@@ -1,0 +1,37 @@
+# Local tools and generated outputs
+.gradle/
+.kotlin/
+.idea/
+**/build/
+**/node_modules/
+**/dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+source/yichat/tests/browser/artifacts/
+**/test-results/
+**/playwright-report/
+.venv/
+venv/
+local.properties
+.DS_Store
+# Signing and runtime secrets: keep outside Git and Release assets
+*.p12
+*.jks
+*.keystore
+*.key
+signing-private.json
+*-PRIVATE.*
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+*.db
+*.sqlite
+*.sqlite3
+# Downloadable builds belong to GitHub Releases
+*.apk
+*.aab
+*.zip
+*.tar.gz

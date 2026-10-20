@@ -1,0 +1,8 @@
+
+org.yitiao.yichat.NativeSdkTest:.
+
+Time: 35.116
+
+OK (1 test)
+
+

@@ -1,0 +1,24 @@
+[Unit]
+Description=YiChat Matrix Synapse (loopback only)
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/yichat/yichat.env
+Environment=PYTHONPATH=/root/yitiao/yichat
+
+Type=simple
+User=root
+WorkingDirectory=/var/lib/yichat/synapse
+ExecStart=/root/yitiao/yichat/.venv/bin/python -m synapse.app.homeserver --config-path=/etc/yichat/synapse.yaml
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/yichat/synapse /var/lib/yichat/gateway /root/yitiao
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

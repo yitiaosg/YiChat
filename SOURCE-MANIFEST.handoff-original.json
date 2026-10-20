@@ -1,0 +1,1696 @@
+{
+  "format": "yichat-android-handoff-v1",
+  "date": "2026-10-20",
+  "source_commit": "20238cdfcaa13f50bd65eba17703605c668e00b5",
+  "source_files": [
+    {
+      "path": "source/.gitignore",
+      "sha256": "3ba3f4c846213ba6baec01691d59398bafdea406f8677690f90733a9076608d0",
+      "original_sha256": "3ba3f4c846213ba6baec01691d59398bafdea406f8677690f90733a9076608d0",
+      "bytes": 710,
+      "sanitized": false
+    },
+    {
+      "path": "source/account_social.py",
+      "sha256": "8c0c2308ee7d648a2774cf2b33b16cb9352c2e4ac42d2893a32008ffeef0f43d",
+      "original_sha256": "8c0c2308ee7d648a2774cf2b33b16cb9352c2e4ac42d2893a32008ffeef0f43d",
+      "bytes": 14237,
+      "sanitized": false
+    },
+    {
+      "path": "source/admin_panel.py",
+      "sha256": "b11fd8e88f3dc24c96415cd0673335a8668890dcad0664021d69a7fb32fa8643",
+      "original_sha256": "b11fd8e88f3dc24c96415cd0673335a8668890dcad0664021d69a7fb32fa8643",
+      "bytes": 31374,
+      "sanitized": false
+    },
+    {
+      "path": "source/app/api.py",
+      "sha256": "f1c511b6ffacc038a5f4a1c5338ee91f4833026c2a7bd506c953469d0e76de9b",
+      "original_sha256": "f1c511b6ffacc038a5f4a1c5338ee91f4833026c2a7bd506c953469d0e76de9b",
+      "bytes": 9503,
+      "sanitized": false
+    },
+    {
+      "path": "source/debug.py",
+      "sha256": "ce35eacb19d014924e5f250b7efd2e62b82fba179dd1ac2a5d09127eceee1c3b",
+      "original_sha256": "ce35eacb19d014924e5f250b7efd2e62b82fba179dd1ac2a5d09127eceee1c3b",
+      "bytes": 11988,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/PASSKEYS.md",
+      "sha256": "667e9880def6614e12e5c090c5ecd3a60ee1ceec87b09a1039efe584a813382d",
+      "original_sha256": "667e9880def6614e12e5c090c5ecd3a60ee1ceec87b09a1039efe584a813382d",
+      "bytes": 4756,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/YCARDS-AUCTIONS.md",
+      "sha256": "ff19c287a5336048467b3d7ef39f275613c3beee9b67ac5a3bde949311c140ed",
+      "original_sha256": "ff19c287a5336048467b3d7ef39f275613c3beee9b67ac5a3bde949311c140ed",
+      "bytes": 6738,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/YCARDS-CACHE-FEES.md",
+      "sha256": "c880b0e6c3969ae81a5b17b0589a402aa9f6fe30670bbed898b6b8ca732e7b0f",
+      "original_sha256": "c880b0e6c3969ae81a5b17b0589a402aa9f6fe30670bbed898b6b8ca732e7b0f",
+      "bytes": 4347,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/YCARDS-COLLECTION.md",
+      "sha256": "b99fc3c54d90c6d9f19f84aa93ce130bc01372d6170fb0104a67f2fee74584e7",
+      "original_sha256": "b99fc3c54d90c6d9f19f84aa93ce130bc01372d6170fb0104a67f2fee74584e7",
+      "bytes": 6121,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/YCARDS-LIBRARY.md",
+      "sha256": "6659585d5e7ea965f1694cc792f492825a496882d79a8c731f4c75d2bd884cd9",
+      "original_sha256": "6659585d5e7ea965f1694cc792f492825a496882d79a8c731f4c75d2bd884cd9",
+      "bytes": 5393,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/YCARDS-OPTICS.md",
+      "sha256": "32081e3fef617a006a73319a955d405afb135bd8dd0219ac761a695aae261ab3",
+      "original_sha256": "32081e3fef617a006a73319a955d405afb135bd8dd0219ac761a695aae261ab3",
+      "bytes": 4139,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/YCARDS-SHARING.md",
+      "sha256": "e7af2aeba75006ae6763a00aef7539c55159bbb96e38b98f8df2ce9685904899",
+      "original_sha256": "e7af2aeba75006ae6763a00aef7539c55159bbb96e38b98f8df2ce9685904899",
+      "bytes": 5440,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/YCARDS-V2.md",
+      "sha256": "e0b2736e46aaef132bcd5fc9b6e52f3b850949de72531b3ee6535a1dd970ce31",
+      "original_sha256": "e0b2736e46aaef132bcd5fc9b6e52f3b850949de72531b3ee6535a1dd970ce31",
+      "bytes": 7410,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/YCARDS.md",
+      "sha256": "cd852e1ff3511c605e9bbe9f2283cdbdb80baddda5666931ae9c9061e6e68483",
+      "original_sha256": "cd852e1ff3511c605e9bbe9f2283cdbdb80baddda5666931ae9c9061e6e68483",
+      "bytes": 14086,
+      "sanitized": false
+    },
+    {
+      "path": "source/docs/YIDT.md",
+      "sha256": "4bc57d7ce26bb20453aab891ebe1d6865297ff9a0d0f6bfe03ebb483e2fc5182",
+      "original_sha256": "4bc57d7ce26bb20453aab891ebe1d6865297ff9a0d0f6bfe03ebb483e2fc5182",
+      "bytes": 9028,
+      "sanitized": false
+    },
+    {
+      "path": "source/mailer.py",
+      "sha256": "9b36e5768080ce529bdcbe1e2c1107f2367d6e890e78bdcc8128067904333498",
+      "original_sha256": "913179933d91a4ca3d223a001982e964401d35cd8f9947d952dcaa127a71eb13",
+      "bytes": 6315,
+      "sanitized": true
+    },
+    {
+      "path": "source/oidc_provider.py",
+      "sha256": "b89a7ca00fb2b6d7a72a21fb497d95bf90ea692dcbdf0e38db0a9cd713e0f4e1",
+      "original_sha256": "b89a7ca00fb2b6d7a72a21fb497d95bf90ea692dcbdf0e38db0a9cd713e0f4e1",
+      "bytes": 22782,
+      "sanitized": false
+    },
+    {
+      "path": "source/parachute.py",
+      "sha256": "6598330e5e0fad8ad667c01e18c7a2e5d902d1456401fa3ecd0d50c8906ebdcc",
+      "original_sha256": "6598330e5e0fad8ad667c01e18c7a2e5d902d1456401fa3ecd0d50c8906ebdcc",
+      "bytes": 22470,
+      "sanitized": false
+    },
+    {
+      "path": "source/passkeys.py",
+      "sha256": "4489a9b5667548a638fd1d8d3fdcd0e5d5d564eb9e109fe60dfe7b231d97375b",
+      "original_sha256": "4489a9b5667548a638fd1d8d3fdcd0e5d5d564eb9e109fe60dfe7b231d97375b",
+      "bytes": 9373,
+      "sanitized": false
+    },
+    {
+      "path": "source/points.py",
+      "sha256": "c6a73d1b4c66fcad7e85f7e9c876561f0660864e76bf118976764f30abdcbd66",
+      "original_sha256": "c6a73d1b4c66fcad7e85f7e9c876561f0660864e76bf118976764f30abdcbd66",
+      "bytes": 1557,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/account-settings.css",
+      "sha256": "b661d375029d68371bb6d5e4e2724ab3cf1fad196113d70e68b9f951a7ec2284",
+      "original_sha256": "b661d375029d68371bb6d5e4e2724ab3cf1fad196113d70e68b9f951a7ec2284",
+      "bytes": 5984,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/account-social.js",
+      "sha256": "dfe103913483392c704f72dfb7811e24ebea0a9d445c606ba600d64803763955",
+      "original_sha256": "dfe103913483392c704f72dfb7811e24ebea0a9d445c606ba600d64803763955",
+      "bytes": 3615,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/game-ranking.css",
+      "sha256": "73765999671fac0a595bf6527706b44953f249ec13bd9715d180661cf9da8a7d",
+      "original_sha256": "73765999671fac0a595bf6527706b44953f249ec13bd9715d180661cf9da8a7d",
+      "bytes": 2215,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/home.css",
+      "sha256": "08a69aea4f5812f51da3ce365f00d4737a3cb79acaeaf9558736263d87c71451",
+      "original_sha256": "08a69aea4f5812f51da3ce365f00d4737a3cb79acaeaf9558736263d87c71451",
+      "bytes": 8088,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/home.js",
+      "sha256": "2c19c706c46d2d82979629570cdc39f82dc656aaf6e287a1312363d363ca8b61",
+      "original_sha256": "2c19c706c46d2d82979629570cdc39f82dc656aaf6e287a1312363d363ca8b61",
+      "bytes": 2883,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/login-button.css",
+      "sha256": "128f6ecf3816bfab0a57596a15cff62a790b7989ab335efae821ccabf5b406cd",
+      "original_sha256": "128f6ecf3816bfab0a57596a15cff62a790b7989ab335efae821ccabf5b406cd",
+      "bytes": 674,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/logo.ico",
+      "sha256": "aa8800bcab4d84cbedaba0005a391a6e446caeb9ddf611462638b77a1d86d617",
+      "original_sha256": "aa8800bcab4d84cbedaba0005a391a6e446caeb9ddf611462638b77a1d86d617",
+      "bytes": 4286,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/logo.svg",
+      "sha256": "6dde10321bccac0b1ff08f7b8c93b7fcef79165e36862544fe270d9a3741bbd2",
+      "original_sha256": "6dde10321bccac0b1ff08f7b8c93b7fcef79165e36862544fe270d9a3741bbd2",
+      "bytes": 2091,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/parachute-qrcode.js",
+      "sha256": "79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c",
+      "original_sha256": "79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c",
+      "bytes": 56694,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/parachute-scene.js",
+      "sha256": "a0276177a6844ce30be6ea9f231ffa6e5e454f88634693c2ce85d16bda56d271",
+      "original_sha256": "a0276177a6844ce30be6ea9f231ffa6e5e454f88634693c2ce85d16bda56d271",
+      "bytes": 794,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/parachute-share-poster.js",
+      "sha256": "0564f2f6b145f7878289137105bbeaa0b1c70774ceeb41faf89174a9c63644e4",
+      "original_sha256": "0564f2f6b145f7878289137105bbeaa0b1c70774ceeb41faf89174a9c63644e4",
+      "bytes": 7872,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/passkeys.css",
+      "sha256": "bc43eb08bf86d677cafdabf2f80b72697ea255775ecb1e91cb73c6ae4517791a",
+      "original_sha256": "bc43eb08bf86d677cafdabf2f80b72697ea255775ecb1e91cb73c6ae4517791a",
+      "bytes": 872,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/passkeys.js",
+      "sha256": "bf84d6f9980278e2448dd364732ed8aa03331f6a31588991961510d461a9ccea",
+      "original_sha256": "bf84d6f9980278e2448dd364732ed8aa03331f6a31588991961510d461a9ccea",
+      "bytes": 7380,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards-auctions.js",
+      "sha256": "5e2527e79c9dafbc633945c24e554583f37ca4bd2ecaa673a1fc337bfd1cdf5c",
+      "original_sha256": "5e2527e79c9dafbc633945c24e554583f37ca4bd2ecaa673a1fc337bfd1cdf5c",
+      "bytes": 17255,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards-cache.js",
+      "sha256": "3333ff2674f55b9d1889c1255272e15a427549bcd2baf4c42011f6b840abafaf",
+      "original_sha256": "3333ff2674f55b9d1889c1255272e15a427549bcd2baf4c42011f6b840abafaf",
+      "bytes": 5384,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards-public.js",
+      "sha256": "e985c855a083f84970e742a4f4891e56ab21e1ad1aa7fecb987a8a6fcae7c6fb",
+      "original_sha256": "e985c855a083f84970e742a4f4891e56ab21e1ad1aa7fecb987a8a6fcae7c6fb",
+      "bytes": 870,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards-render.js",
+      "sha256": "64659cd5dfd646ca8372749487a2c2df0bccdc1b82cc3d9a359ca1d933ead776",
+      "original_sha256": "64659cd5dfd646ca8372749487a2c2df0bccdc1b82cc3d9a359ca1d933ead776",
+      "bytes": 25912,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards-save-worker.js",
+      "sha256": "0511d1ab2153e56bc960c932760a1e722c23631a76e659301c9f7a53866a1d87",
+      "original_sha256": "0511d1ab2153e56bc960c932760a1e722c23631a76e659301c9f7a53866a1d87",
+      "bytes": 762,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards-save.js",
+      "sha256": "744dc7e31b2cda581e1aeb70efa459848d6052d8db0c1b91d93bce0cf0d973f9",
+      "original_sha256": "744dc7e31b2cda581e1aeb70efa459848d6052d8db0c1b91d93bce0cf0d973f9",
+      "bytes": 1554,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards-share.js",
+      "sha256": "6423052ceadb43ea5549e14a6b23b4963ebac477a0ec3a9bb0e6c4c5bef76d63",
+      "original_sha256": "6423052ceadb43ea5549e14a6b23b4963ebac477a0ec3a9bb0e6c4c5bef76d63",
+      "bytes": 4513,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards-showcase.css",
+      "sha256": "55113c6f2b11003b2febbc247274c0fb2ebe6e8cb759fe05acf01ca051025d29",
+      "original_sha256": "55113c6f2b11003b2febbc247274c0fb2ebe6e8cb759fe05acf01ca051025d29",
+      "bytes": 3755,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards-showcase.js",
+      "sha256": "3cdf7d38b71a19491e41467203040f4c81073f93de2d383a953137f31b85d69f",
+      "original_sha256": "3cdf7d38b71a19491e41467203040f4c81073f93de2d383a953137f31b85d69f",
+      "bytes": 6040,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards.css",
+      "sha256": "61e2570637498d9edf30925f9e5913cab4328d47b219261b6fce07081c714387",
+      "original_sha256": "61e2570637498d9edf30925f9e5913cab4328d47b219261b6fce07081c714387",
+      "bytes": 16395,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/ycards.js",
+      "sha256": "563870b48ef490e7ac8eddc127538945a9298941599c9b29f544bdad9d3277d2",
+      "original_sha256": "563870b48ef490e7ac8eddc127538945a9298941599c9b29f544bdad9d3277d2",
+      "bytes": 55885,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/yidt-bridge.js",
+      "sha256": "90bff5236c50ef85015833f62360a8bda7568d1ee7eef1bc7c588d15a0394c0a",
+      "original_sha256": "90bff5236c50ef85015833f62360a8bda7568d1ee7eef1bc7c588d15a0394c0a",
+      "bytes": 2615,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/yidt-daily.js",
+      "sha256": "75661c3e4171f321cd2ebd00724a6df91ff704357d1b50b3b317c6353c0121b1",
+      "original_sha256": "75661c3e4171f321cd2ebd00724a6df91ff704357d1b50b3b317c6353c0121b1",
+      "bytes": 436,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/yidt-jsqr.js",
+      "sha256": "bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859",
+      "original_sha256": "bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859",
+      "bytes": 256885,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/yidt.css",
+      "sha256": "1ec0cd11427598002be4db17a2556ba961601941320679eabc1c6dd6a06c4323",
+      "original_sha256": "1ec0cd11427598002be4db17a2556ba961601941320679eabc1c6dd6a06c4323",
+      "bytes": 5216,
+      "sanitized": false
+    },
+    {
+      "path": "source/static/yidt.js",
+      "sha256": "7efab1ab747a2f797d086f57540a8d243950dc3c6901c1e55d807a3208d58314",
+      "original_sha256": "7efab1ab747a2f797d086f57540a8d243950dc3c6901c1e55d807a3208d58314",
+      "bytes": 3462,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/account_privacy.html",
+      "sha256": "94c0cabb825aadd737183fabd57c8be761bb5f87bd5bd3a148eec5feb8a463f1",
+      "original_sha256": "94c0cabb825aadd737183fabd57c8be761bb5f87bd5bd3a148eec5feb8a463f1",
+      "bytes": 2661,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/account_qr.html",
+      "sha256": "c9b651b951f66a50c47519db76ea93b7ae0523cbd8316f282721bf060b739906",
+      "original_sha256": "c9b651b951f66a50c47519db76ea93b7ae0523cbd8316f282721bf060b739906",
+      "bytes": 542,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/account_relations.html",
+      "sha256": "3d4467e1d51573b2e43ff1b7d53289da2ee4edeec9b969ab1f1cdaa5b83ef3ac",
+      "original_sha256": "3d4467e1d51573b2e43ff1b7d53289da2ee4edeec9b969ab1f1cdaa5b83ef3ac",
+      "bytes": 457,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/account_social_summary.html",
+      "sha256": "32d9d267860a68bbde52484d34e1dc9e96bac996037700354d09d9489021efd0",
+      "original_sha256": "32d9d267860a68bbde52484d34e1dc9e96bac996037700354d09d9489021efd0",
+      "bytes": 1266,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/admin_panel.html",
+      "sha256": "5c581ded68451e0e2abbf305407fbc7c00f0b288e51243514d34fbd6816d6bdd",
+      "original_sha256": "5c581ded68451e0e2abbf305407fbc7c00f0b288e51243514d34fbd6816d6bdd",
+      "bytes": 26023,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/parachute.html",
+      "sha256": "8794d4fc4f1b4ed5b7f547428bb8bcd4563578a66eeb67c60cee5449e79908bb",
+      "original_sha256": "8794d4fc4f1b4ed5b7f547428bb8bcd4563578a66eeb67c60cee5449e79908bb",
+      "bytes": 28350,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/parachute_base.html",
+      "sha256": "eaef1271cf67456fb7d48cc5c8d33054270a61f8d2a63b1c7478aec52959a086",
+      "original_sha256": "eaef1271cf67456fb7d48cc5c8d33054270a61f8d2a63b1c7478aec52959a086",
+      "bytes": 5832,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/parachute_history.html",
+      "sha256": "7b33e024a1c604cd9fdc15393b533e9572713280bd519ba72225875353d9e9e9",
+      "original_sha256": "7b33e024a1c604cd9fdc15393b533e9572713280bd519ba72225875353d9e9e9",
+      "bytes": 3214,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/parachute_ranking.html",
+      "sha256": "230c44e3ada110733e782e45cc1dc666efc2ddb26f9b54255ebb7b8e0e552f93",
+      "original_sha256": "230c44e3ada110733e782e45cc1dc666efc2ddb26f9b54255ebb7b8e0e552f93",
+      "bytes": 6032,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/parachute_share.html",
+      "sha256": "7f05a43f3f66387f02ffb8fdb4650479f561f9e3f988a9197c085f189947f7fc",
+      "original_sha256": "7f05a43f3f66387f02ffb8fdb4650479f561f9e3f988a9197c085f189947f7fc",
+      "bytes": 3051,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/parachute_share_options.html",
+      "sha256": "9730e49c8442def42e1b6fab04a700e9fb4ed5ff45b3ee20bcee11503f193698",
+      "original_sha256": "9730e49c8442def42e1b6fab04a700e9fb4ed5ff45b3ee20bcee11503f193698",
+      "bytes": 3034,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/passkeys_manage.html",
+      "sha256": "b790a462cd99aa1e9abbb765c7bdea9ea8c6a9c61effd2a34272b36105f4c8ce",
+      "original_sha256": "b790a462cd99aa1e9abbb765c7bdea9ea8c6a9c61effd2a34272b36105f4c8ce",
+      "bytes": 2048,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/ycards.html",
+      "sha256": "fffa1ef5ce3e81372e0871c59e6c39f22126aad812fa3b25e017efc77adc92bb",
+      "original_sha256": "fffa1ef5ce3e81372e0871c59e6c39f22126aad812fa3b25e017efc77adc92bb",
+      "bytes": 2288,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/ycards_public.html",
+      "sha256": "595cf3464fe8dfb228b0bf92498e7c1343af66c3b1bc9471cb25cf3d055cb437",
+      "original_sha256": "595cf3464fe8dfb228b0bf92498e7c1343af66c3b1bc9471cb25cf3d055cb437",
+      "bytes": 1175,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/ycards_showcase.html",
+      "sha256": "6b51d0483b290ff9bd640bf14afffbb3f4ecd622e5f18cce9558d4eb52538234",
+      "original_sha256": "6b51d0483b290ff9bd640bf14afffbb3f4ecd622e5f18cce9558d4eb52538234",
+      "bytes": 1926,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/yidt.html",
+      "sha256": "417863a954f379af499c3a019868ed41125b5b3b85a8c3187b4e44c153956cab",
+      "original_sha256": "417863a954f379af499c3a019868ed41125b5b3b85a8c3187b4e44c153956cab",
+      "bytes": 14283,
+      "sanitized": false
+    },
+    {
+      "path": "source/templates/yidt_daily.html",
+      "sha256": "eb7c9ae2ac6060ba4243b468853e2f77eff1950db2bdc683ecb1dc708feada3d",
+      "original_sha256": "eb7c9ae2ac6060ba4243b468853e2f77eff1950db2bdc683ecb1dc708feada3d",
+      "bytes": 1084,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/passkey_authenticator.py",
+      "sha256": "e06d070a53f702ff183b56e29a044af0aba52f49807b8bce8a4f093a324eaa4d",
+      "original_sha256": "e06d070a53f702ff183b56e29a044af0aba52f49807b8bce8a4f093a324eaa4d",
+      "bytes": 1937,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/passkeys_browser_check.mjs",
+      "sha256": "cd4a960a480db8c8bc442eebf3ee62060872a8c627fea1c0b287b1ebd3f12bab",
+      "original_sha256": "cd4a960a480db8c8bc442eebf3ee62060872a8c627fea1c0b287b1ebd3f12bab",
+      "bytes": 10462,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/passkeys_usb_check.mjs",
+      "sha256": "211f1ff9bc75dfebe07882069e2f11478d1ec96637107272fa4dbfa69205e478",
+      "original_sha256": "211f1ff9bc75dfebe07882069e2f11478d1ec96637107272fa4dbfa69205e478",
+      "bytes": 5170,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/run_ycards_auction_checks.sh",
+      "sha256": "dc1c3447505cea4e964783d559eeb9dea749ed3c4dc989be48288619652a50ea",
+      "original_sha256": "dc1c3447505cea4e964783d559eeb9dea749ed3c4dc989be48288619652a50ea",
+      "bytes": 1131,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/run_ycards_browser_checks.sh",
+      "sha256": "a2c4e740099cc76b81114509ea6e3c91ac4f08eab9743ee45d146d424efb044d",
+      "original_sha256": "a2c4e740099cc76b81114509ea6e3c91ac4f08eab9743ee45d146d424efb044d",
+      "bytes": 1218,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/run_ycards_cache_checks.sh",
+      "sha256": "0c5e1996b0b54f4997958ce5ab39573414217308416f94c097550ea485c46925",
+      "original_sha256": "0c5e1996b0b54f4997958ce5ab39573414217308416f94c097550ea485c46925",
+      "bytes": 989,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/run_ycards_collection_checks.sh",
+      "sha256": "68f96249ad0c65a03752089605e06d79f72fc9893d4dddab3c092e0a53582342",
+      "original_sha256": "68f96249ad0c65a03752089605e06d79f72fc9893d4dddab3c092e0a53582342",
+      "bytes": 1009,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/run_ycards_library_checks.sh",
+      "sha256": "0630d17b69503a474e53c2768f0f409f29f74275959b65796c114d3357c24cd6",
+      "original_sha256": "0630d17b69503a474e53c2768f0f409f29f74275959b65796c114d3357c24cd6",
+      "bytes": 1170,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/run_ycards_optics_checks.sh",
+      "sha256": "501200341e363d7715bb63b84872df540f9da21b4f7ee85f327d32d98c8b55dc",
+      "original_sha256": "501200341e363d7715bb63b84872df540f9da21b4f7ee85f327d32d98c8b55dc",
+      "bytes": 1457,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/run_ycards_sharing_checks.sh",
+      "sha256": "e69c1f3ee5a1e8a061c38f3ac0a04c40297239fb652e9dfca4dc601eab1eacbd",
+      "original_sha256": "e69c1f3ee5a1e8a061c38f3ac0a04c40297239fb652e9dfca4dc601eab1eacbd",
+      "bytes": 1301,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/run_ycards_v2_checks.sh",
+      "sha256": "24e257547fe1d207bd9b4020b30f48704f124d5ccae482861064d25c26889421",
+      "original_sha256": "24e257547fe1d207bd9b4020b30f48704f124d5ccae482861064d25c26889421",
+      "bytes": 1007,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_passkey_flows.py",
+      "sha256": "bdd97617ee3284c8c5d3ce04ab50ed6a9c02765ba6b518875f7f0372854c3903",
+      "original_sha256": "bdd97617ee3284c8c5d3ce04ab50ed6a9c02765ba6b518875f7f0372854c3903",
+      "bytes": 9375,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_passkeys.py",
+      "sha256": "3ef92ce3d84e1ca2b4d760b5f71d031476bce390ee6b9fe2dc4d9e1a71f069b4",
+      "original_sha256": "3ef92ce3d84e1ca2b4d760b5f71d031476bce390ee6b9fe2dc4d9e1a71f069b4",
+      "bytes": 5892,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_social_pages.py",
+      "sha256": "40d0e9d42a53d92030153ac0a7f7cd0df94c2d0317b4d5e88d07210fab3f6ffe",
+      "original_sha256": "40d0e9d42a53d92030153ac0a7f7cd0df94c2d0317b4d5e88d07210fab3f6ffe",
+      "bytes": 5665,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_ycards.py",
+      "sha256": "939f99212a99cf0b8443bbde58d4e20a69a98d3149178398c28c75a639f9ce93",
+      "original_sha256": "939f99212a99cf0b8443bbde58d4e20a69a98d3149178398c28c75a639f9ce93",
+      "bytes": 18578,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_ycards_auctions.py",
+      "sha256": "33034e0b76b06a1f6c05edac40768aed14d05402cb51a3dfc47407b49eac1ff4",
+      "original_sha256": "33034e0b76b06a1f6c05edac40768aed14d05402cb51a3dfc47407b49eac1ff4",
+      "bytes": 12820,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_ycards_cache_fees.py",
+      "sha256": "0400738a7c07e41cd4ab916d5366b2ededde3a2d336d6311bbc50396f048c94d",
+      "original_sha256": "0400738a7c07e41cd4ab916d5366b2ededde3a2d336d6311bbc50396f048c94d",
+      "bytes": 6808,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_ycards_collection.py",
+      "sha256": "087edc18cddddc23bd4b6cb3e82c3c84c56b96f8b194150ee3da41836865e773",
+      "original_sha256": "087edc18cddddc23bd4b6cb3e82c3c84c56b96f8b194150ee3da41836865e773",
+      "bytes": 10042,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_ycards_cuts.py",
+      "sha256": "b17992fc31a3c67aa0ab76db845d9956aed4bd81914b62226c8d335a86930a88",
+      "original_sha256": "b17992fc31a3c67aa0ab76db845d9956aed4bd81914b62226c8d335a86930a88",
+      "bytes": 2963,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_ycards_library.py",
+      "sha256": "a596e8220e77f529fc57e90ad4157faa3f8506facdaa8abb2db91f345b8241a9",
+      "original_sha256": "a596e8220e77f529fc57e90ad4157faa3f8506facdaa8abb2db91f345b8241a9",
+      "bytes": 10664,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_ycards_sharing.py",
+      "sha256": "66b98212d80bd81e1bb3a8c9970c0bf6e0e18186ff96e0d1771c0be2444af737",
+      "original_sha256": "66b98212d80bd81e1bb3a8c9970c0bf6e0e18186ff96e0d1771c0be2444af737",
+      "bytes": 9921,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_ycards_v2.py",
+      "sha256": "ae11634cb9e6a8bd0b0464543a0ebe6ce5a0076df9a9aeba7489dfb86a24b02f",
+      "original_sha256": "ae11634cb9e6a8bd0b0464543a0ebe6ce5a0076df9a9aeba7489dfb86a24b02f",
+      "bytes": 8533,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_yidt.py",
+      "sha256": "131c6d51a0282eabf305657a8c4bed222ab997020c05a116ecb58aa26f50b84b",
+      "original_sha256": "131c6d51a0282eabf305657a8c4bed222ab997020c05a116ecb58aa26f50b84b",
+      "bytes": 14962,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/test_yidt_account.py",
+      "sha256": "acd0472aec525cb2f6584f721efdc60ac64d1a1b626663befc94832ba12c20ad",
+      "original_sha256": "acd0472aec525cb2f6584f721efdc60ac64d1a1b626663befc94832ba12c20ad",
+      "bytes": 10243,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_auction_check.mjs",
+      "sha256": "db8b46a4484a457c893b9031abc47f8e7d8e96ee80a7035979c85357990f66fa",
+      "original_sha256": "db8b46a4484a457c893b9031abc47f8e7d8e96ee80a7035979c85357990f66fa",
+      "bytes": 6052,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_auction_fixture.py",
+      "sha256": "14a3edc10b7710996cb2486b8539b2264bc2cd48603589fe25b587e9930f1fb1",
+      "original_sha256": "14a3edc10b7710996cb2486b8539b2264bc2cd48603589fe25b587e9930f1fb1",
+      "bytes": 1903,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_browser_check.mjs",
+      "sha256": "c764f76cf44b50c84724349462c020edf326bb06c0d42a64397fb2600fd353d9",
+      "original_sha256": "c764f76cf44b50c84724349462c020edf326bb06c0d42a64397fb2600fd353d9",
+      "bytes": 5934,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_browser_fixture.py",
+      "sha256": "f88041eff433bd4769513782d7759747db4025ec8d3bb66495d3bbb921458b13",
+      "original_sha256": "f88041eff433bd4769513782d7759747db4025ec8d3bb66495d3bbb921458b13",
+      "bytes": 1146,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_cache_check.mjs",
+      "sha256": "a67b1d250545770ad25647fb22be93c97445b6362e0e922a71579729f2816478",
+      "original_sha256": "a67b1d250545770ad25647fb22be93c97445b6362e0e922a71579729f2816478",
+      "bytes": 6591,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_cache_fixture.py",
+      "sha256": "11efce8aada7075d01c3d9e138bbe242ed1086a022b7a10d5b85162c023ca008",
+      "original_sha256": "11efce8aada7075d01c3d9e138bbe242ed1086a022b7a10d5b85162c023ca008",
+      "bytes": 2693,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_collection_check.mjs",
+      "sha256": "c655e0d384c7c604d0ce5ab29a6ca6938917e59434dcebbe6fc1ca93071fca90",
+      "original_sha256": "c655e0d384c7c604d0ce5ab29a6ca6938917e59434dcebbe6fc1ca93071fca90",
+      "bytes": 8477,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_collection_fixture.py",
+      "sha256": "3467cdefd0852f39c874ff9ffc36684a2312352b51d893ce1db7154f77afab2c",
+      "original_sha256": "3467cdefd0852f39c874ff9ffc36684a2312352b51d893ce1db7154f77afab2c",
+      "bytes": 3470,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_library_check.mjs",
+      "sha256": "23aa650d45fb537943f9597e444ee9d61017c92e96ed09db6b12c7c02f7126e8",
+      "original_sha256": "23aa650d45fb537943f9597e444ee9d61017c92e96ed09db6b12c7c02f7126e8",
+      "bytes": 7620,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_library_fixture.py",
+      "sha256": "a4782dcf9565022093570a23d447bd351346aee5d280640af3b57f1bf91cd0c8",
+      "original_sha256": "a4782dcf9565022093570a23d447bd351346aee5d280640af3b57f1bf91cd0c8",
+      "bytes": 840,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_optics_check.mjs",
+      "sha256": "5122bf835084d5c2423ddf91672ff62b36fa9ec470dab171194cf0ea261475b7",
+      "original_sha256": "5122bf835084d5c2423ddf91672ff62b36fa9ec470dab171194cf0ea261475b7",
+      "bytes": 6123,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_render_check.mjs",
+      "sha256": "380a542b40a813c303d3d824d0af8f3ad14d4b4e69c692bbf77648f87a838c9a",
+      "original_sha256": "380a542b40a813c303d3d824d0af8f3ad14d4b4e69c692bbf77648f87a838c9a",
+      "bytes": 5730,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_sharing_check.mjs",
+      "sha256": "7e465f1e64cedbd22c041f66219fabc0c2e90de4b63fd9050b1ddae9e27437d9",
+      "original_sha256": "7e465f1e64cedbd22c041f66219fabc0c2e90de4b63fd9050b1ddae9e27437d9",
+      "bytes": 7615,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_sharing_fixture.py",
+      "sha256": "203299b416a1654209c9043f11db46dfdc240b0f1da2bb0c9deb23f54cf69402",
+      "original_sha256": "203299b416a1654209c9043f11db46dfdc240b0f1da2bb0c9deb23f54cf69402",
+      "bytes": 3531,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_v2_check.mjs",
+      "sha256": "774a6589b09dc915d7d185e341404edce969d4e151806328ac39a590e16c535d",
+      "original_sha256": "774a6589b09dc915d7d185e341404edce969d4e151806328ac39a590e16c535d",
+      "bytes": 10029,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/ycards_v2_fixture.py",
+      "sha256": "77708ebefe004834887a463965469da2b704bc8fc32237501839f89e90ad6edb",
+      "original_sha256": "77708ebefe004834887a463965469da2b704bc8fc32237501839f89e90ad6edb",
+      "bytes": 1766,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/yidt_browser_check.mjs",
+      "sha256": "1735a0cc284f4ee549579e85209bdec51f320c38462e059fea9a6bea5efd1e71",
+      "original_sha256": "1735a0cc284f4ee549579e85209bdec51f320c38462e059fea9a6bea5efd1e71",
+      "bytes": 9194,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/yidt_browser_fixture.py",
+      "sha256": "353edae31b4f620afb3e4853a6f58fb5ede5b810e40ea2464b1a6b35159b682b",
+      "original_sha256": "353edae31b4f620afb3e4853a6f58fb5ede5b810e40ea2464b1a6b35159b682b",
+      "bytes": 2220,
+      "sanitized": false
+    },
+    {
+      "path": "source/tests/yidt_ui_check.mjs",
+      "sha256": "1f7b28cfee6f785c5712f5b2d6f91ece478867f92d5efebd631384901bbe4069",
+      "original_sha256": "1f7b28cfee6f785c5712f5b2d6f91ece478867f92d5efebd631384901bbe4069",
+      "bytes": 7019,
+      "sanitized": false
+    },
+    {
+      "path": "source/tools.py",
+      "sha256": "742bb23fe685e8e9c88761c2e599ceb69a5eb628c0faf9bc345afc1a6f9942f5",
+      "original_sha256": "742bb23fe685e8e9c88761c2e599ceb69a5eb628c0faf9bc345afc1a6f9942f5",
+      "bytes": 15138,
+      "sanitized": false
+    },
+    {
+      "path": "source/website.py",
+      "sha256": "ebde5ffd289ea70f21812bc1906a62ad342b6ea988533c71c6e6cf57ecf2609c",
+      "original_sha256": "d52c05083dd28de1ab1496aa7d86de5eaabbca8180ae4781dc2422665ef661c3",
+      "bytes": 218355,
+      "sanitized": true
+    },
+    {
+      "path": "source/ycards.py",
+      "sha256": "46234b0fa22dd6a6d7728e96314590ceda3ef704756229a0f9721ea8e61a7906",
+      "original_sha256": "46234b0fa22dd6a6d7728e96314590ceda3ef704756229a0f9721ea8e61a7906",
+      "bytes": 65054,
+      "sanitized": false
+    },
+    {
+      "path": "source/ycards_auctions.py",
+      "sha256": "6e5c7cd30b50b31e64e48b1d32b2d1243b1e9403b7f63544cb2f64f2016ced90",
+      "original_sha256": "6e5c7cd30b50b31e64e48b1d32b2d1243b1e9403b7f63544cb2f64f2016ced90",
+      "bytes": 17894,
+      "sanitized": false
+    },
+    {
+      "path": "source/ycards_collection.py",
+      "sha256": "fdf1bd8c31f4ebdded1651765a953fa9b8fdfdd5b328431fd0acffffca1a6288",
+      "original_sha256": "fdf1bd8c31f4ebdded1651765a953fa9b8fdfdd5b328431fd0acffffca1a6288",
+      "bytes": 11370,
+      "sanitized": false
+    },
+    {
+      "path": "source/ycards_library.py",
+      "sha256": "28055edc6320693abb90fcf8eee2f1e842006acc0dc6193bf5aa715f5f2021b5",
+      "original_sha256": "28055edc6320693abb90fcf8eee2f1e842006acc0dc6193bf5aa715f5f2021b5",
+      "bytes": 4566,
+      "sanitized": false
+    },
+    {
+      "path": "source/ycards_promotions.py",
+      "sha256": "4e067f80f3731cd407658f84153e70ffffb52f8d61e87935f88b14ec5ff033fc",
+      "original_sha256": "4e067f80f3731cd407658f84153e70ffffb52f8d61e87935f88b14ec5ff033fc",
+      "bytes": 5368,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat.service",
+      "sha256": "1fc145dae8c94031526c5421077b70b029b59ec610b67b1c6fd0d47bba7aada4",
+      "original_sha256": "1fc145dae8c94031526c5421077b70b029b59ec610b67b1c6fd0d47bba7aada4",
+      "bytes": 742,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/.gitignore",
+      "sha256": "23cabf3253545fee82f9b4b8ad8af5ad89ac974fe963a1a4528ec7fec8ea2104",
+      "original_sha256": "23cabf3253545fee82f9b4b8ad8af5ad89ac974fe963a1a4528ec7fec8ea2104",
+      "bytes": 124,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/README.md",
+      "sha256": "ad607fb64bf1405b7a854c6e4bd602322418f9d6d13b4e7a839576e7beffbf72",
+      "original_sha256": "ad607fb64bf1405b7a854c6e4bd602322418f9d6d13b4e7a839576e7beffbf72",
+      "bytes": 2240,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/__init__.py",
+      "sha256": "e71302daf62d644a5c87f946d4ca95453e57fed10fa0b3ed3a9a22947be5fc6f",
+      "original_sha256": "e71302daf62d644a5c87f946d4ca95453e57fed10fa0b3ed3a9a22947be5fc6f",
+      "bytes": 77,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/app.py",
+      "sha256": "f1b2e8e77524dcd6415d07b759bce218e63a2f9da732ed5825884b7b0f68c8a2",
+      "original_sha256": "f1b2e8e77524dcd6415d07b759bce218e63a2f9da732ed5825884b7b0f68c8a2",
+      "bytes": 38530,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/archive.py",
+      "sha256": "727b80cb77150155bafca3f56a578e790d4e5156b3a84efc4eec5cc220b8a912",
+      "original_sha256": "727b80cb77150155bafca3f56a578e790d4e5156b3a84efc4eec5cc220b8a912",
+      "bytes": 17860,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/archive_routes.py",
+      "sha256": "dda133cdc1d2b4a8a831c5654e0fdc8dc68669327817a36d8987161697660bd9",
+      "original_sha256": "dda133cdc1d2b4a8a831c5654e0fdc8dc68669327817a36d8987161697660bd9",
+      "bytes": 4408,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/archive_worker.py",
+      "sha256": "43717d25fa71b9eefa2d792a472a7fae8e8de5f3437274ea1bce3035b6cf3ba4",
+      "original_sha256": "43717d25fa71b9eefa2d792a472a7fae8e8de5f3437274ea1bce3035b6cf3ba4",
+      "bytes": 11572,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/assets.py",
+      "sha256": "f890f99305f615c997ffc7937ec2b0675c16d40e8caccd85b8efc53127ae252c",
+      "original_sha256": "f890f99305f615c997ffc7937ec2b0675c16d40e8caccd85b8efc53127ae252c",
+      "bytes": 5950,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/card_reads.py",
+      "sha256": "595c2590b0a552225e95b541082f6d0430614ae0c4351aec21161503acc56708",
+      "original_sha256": "595c2590b0a552225e95b541082f6d0430614ae0c4351aec21161503acc56708",
+      "bytes": 1594,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/config.py",
+      "sha256": "4ae11652b0f48b27c05caf55dbac574ad2d98ef769bec1aa1feebfa49cc22695",
+      "original_sha256": "4ae11652b0f48b27c05caf55dbac574ad2d98ef769bec1aa1feebfa49cc22695",
+      "bytes": 2167,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/db.py",
+      "sha256": "3b5ab1ba804647b84ab998d17020b7a5c9f7a5631f79cc09d31104397e6a6d8b",
+      "original_sha256": "3b5ab1ba804647b84ab998d17020b7a5c9f7a5631f79cc09d31104397e6a6d8b",
+      "bytes": 4844,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/funds.py",
+      "sha256": "1bd66e73201a7c08f4143e20077083148e1c4fdef0943f4bdf5c33e0858a4f4f",
+      "original_sha256": "1bd66e73201a7c08f4143e20077083148e1c4fdef0943f4bdf5c33e0858a4f4f",
+      "bytes": 22782,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/history.py",
+      "sha256": "62a85137ac1f7c4036b4c4e0e69c1ae06a169918a1ba2d85db26c60690efa962",
+      "original_sha256": "62a85137ac1f7c4036b4c4e0e69c1ae06a169918a1ba2d85db26c60690efa962",
+      "bytes": 14076,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/limits.py",
+      "sha256": "b109905a7bec9ce721ee1cd0dcbac2588cc92f68424b950a1a7759f42d48b816",
+      "original_sha256": "b109905a7bec9ce721ee1cd0dcbac2588cc92f68424b950a1a7759f42d48b816",
+      "bytes": 1044,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/manage.py",
+      "sha256": "a51fdb2c9bab0a0fc228494e5947d94cd94772f9d6dbea2f68c59f8ce5c3bdd4",
+      "original_sha256": "a51fdb2c9bab0a0fc228494e5947d94cd94772f9d6dbea2f68c59f8ce5c3bdd4",
+      "bytes": 2227,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/matrix.py",
+      "sha256": "7aefd224649b91613c9eeff0148d3fca83f24022b580440446ced483feca01a2",
+      "original_sha256": "7aefd224649b91613c9eeff0148d3fca83f24022b580440446ced483feca01a2",
+      "bytes": 1953,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/membership.py",
+      "sha256": "2de87d03f31516a8eb9b8b7534c1fa90b51e60ad42ff9003a7c48882968a33dc",
+      "original_sha256": "2de87d03f31516a8eb9b8b7534c1fa90b51e60ad42ff9003a7c48882968a33dc",
+      "bytes": 1037,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/policy.py",
+      "sha256": "b2c4c9ef38628e88626c350cb3e911203cb4f41141b5bc6f5b1cbaf513448a9c",
+      "original_sha256": "b2c4c9ef38628e88626c350cb3e911203cb4f41141b5bc6f5b1cbaf513448a9c",
+      "bytes": 10402,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/previews.py",
+      "sha256": "be15ebed85a83cb68162671d941014a80fd98dd5ba5f6bd7e6476d86121e373a",
+      "original_sha256": "be15ebed85a83cb68162671d941014a80fd98dd5ba5f6bd7e6476d86121e373a",
+      "bytes": 1887,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/security.py",
+      "sha256": "98bd30497867b5179662985472d8a733423dd87fbd3645ff90598a5c054f8cb7",
+      "original_sha256": "98bd30497867b5179662985472d8a733423dd87fbd3645ff90598a5c054f8cb7",
+      "bytes": 4046,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/backend/synapse_module.py",
+      "sha256": "36e4780b27d08d8b218b99e1b34876a0a43f97f64c46746afde98c4f294a3307",
+      "original_sha256": "36e4780b27d08d8b218b99e1b34876a0a43f97f64c46746afde98c4f294a3307",
+      "bytes": 16918,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/index.html",
+      "sha256": "82ac403c65631839cf9bacc864f452270f5ee94ca550348c4c8e1dd6894ebbc7",
+      "original_sha256": "82ac403c65631839cf9bacc864f452270f5ee94ca550348c4c8e1dd6894ebbc7",
+      "bytes": 764,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/package-lock.json",
+      "sha256": "c0777261cbc336180c297aa277b7a19152a885d37229d4ba7d5e9dc7650c4d73",
+      "original_sha256": "c0777261cbc336180c297aa277b7a19152a885d37229d4ba7d5e9dc7650c4d73",
+      "bytes": 45655,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/package.json",
+      "sha256": "69704dc30f8c5fd62c9fb83e43770cbef0bc2422381cad7f6fbe54fe65811346",
+      "original_sha256": "69704dc30f8c5fd62c9fb83e43770cbef0bc2422381cad7f6fbe54fe65811346",
+      "bytes": 579,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/public/render/parachute-jump.svg",
+      "sha256": "efd693beefd3024e4d704112078127eccebfd773a20c8b4e953b46cfc0a79082",
+      "original_sha256": "efd693beefd3024e4d704112078127eccebfd773a20c8b4e953b46cfc0a79082",
+      "bytes": 966,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/public/render/parachute-plane.svg",
+      "sha256": "481ab6d52faa18214b39aa23fb20f05b03232ae61f90ccd59d8d5d8e8e017ebb",
+      "original_sha256": "481ab6d52faa18214b39aa23fb20f05b03232ae61f90ccd59d8d5d8e8e017ebb",
+      "bytes": 1705,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/scripts/copy-renderers.mjs",
+      "sha256": "43fc3a92a6693fa81fcd9c61220317c073753a7554eb7e30903b7d8150c3b515",
+      "original_sha256": "43fc3a92a6693fa81fcd9c61220317c073753a7554eb7e30903b7d8150c3b515",
+      "bytes": 298,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/api.ts",
+      "sha256": "c53846fcd3dec9d02eead9e38eec6eeba10d9ab4dcfdd3f6d4621a01565ca433",
+      "original_sha256": "c53846fcd3dec9d02eead9e38eec6eeba10d9ab4dcfdd3f6d4621a01565ca433",
+      "bytes": 5193,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/chat.ts",
+      "sha256": "5c9c7303545f87e21ef897b35a0a690966eba82468ed65a73df3569e3b0f1caa",
+      "original_sha256": "5c9c7303545f87e21ef897b35a0a690966eba82468ed65a73df3569e3b0f1caa",
+      "bytes": 21196,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/conversation.tsx",
+      "sha256": "8d3c25c6285c977e053a96edb7c75a74ed937db763f7147ed4748e63592219c8",
+      "original_sha256": "8d3c25c6285c977e053a96edb7c75a74ed937db763f7147ed4748e63592219c8",
+      "bytes": 27757,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/dialogs.tsx",
+      "sha256": "88738b193cd6d31993e6221d7822ec0c4703e0965a6fd1e47803fdb52657b1c4",
+      "original_sha256": "88738b193cd6d31993e6221d7822ec0c4703e0965a6fd1e47803fdb52657b1c4",
+      "bytes": 23092,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/history.ts",
+      "sha256": "242dcc1fb667637d1aaa4b0543448f8f512d9fa00595d67623985f66fe4af47a",
+      "original_sha256": "242dcc1fb667637d1aaa4b0543448f8f512d9fa00595d67623985f66fe4af47a",
+      "bytes": 4269,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/log.ts",
+      "sha256": "f40de7846b15da222c218b26bf651283dec9a4af2bbf2d11c06a95e0feaa70ed",
+      "original_sha256": "f40de7846b15da222c218b26bf651283dec9a4af2bbf2d11c06a95e0feaa70ed",
+      "bytes": 347,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/main.tsx",
+      "sha256": "b6e1a3c397b3504d2095f70ba1777838aa8b81a2dfc19ad3b26dde286cbbc6fa",
+      "original_sha256": "b6e1a3c397b3504d2095f70ba1777838aa8b81a2dfc19ad3b26dde286cbbc6fa",
+      "bytes": 11944,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/media.ts",
+      "sha256": "16005508a59ae3ffe1828ccd344c4f464b02739f5abb50faf4afe3298fd60723",
+      "original_sha256": "16005508a59ae3ffe1828ccd344c4f464b02739f5abb50faf4afe3298fd60723",
+      "bytes": 4737,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/previews.tsx",
+      "sha256": "048f77ef6d8915fe7c2067ef09fba64e03b53c6205169da755fe717e05046444",
+      "original_sha256": "048f77ef6d8915fe7c2067ef09fba64e03b53c6205169da755fe717e05046444",
+      "bytes": 17573,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/profiles.tsx",
+      "sha256": "dbd389790b618116f0e96c37307d8df28ac454e300281311305fe4234264ee1c",
+      "original_sha256": "dbd389790b618116f0e96c37307d8df28ac454e300281311305fe4234264ee1c",
+      "bytes": 1387,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/shared.tsx",
+      "sha256": "a186c599512b07fee3e139449432ebb80765684202b96274d3fa9dbf63104ca4",
+      "original_sha256": "a186c599512b07fee3e139449432ebb80765684202b96274d3fa9dbf63104ca4",
+      "bytes": 2560,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/style.css",
+      "sha256": "29aade06b793e0541560b64d177a552254f3a229c35027edfbe63e2323d0dda3",
+      "original_sha256": "29aade06b793e0541560b64d177a552254f3a229c35027edfbe63e2323d0dda3",
+      "bytes": 26384,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/src/vault.ts",
+      "sha256": "2e48a21e15a9b42ba6d0a1a685a6424ebab627ad01bca446c0f1445da49fecec",
+      "original_sha256": "2e48a21e15a9b42ba6d0a1a685a6424ebab627ad01bca446c0f1445da49fecec",
+      "bytes": 4213,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/test/contracts.test.ts",
+      "sha256": "f056509b492b4f00e3096e2763ed928fdf08526464ed16c08d2a1cec8c61e70d",
+      "original_sha256": "f056509b492b4f00e3096e2763ed928fdf08526464ed16c08d2a1cec8c61e70d",
+      "bytes": 1669,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/test/history.test.ts",
+      "sha256": "d078be555485ffd7cf879827201efca585d0da023bbadcbdbbe39af63cd5aa1a",
+      "original_sha256": "d078be555485ffd7cf879827201efca585d0da023bbadcbdbbe39af63cd5aa1a",
+      "bytes": 824,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/tsconfig.json",
+      "sha256": "a4d3d6cc4d5455913b817e5d6d81845a341abc1b3e105e14b54f88bf064ee2fa",
+      "original_sha256": "a4d3d6cc4d5455913b817e5d6d81845a341abc1b3e105e14b54f88bf064ee2fa",
+      "bytes": 397,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/client/vite.config.ts",
+      "sha256": "9e68124ebde98366db7b7036176180d5aac9b423977f92cdb00dbe9fd420cc7f",
+      "original_sha256": "9e68124ebde98366db7b7036176180d5aac9b423977f92cdb00dbe9fd420cc7f",
+      "bytes": 264,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/Caddyfile.yichat",
+      "sha256": "9b17e2fa36a11a1517a784cec63789448f0a5ff24f1b5f730823507e298eafd7",
+      "original_sha256": "9b17e2fa36a11a1517a784cec63789448f0a5ff24f1b5f730823507e298eafd7",
+      "bytes": 316,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/archive.sql",
+      "sha256": "7e6de08eeb7773faf7ae2b58069a3e449a813eb842b4c2d329dc8a572474e6ff",
+      "original_sha256": "7e6de08eeb7773faf7ae2b58069a3e449a813eb842b4c2d329dc8a572474e6ff",
+      "bytes": 4404,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/backup.py",
+      "sha256": "b5e8dff2eb2afe9b4b5636814023355b6b765515b3ff8b892b29c7308fc3d6eb",
+      "original_sha256": "b5e8dff2eb2afe9b4b5636814023355b6b765515b3ff8b892b29c7308fc3d6eb",
+      "bytes": 2129,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/integrate.py",
+      "sha256": "b8830c15aa0b334999ced5bc908624668e5eae906710f987eb98eb02162ba1d1",
+      "original_sha256": "b8830c15aa0b334999ced5bc908624668e5eae906710f987eb98eb02162ba1d1",
+      "bytes": 2441,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/promote_web.py",
+      "sha256": "b80b35f19279a105a066691ff6588c66f9456d2b24179a270485b56fea3c8c72",
+      "original_sha256": "b80b35f19279a105a066691ff6588c66f9456d2b24179a270485b56fea3c8c72",
+      "bytes": 2057,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/provision_archive.py",
+      "sha256": "8f85ded6f0b30d5b4f1f9cf8a1489039826f33b0f151b523bddf3c2e9edf6129",
+      "original_sha256": "8f85ded6f0b30d5b4f1f9cf8a1489039826f33b0f151b523bddf3c2e9edf6129",
+      "bytes": 2441,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/setup.py",
+      "sha256": "439c02870d5a49f2f544a6ca503540f7b7a1b19d3548041af4c2dbc0b96bf09e",
+      "original_sha256": "439c02870d5a49f2f544a6ca503540f7b7a1b19d3548041af4c2dbc0b96bf09e",
+      "bytes": 5503,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/synapse.yaml.example",
+      "sha256": "3215f25f9e10e77a43978c8d83a43cc750d36a3ac5c46fff601deed21e2e759e",
+      "original_sha256": "3215f25f9e10e77a43978c8d83a43cc750d36a3ac5c46fff601deed21e2e759e",
+      "bytes": 1563,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/web-release.sh",
+      "sha256": "2078e3b9760fcfcea3ba6f03dbff7697a8e89e48d6f92c42a80a02fedf119f60",
+      "original_sha256": "2078e3b9760fcfcea3ba6f03dbff7697a8e89e48d6f92c42a80a02fedf119f60",
+      "bytes": 403,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/yichat-archive.service",
+      "sha256": "fb3437cb9233c5ce87aaac85b8ce7263c216b2044ca9b85da0b805beffe7bf6d",
+      "original_sha256": "fb3437cb9233c5ce87aaac85b8ce7263c216b2044ca9b85da0b805beffe7bf6d",
+      "bytes": 648,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/yichat-synapse.service",
+      "sha256": "1d53c5d2f268b0715d65dd2f6591c80dc806855d04a9cfbe292ad8a92d807f3d",
+      "original_sha256": "1d53c5d2f268b0715d65dd2f6591c80dc806855d04a9cfbe292ad8a92d807f3d",
+      "bytes": 601,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/yichat.env.example",
+      "sha256": "2055c4cdf6bda44750a454203bece71bf14e0d109d7cc2ccbb08a328bbd4c9f9",
+      "original_sha256": "2055c4cdf6bda44750a454203bece71bf14e0d109d7cc2ccbb08a328bbd4c9f9",
+      "bytes": 968,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/deploy/yichat.service",
+      "sha256": "d3d03a36fda95063385827deb96fef4ca976454c3e75025207aaf63b281cea2f",
+      "original_sha256": "d3d03a36fda95063385827deb96fef4ca976454c3e75025207aaf63b281cea2f",
+      "bytes": 733,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/ACCOUNT-UPDATE-20261019.md",
+      "sha256": "3ed096d58d2fbd5efbf2a564d0435d5a2ee693b2651b7d994ff3fadce2a96c1d",
+      "original_sha256": "3ed096d58d2fbd5efbf2a564d0435d5a2ee693b2651b7d994ff3fadce2a96c1d",
+      "bytes": 4284,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/API.md",
+      "sha256": "d27e82d09703d5cae550c47f150a8ddc2834cbb44a95e103b57584fba715835d",
+      "original_sha256": "d27e82d09703d5cae550c47f150a8ddc2834cbb44a95e103b57584fba715835d",
+      "bytes": 9591,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/ARCHIVE-V1.md",
+      "sha256": "25dc2cc9b0e1e74fc1675f54af75393ce9a8c8dcc538f7d28211b7c38b00ee33",
+      "original_sha256": "25dc2cc9b0e1e74fc1675f54af75393ce9a8c8dcc538f7d28211b7c38b00ee33",
+      "bytes": 8973,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/CHAT-KERNEL-API.md",
+      "sha256": "a2f7a6bb4a00fa5128fa094ba31969fb1e4983e3e633ab4648fbf1db66fb11b3",
+      "original_sha256": "a2f7a6bb4a00fa5128fa094ba31969fb1e4983e3e633ab4648fbf1db66fb11b3",
+      "bytes": 41249,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/DEPLOYMENT-RECORD.md",
+      "sha256": "a1ae1a2d95a795e6214068baf3ea1411ae1ffd6608c41a91769c66ea4a59600b",
+      "original_sha256": "a1ae1a2d95a795e6214068baf3ea1411ae1ffd6608c41a91769c66ea4a59600b",
+      "bytes": 4060,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/DEPLOYMENT.md",
+      "sha256": "3b8bd7cc942c47c1d1350c4c2e9bdf8e76a84cf583605ace2dd6398f3e2fecb9",
+      "original_sha256": "3b8bd7cc942c47c1d1350c4c2e9bdf8e76a84cf583605ace2dd6398f3e2fecb9",
+      "bytes": 6973,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/FUNDS.md",
+      "sha256": "be108e0283d727c2760a5e0720afd421fd2d3023f5fb6139e9f7b4e2f48331cc",
+      "original_sha256": "be108e0283d727c2760a5e0720afd421fd2d3023f5fb6139e9f7b4e2f48331cc",
+      "bytes": 6343,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/SECURITY-AND-OPERATIONS.md",
+      "sha256": "9b9f03b5922933a711963aefce5995775e403eed3a01fa35c38284600ab2f86c",
+      "original_sha256": "9b9f03b5922933a711963aefce5995775e403eed3a01fa35c38284600ab2f86c",
+      "bytes": 2765,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/TEST-RESULTS.md",
+      "sha256": "c4e1425bdb3c31f129dc8e5c161dd99915465affba15824d28eba35ba58b1eea",
+      "original_sha256": "c4e1425bdb3c31f129dc8e5c161dd99915465affba15824d28eba35ba58b1eea",
+      "bytes": 4804,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/THIRD-PARTY-NOTICES.md",
+      "sha256": "abed352600eee73e1bc189e84b9c3f405d315acf69b245f832fce776b632d72e",
+      "original_sha256": "abed352600eee73e1bc189e84b9c3f405d315acf69b245f832fce776b632d72e",
+      "bytes": 807,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/WEB-CANCEL-20261020.md",
+      "sha256": "db141cee4b6c9e508f464ecd55a6d4298453afe6f3e4e8a921589f90a76b3b9f",
+      "original_sha256": "db141cee4b6c9e508f464ecd55a6d4298453afe6f3e4e8a921589f90a76b3b9f",
+      "bytes": 7653,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/WEB-DEPLOYMENT.md",
+      "sha256": "8b3af4459c814d7937c85f9fa574fc42f53b7a95637a14f169c1c409117dd161",
+      "original_sha256": "8b3af4459c814d7937c85f9fa574fc42f53b7a95637a14f169c1c409117dd161",
+      "bytes": 8291,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/WEB-IMPLEMENTATION.md",
+      "sha256": "02ff613270353641a92e12cb0085028ea9bc29a7c56e973ba829cc67995f7eb7",
+      "original_sha256": "02ff613270353641a92e12cb0085028ea9bc29a7c56e973ba829cc67995f7eb7",
+      "bytes": 3231,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/WEB-MONEY-BUBBLES-20261020.md",
+      "sha256": "e05e88382610b6ce5c318b583b9e91f19d6710c27fa8503c2a16fd18786f84a1",
+      "original_sha256": "e05e88382610b6ce5c318b583b9e91f19d6710c27fa8503c2a16fd18786f84a1",
+      "bytes": 6612,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/WEB-TEST-RESULTS.md",
+      "sha256": "a6111bc66c6f950d1d58c40b78f6cc7835d5b0df29939a89d0bc6e4f75af305f",
+      "original_sha256": "a6111bc66c6f950d1d58c40b78f6cc7835d5b0df29939a89d0bc6e4f75af305f",
+      "bytes": 7497,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/WEB-UPDATES-20261020.md",
+      "sha256": "fd7c19a77c7f2e2523f2a9c4c64f38e0291899d73881c8a0b358b047f65f10e8",
+      "original_sha256": "fd7c19a77c7f2e2523f2a9c4c64f38e0291899d73881c8a0b358b047f65f10e8",
+      "bytes": 7618,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/licenses/httpx-LICENSE.md",
+      "sha256": "4ec59d544f12b5f539a3a716fd321ac58ccd8030b465221f2c880200cdf28d8d",
+      "original_sha256": "4ec59d544f12b5f539a3a716fd321ac58ccd8030b465221f2c880200cdf28d8d",
+      "bytes": 1508,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/licenses/uvicorn-LICENSE.md",
+      "sha256": "efe1acf3e62fb99c288b0ec73e5a773b7268ef4320fe757ea994214e4b63c371",
+      "original_sha256": "efe1acf3e62fb99c288b0ec73e5a773b7268ef4320fe757ea994214e4b63c371",
+      "bytes": 1526,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/samples/expected.json",
+      "sha256": "8b7728cada495954c879e35ba3e7217159bbced31b44e44272ce0828000019c9",
+      "original_sha256": "8b7728cada495954c879e35ba3e7217159bbced31b44e44272ce0828000019c9",
+      "bytes": 438,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/samples/synthetic-v1-events-manifest.zip",
+      "sha256": "1c7d6142587b420952295940302eb7a07b3160fd3908275420b95840f2ec2023",
+      "original_sha256": "1c7d6142587b420952295940302eb7a07b3160fd3908275420b95840f2ec2023",
+      "bytes": 1489,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/samples/synthetic-v1-with-attachments.zip",
+      "sha256": "f5eb2df955ddd5699cf1003eae45b85090df3d2a363277196dda0a69a1f233f1",
+      "original_sha256": "f5eb2df955ddd5699cf1003eae45b85090df3d2a363277196dda0a69a1f233f1",
+      "bytes": 1759,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/docs/verification.json",
+      "sha256": "bdc7cbf6d78afbb8f08d47c84ea17c47715385fc9a665fe3b09e322b462875ad",
+      "original_sha256": "bdc7cbf6d78afbb8f08d47c84ea17c47715385fc9a665fe3b09e322b462875ad",
+      "bytes": 1348,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/handoff/ANDROID-PROMPT.md",
+      "sha256": "e4cb301e5d92ec5956445909c4292ad30e893614d428c6120b3a2272ac77824f",
+      "original_sha256": "e4cb301e5d92ec5956445909c4292ad30e893614d428c6120b3a2272ac77824f",
+      "bytes": 11577,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/handoff/ARCHITECTURE.md",
+      "sha256": "03a9611dc87a0c311a44841557e1d2594dfa7ff9e583465f4d36390202f29249",
+      "original_sha256": "03a9611dc87a0c311a44841557e1d2594dfa7ff9e583465f4d36390202f29249",
+      "bytes": 13543,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/handoff/README.md",
+      "sha256": "1f0e4d699dda51218094635a6ace44ea56cdbc1d5d13c0a3737f14d83c040fd9",
+      "original_sha256": "1f0e4d699dda51218094635a6ace44ea56cdbc1d5d13c0a3737f14d83c040fd9",
+      "bytes": 5427,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/handoff/bootstrap-tests.sh",
+      "sha256": "c2c4bbc3fc508f0bbc36fc371946f4be6c72845db7937f5c3689cb5c88e745c2",
+      "original_sha256": "c2c4bbc3fc508f0bbc36fc371946f4be6c72845db7937f5c3689cb5c88e745c2",
+      "bytes": 1118,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/handoff/package.py",
+      "sha256": "1e1741577105e33772ab99427632738d51e72142f09ee5946e95a1268b8b09af",
+      "original_sha256": "1e1741577105e33772ab99427632738d51e72142f09ee5946e95a1268b8b09af",
+      "bytes": 6464,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/handoff/prepare_signing.py",
+      "sha256": "5fe4d98dfa8c09bdb89f3ad2908c3bb5bf73c4481d7d16d51cece1ebcfde034c",
+      "original_sha256": "5fe4d98dfa8c09bdb89f3ad2908c3bb5bf73c4481d7d16d51cece1ebcfde034c",
+      "bytes": 2237,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/handoff/requirements-main.in",
+      "sha256": "3391b94bc233421d4506a81024baaf9ddc6a797e61a0d8f0291e2c49dca3ea46",
+      "original_sha256": "3391b94bc233421d4506a81024baaf9ddc6a797e61a0d8f0291e2c49dca3ea46",
+      "bytes": 279,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/requirements.in",
+      "sha256": "39cc72f5c020891d7524a615e5ddcf7d82a0cb35e3e897d0ef8ec482957d0d09",
+      "original_sha256": "39cc72f5c020891d7524a615e5ddcf7d82a0cb35e3e897d0ef8ec482957d0d09",
+      "bytes": 217,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/requirements.lock",
+      "sha256": "fd4b788efa0863a3b10e9ea4bf2d6cd46790ceaff2183145d138fc2a23622594",
+      "original_sha256": "fd4b788efa0863a3b10e9ea4bf2d6cd46790ceaff2183145d138fc2a23622594",
+      "bytes": 4675,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/browser/account.mjs",
+      "sha256": "dc68940e5d274e9d5635ffb8cecc483174ec700a596fa92652ed78c6e68f2967",
+      "original_sha256": "dc68940e5d274e9d5635ffb8cecc483174ec700a596fa92652ed78c6e68f2967",
+      "bytes": 6680,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/browser/archive.mjs",
+      "sha256": "690c0a46dea4d26411a503ff53274fbb231f33adc27844f7fb89b1315ea03105",
+      "original_sha256": "690c0a46dea4d26411a503ff53274fbb231f33adc27844f7fb89b1315ea03105",
+      "bytes": 1850,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/browser/chat.mjs",
+      "sha256": "4a7445b56d84cf39b15dd47559580d71d0d2fad2d2bcd60b0d383d3c93968a95",
+      "original_sha256": "4a7445b56d84cf39b15dd47559580d71d0d2fad2d2bcd60b0d383d3c93968a95",
+      "bytes": 43414,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/browser/main_fixture.py",
+      "sha256": "1e2a841af93f8e58b7fd5d58c9d5cc142ec3b689412a40a91da02c3f4332bf7b",
+      "original_sha256": "1e2a841af93f8e58b7fd5d58c9d5cc142ec3b689412a40a91da02c3f4332bf7b",
+      "bytes": 789,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/browser/package-lock.json",
+      "sha256": "2f12693d79cece0667aa7a134f1c32a0dee124d0e9794b296c96ab564e677a29",
+      "original_sha256": "2f12693d79cece0667aa7a134f1c32a0dee124d0e9794b296c96ab564e677a29",
+      "bytes": 1650,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/browser/package.json",
+      "sha256": "034440e8627cdd2827d004b97f7216059820ad605c06db63ad41618ba08d6dab",
+      "original_sha256": "034440e8627cdd2827d004b97f7216059820ad605c06db63ad41618ba08d6dab",
+      "bytes": 113,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/conftest.py",
+      "sha256": "17fe4cfd3815a3c3525021b5381f70c30b40dbe2cffa73a22223b4e0eed07f1f",
+      "original_sha256": "17fe4cfd3815a3c3525021b5381f70c30b40dbe2cffa73a22223b4e0eed07f1f",
+      "bytes": 3319,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_archive.py",
+      "sha256": "0c6738ad2a5a8aa44214a267b5e8352d0d4a66c658d2f964da29cc0acbfa3541",
+      "original_sha256": "0c6738ad2a5a8aa44214a267b5e8352d0d4a66c658d2f964da29cc0acbfa3541",
+      "bytes": 12579,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_archive_browser.py",
+      "sha256": "0f7195808cedf20ef31d2ec9206e699f00c793dc1e6d01642eb738a878a550d0",
+      "original_sha256": "0f7195808cedf20ef31d2ec9206e699f00c793dc1e6d01642eb738a878a550d0",
+      "bytes": 1903,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_assets.py",
+      "sha256": "f7278550e92dc77e718d2b228c6bd33378f50f679488e86b1b3fbd40114f7996",
+      "original_sha256": "f7278550e92dc77e718d2b228c6bd33378f50f679488e86b1b3fbd40114f7996",
+      "bytes": 3744,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_funds.py",
+      "sha256": "ddabc211df562d796451e6e418731d7d11bbaa340f78a557baf6f4e5c9c9b251",
+      "original_sha256": "ddabc211df562d796451e6e418731d7d11bbaa340f78a557baf6f4e5c9c9b251",
+      "bytes": 18510,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_gateway.py",
+      "sha256": "454daba9655e2d039b12dbbed5c96172f3e087687a79c0c63892654c74d4d0f5",
+      "original_sha256": "454daba9655e2d039b12dbbed5c96172f3e087687a79c0c63892654c74d4d0f5",
+      "bytes": 13492,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_history.py",
+      "sha256": "b6fb86ceacf2555ca618f62dfa7bca660721100e63b1da726afe4657f8630922",
+      "original_sha256": "b6fb86ceacf2555ca618f62dfa7bca660721100e63b1da726afe4657f8630922",
+      "bytes": 9732,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_oidc.py",
+      "sha256": "a25331cbbabb0359dfacc1931bc581a6681750dfa43f27dee3cabc38db3110fe",
+      "original_sha256": "a25331cbbabb0359dfacc1931bc581a6681750dfa43f27dee3cabc38db3110fe",
+      "bytes": 3563,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_security.py",
+      "sha256": "4e8ac44cb999c31c4568b681ffddcd4fcc1db6cca7770f6f0b17cfa1eeab009b",
+      "original_sha256": "4e8ac44cb999c31c4568b681ffddcd4fcc1db6cca7770f6f0b17cfa1eeab009b",
+      "bytes": 4520,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_social.py",
+      "sha256": "4eb83a374a630aace88bbd4fa37bdb257421abc0699413de368db8d4884a5da1",
+      "original_sha256": "4eb83a374a630aace88bbd4fa37bdb257421abc0699413de368db8d4884a5da1",
+      "bytes": 3947,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_synapse_integration.py",
+      "sha256": "47038ebe7f375753fb5316bc331ccc75097133037950c4d162974df0a2a850af",
+      "original_sha256": "47038ebe7f375753fb5316bc331ccc75097133037950c4d162974df0a2a850af",
+      "bytes": 13474,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_web_client.py",
+      "sha256": "5d1d5c89d8a127ece6d7e62ae035eeca93ed7f88adf29b96a3b8401d4064673c",
+      "original_sha256": "5d1d5c89d8a127ece6d7e62ae035eeca93ed7f88adf29b96a3b8401d4064673c",
+      "bytes": 11328,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tests/test_web_reads.py",
+      "sha256": "825a250ef0c5f4e9d8c1f2b113b0393a42c458339fd501df5cc89a1a067a6eb8",
+      "original_sha256": "825a250ef0c5f4e9d8c1f2b113b0393a42c458339fd501df5cc89a1a067a6eb8",
+      "bytes": 5794,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tools/generate_sample.py",
+      "sha256": "ebebeeb96c4008c8011e46a60264c5735b3d7487a1607e2b89293923225ee3d2",
+      "original_sha256": "ebebeeb96c4008c8011e46a60264c5735b3d7487a1607e2b89293923225ee3d2",
+      "bytes": 2033,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/tools/verify_archive.py",
+      "sha256": "f003812ad932782f1cbd1c319404dfa5a4f07fd97cbf54f64e58cc1bbac85223",
+      "original_sha256": "f003812ad932782f1cbd1c319404dfa5a4f07fd97cbf54f64e58cc1bbac85223",
+      "bytes": 1909,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/web/archive.js",
+      "sha256": "93a1df82f57f028039a1591183b9542c7eea7ea5f8c18c590da3ef7d37780d6b",
+      "original_sha256": "93a1df82f57f028039a1591183b9542c7eea7ea5f8c18c590da3ef7d37780d6b",
+      "bytes": 1654,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/web/archives.html",
+      "sha256": "5f97ca3781e1cd2cf37b84561451ff9e9cec1ad9427d7edd518e8e7f5ad91990",
+      "original_sha256": "5f97ca3781e1cd2cf37b84561451ff9e9cec1ad9427d7edd518e8e7f5ad91990",
+      "bytes": 1541,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/web/index.html",
+      "sha256": "220929ef7dedf192daa427136fc73f760219274dc769561b4fa01b9cb7b2d0de",
+      "original_sha256": "220929ef7dedf192daa427136fc73f760219274dc769561b4fa01b9cb7b2d0de",
+      "bytes": 620,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/web/order.html",
+      "sha256": "4c28882a3626fff5f7a821466970991865591966a181145e84333f28f4a39bc3",
+      "original_sha256": "4c28882a3626fff5f7a821466970991865591966a181145e84333f28f4a39bc3",
+      "bytes": 866,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/web/order.js",
+      "sha256": "6d1ef23105806e28d8e79ce96b20e6b0c570da7d201ce33f75a2a574806cb8ed",
+      "original_sha256": "6d1ef23105806e28d8e79ce96b20e6b0c570da7d201ce33f75a2a574806cb8ed",
+      "bytes": 958,
+      "sanitized": false
+    },
+    {
+      "path": "source/yichat/web/sw-retire.js",
+      "sha256": "78d8d9849f81fe44f144b1c52613d01d6a39667622cc3dd6280f2bad84bda73a",
+      "original_sha256": "78d8d9849f81fe44f144b1c52613d01d6a39667622cc3dd6280f2bad84bda73a",
+      "bytes": 544,
+      "sanitized": false
+    },
+    {
+      "path": "source/yidt.py",
+      "sha256": "2304c1fae455774b92fac19cfe9ffa759d7df893a07c230bb844f51bcdf2d8ac",
+      "original_sha256": "2304c1fae455774b92fac19cfe9ffa759d7df893a07c230bb844f51bcdf2d8ac",
+      "bytes": 21821,
+      "sanitized": false
+    },
+    {
+      "path": "source/yidt.service",
+      "sha256": "3fdbb734869656318a5d9098b9fd35779a7183b1ce816d217644fb9671cb475c",
+      "original_sha256": "3fdbb734869656318a5d9098b9fd35779a7183b1ce816d217644fb9671cb475c",
+      "bytes": 588,
+      "sanitized": false
+    },
+    {
+      "path": "source/yidt_bridge.py",
+      "sha256": "7c5c2e6c9792d59ba3b3d8e23978fce26fac1bcd3905442a75e3a717cc4e76b3",
+      "original_sha256": "7c5c2e6c9792d59ba3b3d8e23978fce26fac1bcd3905442a75e3a717cc4e76b3",
+      "bytes": 4214,
+      "sanitized": false
+    },
+    {
+      "path": "source/yidt_core.py",
+      "sha256": "b67249b7c336185fc40baa32b412895a4fc9885a6d7e46d311607a45e6416be9",
+      "original_sha256": "b67249b7c336185fc40baa32b412895a4fc9885a6d7e46d311607a45e6416be9",
+      "bytes": 19071,
+      "sanitized": false
+    }
+  ],
+  "excluded_tracked_files": [
+    "app/dbloader.py",
+    "app/downloader.py",
+    "app/optionset.py",
+    "app/ws.py",
+    "frontend.py",
+    "lightweight.js",
+    "main.py",
+    "minesweeper.py",
+    "rlstra.py",
+    "start/start-parachute.sh",
+    "start/startaigo.sh",
+    "start/startms.sh",
+    "start/startrl.sh",
+    "start/startweb.sh",
+    "start/startwebg.sh",
+    "strategy.py",
+    "table.py",
+    "test.py",
+    "test_oidc.py",
+    "webgame.py"
+  ],
+  "redactions": [
+    {
+      "file": "mailer.py",
+      "field": "BREVO_API_KEY",
+      "change": "Removed embedded/placeholder credential fallback; environment required"
+    },
+    {
+      "file": "website.py",
+      "field": "TURNSTILE_SECRET",
+      "change": "Removed embedded/placeholder credential fallback; environment required"
+    }
+  ],
+  "reference_sha256": "93b7558c502e37af1034752edc8dfda4f05087ab11108384627d8d2654510412",
+  "contains_android_implementation": false,
+  "excluded_runtime": "All untracked/runtime files, live databases, keys, env, DSNs, credentials, uploads, personal archives, old Telegram sources, dependencies, build outputs, screenshots, Git history"
+}

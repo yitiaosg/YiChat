@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 260" role="img" aria-label="跳伞者">
+<defs><linearGradient id="canopy" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#ffcf70"/><stop offset="1" stop-color="#f46664"/></linearGradient></defs>
+<path d="M19 99C22 34 60 17 110 17s88 17 91 82c-24-12-35-8-46 3-14-10-28-10-45 1-16-11-31-11-47-1-12-11-24-15-44-3Z" fill="url(#canopy)" stroke="#ad4964" stroke-width="6"/>
+<path d="M19 99 97 194m44 0 60-95M63 102l42 91m50-91-40 91" fill="none" stroke="#c5d9ee" stroke-width="3"/>
+<circle cx="111" cy="180" r="15" fill="#ffd0aa" stroke="#425472" stroke-width="4"/><path d="M96 176q13-26 28 0" fill="#334c72"/>
+<path d="M101 197q11-9 20 0l6 38-31 0Z" fill="#304c79" stroke="#192c4f" stroke-width="4"/><path d="m101 202-18 17m39-17 19 17m-35 15-14 21m28-21 15 21" fill="none" stroke="#263b60" stroke-width="9" stroke-linecap="round"/><path d="M99 205q13 8 25 0" fill="none" stroke="#ffb75c" stroke-width="5"/>
+</svg>

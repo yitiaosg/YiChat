@@ -1,0 +1,32 @@
+body { background:#020617; }
+        .diff-tab {
+            padding: 6px 18px; border-radius: 999px; font-size: 14px; font-weight: 600;
+            color: #94a3b8; background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08); cursor: pointer; transition: all .15s;
+        }
+        .diff-tab:hover { background: rgba(255,255,255,0.08); color:#e2e8f0; }
+        .diff-tab.active { background: linear-gradient(135deg,#38bdf8,#2563eb); color:#fff; border-color: transparent; }
+
+        .rank-row {
+            display:flex; align-items:center; gap:14px; padding:10px 14px; border-radius:14px;
+            background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);
+            text-decoration:none; color:inherit; transition: background .15s, transform .15s;
+        }
+        .rank-row:hover { background: rgba(255,255,255,0.07); transform: translateY(-1px); }
+
+        .rank-num { width:30px; text-align:center; font-weight:700; color:#64748b; flex-shrink:0; }
+        .rank-medal {
+            width:30px; height:30px; border-radius:50%; flex-shrink:0;
+            display:flex; align-items:center; justify-content:center;
+            font-weight:800; font-size:14px; color:#0f172a;
+        }
+        .rank-gold   { background: linear-gradient(135deg,#fde68a,#f59e0b); box-shadow:0 0 14px rgba(245,158,11,.6); }
+        .rank-silver { background: linear-gradient(135deg,#e2e8f0,#94a3b8); box-shadow:0 0 14px rgba(148,163,184,.5); }
+        .rank-bronze { background: linear-gradient(135deg,#fcd34d,#b45309); box-shadow:0 0 14px rgba(180,83,9,.5); }
+
+        .rank-top-1 { animation: glow-gold 2.2s ease-in-out infinite; }
+        .rank-top-2 { animation: glow-silver 2.2s ease-in-out infinite; }
+        .rank-top-3 { animation: glow-bronze 2.2s ease-in-out infinite; }
+        @keyframes glow-gold   { 0%,100% { box-shadow:0 0 0 rgba(245,158,11,0); } 50% { box-shadow:0 0 22px rgba(245,158,11,.25); } }
+        @keyframes glow-silver { 0%,100% { box-shadow:0 0 0 rgba(148,163,184,0); } 50% { box-shadow:0 0 18px rgba(148,163,184,.2); } }
+        @keyframes glow-bronze { 0%,100% { box-shadow:0 0 0 rgba(180,83,9,0); } 50% { box-shadow:0 0 18px rgba(180,83,9,.2); } }

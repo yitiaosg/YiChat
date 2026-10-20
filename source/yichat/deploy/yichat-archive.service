@@ -1,0 +1,22 @@
+[Unit]
+Description=YiChat deterministic archive sealing and evidence-first retention
+After=yichat-synapse.service postgresql.service
+Requires=yichat-synapse.service
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/yitiao/yichat
+EnvironmentFile=/etc/yichat/yichat.env
+EnvironmentFile=/etc/yichat/archive-worker.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/root/yitiao/yichat/.venv/bin/python -m backend.archive_worker
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/yichat/gateway /var/lib/yichat/archives
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+
+org.yitiao.yichat.NativeSdkTest:
+Error in composeConversationAndDetails(org.yitiao.yichat.NativeSdkTest):
+java.lang.NullPointerException: Attempt to invoke virtual method 'void androidx.test.uiautomator.UiObject2.click()' on a null object reference
+	at org.yitiao.yichat.NativeSdkTest.composeConversationAndDetails(NativeSdkTest.kt:103)
+
+
+Time: 109.214
+There was 1 failure:
+1) composeConversationAndDetails(org.yitiao.yichat.NativeSdkTest)
+java.lang.NullPointerException: Attempt to invoke virtual method 'void androidx.test.uiautomator.UiObject2.click()' on a null object reference
+	at org.yitiao.yichat.NativeSdkTest.composeConversationAndDetails(NativeSdkTest.kt:103)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+

@@ -1,0 +1,64 @@
+{
+  "matrix_identities_preserved": true,
+  "matrix_identity_count": 2,
+  "gateway_rooms": 1,
+  "gateway_files": 0,
+  "users": 5,
+  "stable_ids": 5,
+  "user_count_preserved": true,
+  "ledger_head_unchanged": true,
+  "wallet_count_unchanged": true,
+  "accepted_events": 17,
+  "sealed_specs": 6,
+  "gaps": 0,
+  "failed_jobs": 0,
+  "sealed_files_match_summaries": true,
+  "sealed_days": [
+    "2026-10-16",
+    "2026-10-17",
+    "2026-10-18"
+  ],
+  "other_service_pids_unchanged": {
+    "yidt": true,
+    "parachute": true,
+    "webgame": true,
+    "caddy": true
+  },
+  "funds_enabled": false,
+  "official_configured": false,
+  "code_commit": "e591ca3",
+  "backend_tests_passed": 81,
+  "main_site_tests_passed": 75,
+  "account_browser_checks_passed": 11,
+  "account_browser_page_errors": 0,
+  "post_migration_backup": "/root/yitiao/backups/yichat-v2-20261019T152439Z",
+  "https_smoke_checks_passed": 14,
+  "production_local_anonymous_burst": {
+    "elapsed_seconds": 0.107,
+    "statuses": [
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      401,
+      429
+    ],
+    "errcode": "M_LIMIT_EXCEEDED",
+    "retry_after": 1,
+    "retry_after_ms": 899
+  },
+  "production_public_social_checks": {
+    "profile": 200,
+    "counts": 200,
+    "private_lists": [
+      403,
+      403,
+      403
+    ]
+  }
+}

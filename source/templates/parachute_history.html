@@ -1,0 +1,18 @@
+{% extends "parachute_base.html" %}{% set active_nav = 'history' %}
+{% block title %}历史记录 · Parachute{% endblock %}
+{% block content %}
+<div class="page-head"><h1>历史记录</h1><p class="muted">最多展示 100 条。挂起的记录会保留在其中；排名前 50 的成绩也会被保存。</p></div>
+<div class="card"><div class="list" id="records"><div class="empty">正在加载记录…</div></div></div>
+{% endblock %}
+{% block script %}<script>
+const root=document.getElementById('records');
+const money=cents=>(cents/100).toFixed(2);
+const signed=cents=>(cents>0?'+':'')+money(cents);
+function element(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node}
+async function post(url,payload){const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await response.json();if(!data.ok)throw Error(data.error||'操作失败');return data}
+async function share(item,button){button.disabled=true;try{const data=await post('/games/parachute/api/records/'+item.id+'/share',{});location.assign(data.options_url)}catch(error){alert(error.message);button.disabled=false}}
+async function togglePin(item,button){button.disabled=true;try{const data=await post('/games/parachute/api/records/'+item.id+'/pin',{pinned:!item.pinned});if(data.deleted)alert('这条记录已超出保留范围，分享链接同时失效');await load()}catch(error){alert(error.message)}finally{button.disabled=false}}
+function render(items){root.replaceChildren();if(!items.length){root.append(element('div','empty','还没有已结束的游戏记录。'));return}for(const item of items){const row=element('div','record');const main=element('div','record-main');const title=element('div','record-title',(item.status==='jumped'?'安全跳伞':'飞机爆炸')+(item.pinned?' · 已挂起':''));const height=Number(item.height||0).toFixed(2);main.append(title,element('div','record-meta',item.played_at+' · 高度 '+height+' m · 投入 '+money(item.stake_cents)+' · 手续费 '+money(item.fee_cents)));const side=element('div','record-side');side.append(element('strong','score '+(item.score_cents>0?'positive':item.score_cents<0?'negative':'neutral'),signed(item.score_cents)));const pin=element('button','button',item.pinned?'取消挂起':'挂起');pin.type='button';pin.onclick=()=>togglePin(item,pin);const shareButton=element('button','button','分享');shareButton.type='button';shareButton.onclick=()=>share(item,shareButton);side.append(pin,shareButton);for(const [hash,label] of [[item.paid_tx,'下注'],[item.redeem_tx,'赎回']])if(hash){const a=element('a','record-meta',label+'详情');a.href='https://yidt.yitiao.org/explorer/tx/'+hash;a.target='_blank';a.rel='noopener';main.append(a);}row.append(main,side);root.append(row)}}
+async function load(){try{const response=await fetch('/games/parachute/api/history',{cache:'no-store'});const data=await response.json();if(!data.ok)throw Error(data.error||'加载失败');render(data.items)}catch(error){root.replaceChildren(element('div','empty',error.message))}}
+load();
+</script>{% endblock %}

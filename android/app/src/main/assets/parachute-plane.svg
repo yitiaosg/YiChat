@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 190" role="img" aria-label="侧面飞机">
+<defs><linearGradient id="body" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#ffffff"/><stop offset=".5" stop-color="#d9e7f8"/><stop offset="1" stop-color="#8ba8c9"/></linearGradient><linearGradient id="wing" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#c7dff3"/><stop offset="1" stop-color="#758eac"/></linearGradient></defs>
+<path d="M48 103 10 36l25-5 91 72Z" fill="#b9d1ed" stroke="#49617f" stroke-width="5"/>
+<path d="m46 93-33 14 12 12 86-2Z" fill="#91b8dc" stroke="#49617f" stroke-width="4"/>
+<path d="M39 94c13-7 47-10 72-8l260 9c36 1 74 8 86 22 6 7-16 24-51 29l-310 5c-27 0-51-10-61-24Z" fill="url(#body)" stroke="#364e6b" stroke-width="6"/>
+<path d="M346 98 407 101q24 2 39 15l-102-2Z" fill="#11395d" stroke="#4f749a" stroke-width="4"/>
+<path d="M103 113h226" stroke="#f9ae5c" stroke-width="10" stroke-linecap="round"/>
+<g fill="#173d62"><rect x="139" y="100" width="19" height="11" rx="5"/><rect x="172" y="100" width="19" height="11" rx="5"/><rect x="205" y="100" width="19" height="11" rx="5"/><rect x="238" y="100" width="19" height="11" rx="5"/><rect x="271" y="100" width="19" height="11" rx="5"/></g>
+<path d="m169 124 81-62 48 2-29 62Z" fill="url(#wing)" stroke="#435d7c" stroke-width="5"/><path d="m220 124 44 51 68-1-65-50Z" fill="#849fbd" stroke="#435d7c" stroke-width="5"/>
+<path d="M135 149v16m192-17v17" stroke="#39485a" stroke-width="6"/><g fill="#1c2938"><circle cx="135" cy="169" r="11"/><circle cx="327" cy="169" r="11"/></g><g fill="#8eb8db"><circle cx="135" cy="169" r="4"/><circle cx="327" cy="169" r="4"/></g>
+<path d="M455 112q12-2 14 4l-12 6Z" fill="#f5e3a5"/>
+</svg>

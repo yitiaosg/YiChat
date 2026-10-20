@@ -1,0 +1,16 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='ycards-showcase.css') }}">
+<section id="yc-showcase" class="yc-showcase{% if not showcase_boot.edit %} yc-showcase-public{% endif %}" aria-label="主页卡片展示">
+  {% if showcase_boot.edit %}<div class="yc-showcase-heading"><h2>卡片展示</h2>{% if showcase_boot.edit %}<span id="yc-showcase-count"></span>{% endif %}</div>{% endif %}
+  {% if showcase_boot.edit %}<p class="yc-showcase-help">选择仓库卡片装入展示框，可随时更换或取消展示。设置即时保存；展示中的卡片不可损毁。</p>{% endif %}
+  <div id="yc-showcase-grid" class="yc-showcase-grid"></div>
+  {% if showcase_boot.edit %}
+  <div class="yc-showcase-tools"><button id="yc-buy-slot" type="button">购买展示框 · 10,000 YIDT</button><span id="yc-showcase-balance"></span></div>
+  <p class="yc-showcase-help">默认 3 个展示框；每个新展示框 10,000 YIDT，最多购买 3 个。</p>
+  <dialog id="yc-card-picker" class="yc-card-picker"><button type="button" id="yc-close-picker">关闭</button><h3 id="yc-picker-title">选择仓库卡片</h3><form id="yc-picker-filter"><input name="tid" placeholder="TID" maxlength="12" aria-label="筛选 TID"><input name="name" placeholder="名称" maxlength="20" aria-label="筛选名称"><button type="submit">筛选</button></form><div id="yc-picker-cards" class="yc-showcase-grid"></div><div id="yc-picker-pages" class="yc-showcase-tools"></div><p id="yc-picker-error" role="status"></p></dialog>
+  {% endif %}
+  <p id="yc-showcase-message" role="status"></p>
+</section>
+<script id="yc-showcase-boot" type="application/json">{{ showcase_boot|tojson }}</script>
+<script src="{{ url_for('static', filename='ycards-render.js') }}" defer></script>
+<script src="{{ url_for('static', filename='ycards-cache.js') }}" defer></script>
+<script src="{{ url_for('static', filename='ycards-showcase.js') }}" defer></script>

@@ -1,0 +1,12 @@
+.venv/
+frontend/node_modules/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+*.db
+*.db-wal
+*.db-shm
+tests/.fixture-path
+*.key
+*.pem

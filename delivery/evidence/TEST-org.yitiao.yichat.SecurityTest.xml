@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="org.yitiao.yichat.SecurityTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-20T07:14:13.893Z" hostname="c4526a8758ab" time="1.347">
+  <properties/>
+  <testcase name="canonicalPacketBindsLfHashRoomAndEvent" classname="org.yitiao.yichat.SecurityTest" time="0.051"/>
+  <testcase name="portableBackupCrossDeviceAndTamperRejection" classname="org.yitiao.yichat.SecurityTest" time="1.259"/>
+  <testcase name="shareAllowlistRejectsUrlConfusion" classname="org.yitiao.yichat.SecurityTest" time="0.036"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

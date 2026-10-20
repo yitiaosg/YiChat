@@ -1,0 +1,7 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>归档下载与本地校验 · YiChat</title><style>body{font:16px system-ui;max-width:760px;margin:50px auto;padding:0 20px;background:#061326;color:#eaf1ff}a{color:#8cb9ff}input,select,button{font:inherit;margin:6px;padding:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h1>归档下载与本地校验</h1><p>仅完整日期具有历史访问权限的成员可下载整日归档。UTC 当天尚未封存。文件只在本机计算哈希，不上传。</p>
+<form id="archive-form"><p><label>会话 ID <input id="room" required placeholder="!room:chat.yitiao.org"></label></p>
+<p><label>UTC 日期 <input id="day" type="date" required></label></p><label>规格 <select id="spec"><option value="events-manifest">事件与附件清单</option><option value="with-attachments">事件、清单与附件实体</option></select></label>
+<button>获取可信摘要</button></form><p id="status" role="status"></p><pre id="summary"></pre><p><a id="download" hidden>下载完整归档</a></p>
+<label>选择本地文件校验 <input id="local-file" type="file" accept=".zip"></label><p id="verification" role="status"></p>
+<p>私聊归档保存密文，恢复还需要用户自己保存的加密密钥备份。本页不解密或恢复消息。</p>
+<p><a href="/tools/verify_archive.py">下载本地 Python 校验工具</a> · <a href="/auth/login">主站登录</a></p><script src="/static/archive.js" defer></script></html>

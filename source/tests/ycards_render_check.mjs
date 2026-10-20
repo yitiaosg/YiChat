@@ -1,0 +1,28 @@
+import fs from 'node:fs';
+const pages=await (await fetch('http://127.0.0.1:9225/json')).json();const ws=new WebSocket(pages[0].webSocketDebuggerUrl);await new Promise(r=>ws.addEventListener('open',r,{once:true}));let seq=0;const pending=new Map();const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}))});ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(Error(JSON.stringify(m.error))):p.resolve(m.result)}});
+await send('Page.enable');await send('Runtime.enable');await send('Page.navigate',{url:'http://127.0.0.1:5079/ycards/'});await new Promise(r=>setTimeout(r,600));
+const res=await send('Runtime.evaluate',{awaitPromise:true,returnByValue:true,expression:`(async()=>{
+const checks=[];const assert=(name,ok,detail)=>{checks.push({name,ok,detail});if(!ok)throw Error(name+': '+JSON.stringify(detail))};
+const host=document.createElement('div');host.style='position:fixed;left:0;top:0;width:300px;height:400px;z-index:500;background:#345';document.body.append(host);
+const d={name:'test',material:'glass',orientation:'portrait',width_mm:53.98,height_mm:85.6,corners:'square',color:'color',layers:[]};
+const r=new YCardRenderer(host,{design:d},{interactive:false});r.visible=true;r.draw();
+const pixel=(x=.5,y=.5)=>[...r.canvas.getContext('2d').getImageData(Math.floor(r.canvas.width*x),Math.floor(r.canvas.height*y),1,1).data];
+const base=pixel();
+const layer=(type,extra={})=>({id:Math.random().toString(36).slice(2),type,effect:type==='filter'?'negative':type==='material'?'gold':'image',side:'front',position:'surface',distance_mm:0,x:0,y:0,width:53.98,height:85.6,rotation:0,scope:'full',order:0,...extra});
+d.layers=[layer('filter')];r.set({design:d});r.draw();assert('negative preserves glass alpha',Math.abs(pixel()[3]-base[3])<=1,{before:base,after:pixel()});
+const png=color=>{const c=document.createElement('canvas');c.width=c.height=20;const x=c.getContext('2d');x.fillStyle=color;x.fillRect(0,0,20,20);return c.toDataURL()};
+const red=png('#ff0000'),blue=png('#0000ff');
+d.layers=[layer('image',{image:red,width:12,height:12,position:'front',distance_mm:10}),layer('image',{image:blue,width:12,height:12,position:'behind',distance_mm:10,order:1})];r.set({design:d});await new Promise(s=>setTimeout(s,100));r.draw();assert('spatial occlusion puts front layer above rear',pixel()[0]>200&&pixel()[2]<20,pixel());
+const centroid=()=>{const p=r.canvas.getContext('2d').getImageData(0,0,r.canvas.width,r.canvas.height);let n=0,x=0;for(let i=0;i<p.data.length;i+=4)if(p.data[i]>220&&p.data[i+1]<30&&p.data[i+2]<30){n++;x+=(i/4)%r.canvas.width}return x/n};
+const x0=centroid();r.ry=45;r.draw();const x45=centroid();r.ry=80;r.draw();const x80=centroid();assert('individual layer parallax moves',Math.abs(x0-x45)>20,{x0,x45});assert('parallax saturates beyond 45 degrees',Math.abs(x45-x80)<1,{x45,x80});
+d.layers=[layer('image',{image:red}),layer('image',{image:blue,side:'back'})];r.ry=0;r.set({design:d});await new Promise(s=>setTimeout(s,50));r.draw();const front=pixel();r.ry=180;r.draw();const back=pixel();assert('glass opaque front and rear artwork occlude by facing side',front[0]>200&&back[2]>200&&back[0]<20,{front,back});
+d.material='plastic';r.rx=140;r.ry=160;r.limit();assert('plastic combined rotation never reveals back',Math.cos(r.rx*Math.PI/180)*Math.cos(r.ry*Math.PI/180)>=0&&r.rx<=90&&r.ry<=90,{rx:r.rx,ry:r.ry});
+r.gyro=true;r.draw();assert('gyro keeps screen position and canvas transform fixed',r.canvas.style.transform==='none',r.canvas.style.transform);
+const m=document.createElement('canvas');m.width=2;m.height=1;const mx=m.getContext('2d');const md=mx.createImageData(2,1);md.data.set([100,100,100,1,100,100,100,255]);mx.putImageData(md,0,0);const mask=await ycBinaryMask(m.toDataURL());const im=new Image();im.src=mask;await im.decode();mx.clearRect(0,0,2,1);mx.drawImage(im,0,0);assert('mask alpha 1 and 255 both become full intensity',[...mx.getImageData(0,0,2,1).data].every(v=>v===255));
+r.rx=r.ry=0;r.gyro=false;d.layers=[layer('image',{image:red})];const geometry={bounds:[0,0,53.98,171.2],cells:[1,5],corners:[0,3,3,5],factory:true};r.set({design:d,geometry,defects:{layers:[],cuts:[]}});r.draw();assert('connected product has actual doubled silhouette',Math.abs(r.canvas.width/r.canvas.height-53.98/171.2)<.01,{width:r.canvas.width,height:r.canvas.height});
+assert('missing corner cut leaves square corner',pixel(.005,.005)[3]>100,pixel(.005,.005));
+r.set({design:d,defects:{layers:[{id:d.layers[0].id,missing:true,offset:[3,4]}],cuts:[]}});r.draw();assert('missing print overrides simultaneous skew appearance',pixel()[0]<30,pixel());
+d.layers=[layer('image',{image:red,width:70,height:100,position:'front',distance_mm:10})];r.ry=30;r.set({design:d});r.draw();const personal=[...r.canvas.getContext('2d').getImageData(0,0,r.canvas.width,r.canvas.height).data];r.set({design:d,geometry:{cells:[6],bounds:[53.98,85.6,107.96,171.2],corners:[0,0,0,0],factory:true}});r.draw();const factory=[...r.canvas.getContext('2d').getImageData(0,0,r.canvas.width,r.canvas.height).data];assert('undamaged factory card matches personal print including parallax overscan',personal.length===factory.length&&personal.every((v,i)=>v===factory[i]));
+const c=performance.now();d.layers=Array.from({length:64},(_,i)=>layer('filter',{id:'n'+i,order:i}));r.set({design:d});r.draw();checks.push({name:'64 negative layers render time ms',ok:true,detail:Math.round(performance.now()-c)});
+r.destroy();host.remove();return checks;
+})()`});console.log(JSON.stringify(res,null,2));ws.close();if(res.exceptionDetails)process.exitCode=1;

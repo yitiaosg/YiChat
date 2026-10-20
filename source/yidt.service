@@ -1,0 +1,21 @@
+[Unit]
+Description=YIDT Wallet and Public Ledger
+After=network.target website.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/yitiao
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/opt/vps-python/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStartPre=/opt/vps-python/bin/python /root/yitiao/yidt_core.py
+ExecStart=/opt/vps-python/bin/gunicorn --bind 127.0.0.1:5010 --workers 2 --threads 4 --timeout 45 yidt:app
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+[Unit]
+Description=YiChat application, session and encrypted file gateway
+After=network.target yichat-synapse.service website.service
+Requires=yichat-synapse.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/yitiao/yichat
+EnvironmentFile=/etc/yichat/yichat.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/root/yitiao/yichat/.venv/bin/python -m uvicorn backend.app:app --host 127.0.0.1 --port 5018 --workers 1 --no-access-log --limit-concurrency 160 --timeout-keep-alive 5
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/yichat/gateway /root/yitiao
+ProtectHome=read-only
+ReadWritePaths=/root/yitiao
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

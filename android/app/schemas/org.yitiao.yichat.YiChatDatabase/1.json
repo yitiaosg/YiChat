@@ -1,0 +1,201 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "e5f37bde871083c2fe2e1ece21b83707",
+    "entities": [
+      {
+        "tableName": "Operation",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` TEXT NOT NULL, `kind` TEXT NOT NULL, `state` TEXT NOT NULL, `encrypted` BLOB NOT NULL, `updated` INTEGER NOT NULL, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "encrypted",
+            "columnName": "encrypted",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updated",
+            "columnName": "updated",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        }
+      },
+      {
+        "tableName": "Packet",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`room` TEXT NOT NULL, `event` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `hash` TEXT NOT NULL, `encrypted` BLOB NOT NULL, PRIMARY KEY(`room`, `event`))",
+        "fields": [
+          {
+            "fieldPath": "room",
+            "columnName": "room",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "event",
+            "columnName": "event",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hash",
+            "columnName": "hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "encrypted",
+            "columnName": "encrypted",
+            "affinity": "BLOB",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "room",
+            "event"
+          ]
+        }
+      },
+      {
+        "tableName": "Tombstone",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`room` TEXT NOT NULL, `event` TEXT NOT NULL, `sequence` INTEGER NOT NULL, PRIMARY KEY(`room`, `event`))",
+        "fields": [
+          {
+            "fieldPath": "room",
+            "columnName": "room",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "event",
+            "columnName": "event",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "room",
+            "event"
+          ]
+        }
+      },
+      {
+        "tableName": "TrustedReceipt",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`room` TEXT NOT NULL, `event` TEXT NOT NULL, `hash` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `encrypted` BLOB NOT NULL, PRIMARY KEY(`room`, `event`))",
+        "fields": [
+          {
+            "fieldPath": "room",
+            "columnName": "room",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "event",
+            "columnName": "event",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hash",
+            "columnName": "hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "encrypted",
+            "columnName": "encrypted",
+            "affinity": "BLOB",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "room",
+            "event"
+          ]
+        }
+      },
+      {
+        "tableName": "Watermark",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`room` TEXT NOT NULL, `untilMs` INTEGER NOT NULL, `cursor` TEXT, PRIMARY KEY(`room`))",
+        "fields": [
+          {
+            "fieldPath": "room",
+            "columnName": "room",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "untilMs",
+            "columnName": "untilMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cursor",
+            "columnName": "cursor",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "room"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e5f37bde871083c2fe2e1ece21b83707')"
+    ]
+  }
+}

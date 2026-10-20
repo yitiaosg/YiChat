@@ -1,0 +1,41 @@
+<main class="page settings-page">
+  <section class="card acct-settings" aria-labelledby="privacy-title">
+    <nav class="settings-top"><a class="settings-back" href="/account/">‹ 返回账户</a></nav>
+    <h1 id="privacy-title">隐私设置</h1>
+    {% if request.args.get('saved') %}<p class="settings-success" role="status">设置已保存</p>{% endif %}
+    <form method="post" class="settings-form">
+      <input type="hidden" name="csrf" value="{{ social_csrf }}">
+      <h2 class="settings-section-title">名单可见性</h2>
+      <p class="settings-description">数量始终公开，名单由你决定。你始终可以查看自己的名单。</p>
+      <div class="settings-options">
+        {% for key,label in [('following','关注'),('followers','粉丝'),('friends','朋友')] %}
+        <label class="settings-toggle-row">
+          <span>公开{{ label }}名单</span>
+          <span class="settings-switch"><input type="checkbox" name="{{ key }}" {% if p[key] %}checked{% endif %}><span class="settings-switch-track" aria-hidden="true"></span></span>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="settings-field">
+        <label for="message-privacy">谁能给我发消息</label>
+        <div class="settings-select"><select id="message-privacy" name="messages">
+          {% for key,label in [('everyone','所有人'),('followers','粉丝'),('friends','朋友')] %}
+          <option value="{{ key }}" {% if p.messages==key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select></div>
+        <p class="settings-description">粉丝指关注你的人；朋友指互相关注的人。拉黑始终优先。</p>
+      </div>
+      <button class="btn-primary" type="submit">保存</button>
+    </form>
+    <section class="settings-blocklist" aria-labelledby="blocklist-title">
+      <h2 class="settings-section-title" id="blocklist-title">黑名单</h2>
+      <p class="settings-description">拉黑将清除双方关注；解除后不会自动恢复。</p>
+      <form id="block-form" class="settings-block-form">
+        <label class="settings-field" for="block-username">用户名<input type="text" id="block-username" name="username" placeholder="输入要拉黑的用户名" autocomplete="off" required maxlength="100"></label>
+        <button class="settings-button" type="submit">拉黑</button>
+      </form>
+      <p id="social-status" class="settings-status" role="status" aria-live="polite"></p>
+      <div class="settings-list" data-social-list="blocked" data-social-id="{{ uid }}"></div>
+    </section>
+  </section>
+</main>
+<script src="/static/account-social.js" defer></script>

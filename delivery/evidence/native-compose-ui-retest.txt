@@ -1,0 +1,23 @@
+
+org.yitiao.yichat.NativeSdkTest:
+Error in composeConversationAndDetails(org.yitiao.yichat.NativeSdkTest):
+java.lang.AssertionError
+	at org.junit.Assert.fail(Assert.java:87)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertTrue(Assert.java:53)
+	at org.yitiao.yichat.NativeSdkTest.composeConversationAndDetails(NativeSdkTest.kt:104)
+
+
+Time: 161.006
+There was 1 failure:
+1) composeConversationAndDetails(org.yitiao.yichat.NativeSdkTest)
+java.lang.AssertionError
+	at org.junit.Assert.fail(Assert.java:87)
+	at org.junit.Assert.assertTrue(Assert.java:42)
+	at org.junit.Assert.assertTrue(Assert.java:53)
+	at org.yitiao.yichat.NativeSdkTest.composeConversationAndDetails(NativeSdkTest.kt:104)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+

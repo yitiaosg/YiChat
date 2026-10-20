@@ -1,0 +1,34 @@
+import fs from 'node:fs';
+const artifacts=process.env.YCARDS_ARTIFACTS||new URL('./ycards-cache-artifacts',import.meta.url).pathname;fs.mkdirSync(artifacts,{recursive:true});
+const pages=await(await fetch('http://127.0.0.1:9225/json')).json(),ws=new WebSocket(pages[0].webSocketDebuggerUrl);await new Promise(r=>ws.addEventListener('open',r,{once:true}));let seq=0;const pending=new Map(),errors=[],writes=[],requests=[],failed=[];
+const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}))});
+ws.addEventListener('message',async e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);pending.delete(m.id);m.error?p?.reject(Error(JSON.stringify(m.error))):p?.resolve(m.result)}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text);else if(m.method==='Network.requestWillBeSent'){requests.push({id:m.params.requestId,url:m.params.request.url});if(m.params.request.method==='POST')writes.push(m.params.request.url)}else if(m.method==='Network.loadingFailed')failed.push(m.params.requestId);else if(m.method==='Page.javascriptDialogOpening')await send('Page.handleJavaScriptDialog',{accept:true,promptText:'V2Demo'})});
+await send('Page.enable');await send('Runtime.enable');await send('Network.enable');await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1080,deviceScaleFactor:1,mobile:false});
+const evaljs=async expression=>{const r=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value};
+const wait=async expression=>{for(let i=0;i<150;i++){if(await evaljs(expression))return;await new Promise(r=>setTimeout(r,100))}throw Error('Timeout '+expression)};
+const click=async sel=>{await wait(`!!document.querySelector(${JSON.stringify(sel)})`);await evaljs(`document.querySelector(${JSON.stringify(sel)}).click()`)};
+const field=async(sel,value)=>{await wait(`!!document.querySelector(${JSON.stringify(sel)})`);return evaljs(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))})()`)};
+const nav=async path=>{await send('Page.navigate',{url:'http://127.0.0.1:5079'+path});await wait(`document.readyState==='complete'`)};
+const screen=async name=>{const s=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(artifacts+'/'+name+'.png',Buffer.from(s.data,'base64'))};
+
+const templates=tid=>requests.filter(r=>r.url.includes('/api/render-template/'+tid));
+await nav('/test-login/creator');await wait(`document.querySelectorAll('#card-grid .preview .yc-canvas').length>=4`);if(templates('CacheA').length!==1)throw Error('Duplicate initial template downloads');
+await field('#pagination [name=page]','2');await click('#pagination button[type=submit]');await wait(`document.querySelector('#pagination').textContent.includes('2 / 3')&&document.querySelectorAll('#card-grid .preview .yc-canvas').length>=4`);if(templates('CacheA').length!==1)throw Error('Page 2 downloaded template again');
+await click('[data-tab=mine]');await wait(`document.querySelectorAll('#card-grid .preview .yc-canvas').length>=4`);if(templates('CacheA').length!==1)throw Error('Warehouse did not share template');
+await click('[data-tab=auction]');await wait(`document.querySelectorAll('#auction-grid .preview .yc-canvas').length>=4`);if(templates('CacheA').length!==1)throw Error('Auction did not share template');
+await field('#auction-pages [name=page]','2');await click('#auction-pages button[type=submit]');await wait(`document.querySelector('#auction-pages').textContent.includes('2 / 2')&&document.querySelectorAll('#auction-grid .tile').length===8`);
+await click('[data-auction-open]');await wait(`!!document.querySelector('#auction-detail .yc-canvas')`);await new Promise(r=>setTimeout(r,4300));
+if(templates('CacheA').length!==1)throw Error('Detail/poll refetched template');if(!requests.some(r=>r.url.includes('card=0')))throw Error('Auction poll not compact');await click('.dialog-close');
+// Reload must use IndexedDB, then filtering must cancel an in-flight new template.
+await nav('/ycards/?tab=market');await wait(`document.querySelectorAll('#card-grid .preview .yc-canvas').length>=4`);if(templates('CacheA').length!==1)throw Error('Reload did not reuse disk cache');
+await field('#filter-form [name=tid]','SlowM');await click('#filter-form button[type=submit]');
+for(let i=0;i<100&&!templates('SlowM').length;i++)await new Promise(r=>setTimeout(r,20));if(!templates('SlowM').length)throw Error('Slow template never started');
+const slowRequest=templates('SlowM').at(-1).id;
+await field('#filter-form [name=tid]','CacheA');await click('#filter-form button[type=submit]');await wait(`document.querySelectorAll('#card-grid .tile').length===24&&document.querySelectorAll('#card-grid .yc-canvas').length>=4`);
+await new Promise(r=>setTimeout(r,200));if(!failed.includes(slowRequest))throw Error('Old template download not cancelled');
+await field('#filter-form [name=name]','slow-query');await click('#filter-form button[type=submit]');await new Promise(r=>setTimeout(r,100));
+await field('#filter-form [name=name]','');await click('#filter-form button[type=submit]');await wait(`document.querySelectorAll('#card-grid .tile').length===24`);await new Promise(r=>setTimeout(r,1700));if(await evaljs(`document.querySelectorAll('#card-grid .tile').length`)!==24)throw Error('Old filter overwrote new results');
+if(requests.some(r=>/\/api\/preview\//.test(r.url)))throw Error('List still downloads individual previews');
+await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await evaljs(`document.querySelector('#pagination').scrollIntoView({block:'center'})`);await screen('cache-pagination-mobile');
+const mobile=await evaljs(`({width:innerWidth,scroll:document.documentElement.scrollWidth})`);if(mobile.width!==mobile.scroll)throw Error('Mobile overflow');
+const result={errors,templateDownloads:templates('CacheA').length,sharedAcrossPagesAndTabs:true,persistentAcrossReload:true,abortedOldTemplate:failed.includes(slowRequest),staleFilterIgnored:true,auctionPageJump:true,mobile};console.log(JSON.stringify(result,null,2));fs.writeFileSync(artifacts+'/result.json',JSON.stringify(result,null,2));ws.close();if(errors.length)process.exitCode=1;

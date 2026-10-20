@@ -1,0 +1,163 @@
+Picked up JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Djavax.net.ssl.trustStorePassword=changeit
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :app:mergeReleaseNativeLibs UP-TO-DATE
+> Task :app:stripReleaseDebugSymbols UP-TO-DATE
+> Task :app:extractReleaseNativeSymbolTables UP-TO-DATE
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:checkReleaseDuplicateClasses UP-TO-DATE
+> Task :app:buildKotlinToolingMetadata UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateReleaseBuildConfig UP-TO-DATE
+> Task :app:checkReleaseAarMetadata UP-TO-DATE
+> Task :app:generateReleaseResValues UP-TO-DATE
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksRelease UP-TO-DATE
+> Task :app:mergeReleaseResources
+> Task :app:processReleaseMainManifest
+> Task :app:packageReleaseResources
+> Task :app:processReleaseManifest
+> Task :app:processReleaseManifestForPackage
+> Task :app:parseReleaseLocalResources
+> Task :app:javaPreCompileRelease UP-TO-DATE
+> Task :app:desugarReleaseFileDependencies UP-TO-DATE
+> Task :app:mergeReleaseStartupProfile UP-TO-DATE
+> Task :app:mergeExtDexRelease UP-TO-DATE
+> Task :app:mergeReleaseArtProfile UP-TO-DATE
+> Task :app:mergeReleaseShaders UP-TO-DATE
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets UP-TO-DATE
+> Task :app:compressReleaseAssets UP-TO-DATE
+> Task :app:extractReleaseVersionControlInfo UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:collectReleaseDependencies UP-TO-DATE
+> Task :app:sdkReleaseDependencyData UP-TO-DATE
+> Task :app:validateSigningRelease UP-TO-DATE
+> Task :app:writeReleaseAppMetadata UP-TO-DATE
+> Task :app:writeReleaseSigningConfigVersions UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugResources
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:mergeDebugShaders UP-TO-DATE
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :app:processDebugAndroidTestManifest UP-TO-DATE
+> Task :app:generateDebugAndroidTestBuildConfig UP-TO-DATE
+> Task :app:checkDebugAndroidTestAarMetadata UP-TO-DATE
+> Task :app:generateDebugAndroidTestResValues UP-TO-DATE
+> Task :app:mapDebugAndroidTestSourceSetPaths UP-TO-DATE
+> Task :app:generateDebugAndroidTestResources UP-TO-DATE
+> Task :app:javaPreCompileDebugAndroidTest UP-TO-DATE
+> Task :app:mergeDebugAndroidTestShaders UP-TO-DATE
+> Task :app:compileDebugAndroidTestShaders NO-SOURCE
+> Task :app:generateDebugAndroidTestAssets UP-TO-DATE
+> Task :app:mergeDebugAndroidTestAssets UP-TO-DATE
+> Task :app:compressDebugAndroidTestAssets UP-TO-DATE
+> Task :app:desugarDebugAndroidTestFileDependencies UP-TO-DATE
+> Task :app:checkDebugAndroidTestDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebugAndroidTest UP-TO-DATE
+> Task :app:mergeLibDexDebugAndroidTest UP-TO-DATE
+> Task :app:mergeDebugAndroidTestJniLibFolders UP-TO-DATE
+> Task :app:mergeDebugAndroidTestNativeLibs NO-SOURCE
+> Task :app:stripDebugAndroidTestDebugSymbols NO-SOURCE
+> Task :app:validateSigningDebugAndroidTest UP-TO-DATE
+> Task :app:writeDebugAndroidTestSigningConfigVersions UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :app:preReleaseUnitTestBuild UP-TO-DATE
+> Task :app:processReleaseResources
+> Task :app:kspReleaseKotlin
+> Task :app:optimizeReleaseResources
+> Task :app:mergeDebugResources
+> Task :app:packageDebugResources
+> Task :app:parseDebugLocalResources
+> Task :app:compileReleaseKotlin
+> Task :app:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :app:processDebugResources
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics UP-TO-DATE
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:mergeDexRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:processReleaseJavaRes UP-TO-DATE
+> Task :app:mergeReleaseJavaResource UP-TO-DATE
+> Task :app:kspDebugKotlin
+> Task :app:compileDebugKotlin
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugGlobalSynthetics UP-TO-DATE
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:mergeDebugJavaResource UP-TO-DATE
+> Task :app:mergeProjectDexDebug
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:mergeDebugAndroidTestResources UP-TO-DATE
+> Task :app:processDebugAndroidTestResources UP-TO-DATE
+> Task :app:kspDebugAndroidTestKotlin
+> Task :app:compileDebugAndroidTestKotlin
+> Task :app:compileDebugAndroidTestJavaWithJavac UP-TO-DATE
+> Task :app:dexBuilderDebugAndroidTest UP-TO-DATE
+> Task :app:mergeDebugAndroidTestGlobalSynthetics UP-TO-DATE
+> Task :app:processDebugAndroidTestJavaRes UP-TO-DATE
+> Task :app:mergeDebugAndroidTestJavaResource UP-TO-DATE
+> Task :app:mergeProjectDexDebugAndroidTest UP-TO-DATE
+> Task :app:packageDebugAndroidTest UP-TO-DATE
+> Task :app:createDebugAndroidTestApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleDebugAndroidTest UP-TO-DATE
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:kspDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+
+> Task :app:testDebugUnitTest
+Picked up JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Djavax.net.ssl.trustStorePassword=changeit
+
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:lintVitalReportRelease SKIPPED
+> Task :app:lintVitalRelease SKIPPED
+> Task :app:generateReleaseLintReportModel
+> Task :app:bundleReleaseClassesToCompileJar
+> Task :app:generateReleaseUnitTestLintModel
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleRelease
+> Task :app:lintAnalyzeReleaseUnitTest
+> Task :app:lintAnalyzeRelease
+
+> Task :app:lintReportRelease
+Wrote HTML report to file:///workspace/yichat-android-handoff-20261020/android/app/build/reports/lint-results-release.html
+
+> Task :app:lintRelease
+
+BUILD SUCCESSFUL in 1m 11s
+130 actionable tasks: 47 executed, 83 up-to-date

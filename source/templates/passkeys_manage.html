@@ -1,0 +1,14 @@
+{% if not pk_wallet %}<link rel="stylesheet" href="/static/passkeys.css">{% endif %}
+<a href="{{'/' if pk_wallet else '/account/'}}">← {{'YIDT' if pk_wallet else '账户'}}</a>
+<h1>{{'YIDT ' if pk_wallet else ''}}通行密钥</h1>
+<p>通过设备解锁、Face ID、指纹或兼容的 USB 安全密钥验证身份。已设置 {{passkeys|length}} / 8 个。</p>
+<p>{{'仅用于 YIDT，与主站的通行密钥独立。' if pk_wallet else '可直接登录，也可用于敏感操作验证。新增或管理时须通过邮箱或身份验证器验证。'}}</p>
+<div data-passkey-manager data-api="{{pk_api}}" data-csrf="{{pk_csrf}}" data-wallet="{{'1' if pk_wallet else '0'}}">
+{% if not pk_ready %}<p>设置支付密码后，可添加通行密钥。</p><a class="button" href="/pin/">设置支付密码</a>{% else %}
+{% if pk_wallet %}<label>支付密码（管理通行密钥时验证）<input name="management_pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off"></label>{% endif %}
+<label>新通行密钥名称<input name="passkey_name" maxlength="40" placeholder="例如：我的手机" autocomplete="off"></label>
+<button type="button" class="passkey-button" data-passkey-add {% if passkeys|length>=8 %}disabled{% endif %}>添加通行密钥</button>
+{% for key in passkeys %}<section class="passkey-item" data-id="{{key.id}}" style="margin:18px 0;padding:16px;border:1px solid #315578;border-radius:12px">
+<label>名称<input value="{{key.name}}" maxlength="40" data-passkey-name></label><p class="copy-hint">添加于 <time data-passkey-time="{{key.created}}"></time>{% if key.last_used %} · 最近使用 <time data-passkey-time="{{key.last_used}}"></time>{% endif %}</p>
+<button type="button" class="passkey-button" data-passkey-action="rename">保存名称</button> <button type="button" class="passkey-button" data-passkey-action="delete">移除此通行密钥</button></section>{% endfor %}
+{% endif %}<p data-passkey-status role="status"></p></div><script src="/static/passkeys.js" defer></script>

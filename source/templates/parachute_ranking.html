@@ -1,0 +1,74 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <link rel="stylesheet" href="/static/login-button.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parachute Ranking</title>
+    <link rel="icon" href="/static/logo.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/game-ranking.css">
+</head>
+<body class="bg-slate-950 text-white min-h-screen font-sans">
+
+    <header class="sticky top-0 z-30 backdrop-blur bg-slate-950/80 border-b border-slate-800">
+        <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex items-center gap-3">
+                <a href="/"><img src="/static/logo.svg" class="w-8 h-8" alt="logo"></a>
+                <span class="font-bold text-lg tracking-wide">Parachute Ranking</span>
+            </div>
+            <div>
+                {% if username %}
+                <a href="/account/" class="flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700/80 pl-1 pr-3 py-1 rounded-full border border-slate-700/50 transition">
+                    {% if avatar_url %}
+                    <img src="{{ avatar_url }}" class="w-7 h-7 rounded-full object-cover" alt="">
+                    {% else %}
+                    <span class="w-7 h-7 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-xs font-bold">{{ username[0] | upper }}</span>
+                    {% endif %}
+                    <span class="text-sm font-semibold max-w-[100px] truncate">{{ username }}</span>
+                </a>
+                {% else %}
+                <a class="login-btn" href="/login/?next=/games/parachute/ranking/">Log in</a>
+                {% endif %}
+            </div>
+        </div>
+        <div class="max-w-3xl mx-auto px-4 pb-3 flex gap-2">
+            <button class="diff-tab active" id="global" type="button">全服</button>
+            <button class="diff-tab" id="personal" type="button">个人</button>
+        </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto px-4 py-4">
+        {% if not username %}<div class="mb-4 p-4 rounded-xl bg-blue-950 border border-blue-800"><a href="/login/?next=/games/parachute/ranking/" class="text-blue-300 font-semibold">登录以加入排行榜</a><p class="mt-1 text-sm text-slate-300">guest 账号即可参与；未登录试玩不会计入排行榜。</p></div>{% endif %}
+        <p class="mb-4 text-sm text-slate-500">按每局余额净盈利排序。个人保留最佳 50 局；全服每人最多入榜 10 局。</p>
+        <div id="rank-list" class="flex flex-col gap-2"><div class="text-center text-slate-500 py-6 text-sm">加载中...</div></div>
+        <div class="text-center py-6"><button class="diff-tab" id="more" type="button" hidden>加载更多</button></div>
+    </main>
+<script>
+const loggedIn={{ (username is not none)|tojson }};
+const ranks=document.getElementById('rank-list'),more=document.getElementById('more');let scope='global',offset=0,busy=false,pending=false;
+const money=cents=>(cents/100).toFixed(2),signed=cents=>(cents>0?'+':'')+money(cents);
+function element(tag,className,value){const node=document.createElement(tag);if(className)node.className=className;if(value!==undefined)node.textContent=value;return node}
+function row(item){
+  const node=element('a','rank-row'+(item.rank<=3?' rank-top-'+item.rank:''));
+  node.href='/@'+encodeURIComponent(item.user);
+  node.setAttribute('aria-label','查看 '+item.nickname+' 的主页');
+  const medal=['','rank-gold','rank-silver','rank-bronze'][item.rank];
+  node.append(element('div',medal?'rank-medal '+medal:'rank-num',String(item.rank)));
+  const player=element('div','flex items-center gap-3 flex-1 min-w-0');
+  if(item.avatar_url){const image=element('img','w-10 h-10 rounded-full object-cover flex-shrink-0');image.src=item.avatar_url;image.alt='';player.append(image)}
+  else player.append(element('span','w-10 h-10 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center font-bold flex-shrink-0',item.nickname.slice(0,1).toUpperCase()));
+  const name=element('span','truncate font-semibold',item.nickname);name.title=item.user;player.append(name);node.append(player);
+  const detail=element('div','text-right flex-shrink-0');
+  detail.append(element('div','font-mono font-bold text-blue-300',signed(item.score_cents)+' YIDT'));
+  detail.append(element('div','text-xs text-slate-500',item.played_at));
+  node.append(detail);
+  return node;
+}
+async function load(reset=false){if(busy){if(reset)pending=true;return}if(reset){offset=0;ranks.replaceChildren();more.hidden=true}busy=true;more.disabled=true;const loadedScope=scope;try{const response=await fetch('/games/parachute/api/ranking?scope='+scope+'&offset='+offset+'&limit=50',{cache:'no-store'});const data=await response.json();if(!data.ok)throw Error(data.error||'加载失败');if(loadedScope!==scope)return;for(const item of data.items)ranks.append(row(item));offset+=data.items.length;if(!offset)ranks.append(element('div','text-center text-slate-500 py-10','暂无成绩'));more.hidden=!data.has_more||!data.items.length}catch(error){if(loadedScope===scope)ranks.append(element('div','text-center text-slate-500 py-10',error.message))}finally{busy=false;more.disabled=false;if(pending){pending=false;load(true)}}}
+function select(next){if(next==='personal'&&!loggedIn){location.assign('/login/?next=/games/parachute/ranking/');return}scope=next;document.getElementById('personal').classList.toggle('active',scope==='personal');document.getElementById('global').classList.toggle('active',scope==='global');load(true)}
+document.getElementById('personal').onclick=()=>select('personal');document.getElementById('global').onclick=()=>select('global');more.onclick=()=>load();window.addEventListener('scroll',()=>{if(!more.hidden&&!busy&&window.innerHeight+window.scrollY>=document.body.offsetHeight-300)load()});select('global');
+</script>
+</body>
+</html>

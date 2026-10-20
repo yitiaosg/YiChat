@@ -1,0 +1,582 @@
+--- a/source/yichat/backend/app.py
++++ b/source/yichat/backend/app.py
+@@ -78,8 +78,14 @@
+ 
+     @app.middleware('http')
+     async def protection(request,call_next):
++        token=''
+         try:
+-            check_origin(request,s)
++            # The native exchange is a public PKCE endpoint, never cookie-authenticated.
++            native_exchange=request.url.path=='/auth/native/exchange' and request.method=='POST'
++            if native_exchange:
++                if request.headers.get('origin') or request.headers.get('sec-fetch-mode') or request.cookies.get('yc_session'):fail(403,'原生交换不接受浏览器会话')
++                if request.headers.get('content-type','').split(';')[0]!='application/json':fail(415,'需要 JSON 请求')
++            else:check_origin(request,s)
+             token=request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('yc_session','')
+             if request.url.path.startswith(('/api/','/_matrix/','/auth/')) or request.url.path=='/health':
+                 host=request.client.host if request.client else 'unknown'
+@@ -91,7 +97,18 @@
+                     except HTTPException as exc:
+                         if exc.status_code==401:request_limit(s,'anonymous:'+host,limit=10)
+                         if request.url.path!='/_matrix/client/versions' or exc.status_code!=401:raise
+-                    if who:request_limit(s,'user:'+who['subject'])
++                    if who:
++                        # The official FFI has no HTTP transport callback. Queue
++                        # every request from native devices here, including Rust
++                        # key queries, sync, media and business requests. This is
++                        # admission pacing, not a claim of client-side transport
++                        # interception. The global ten-per-second guard remains.
++                        with connect(s.db) as c:
++                            native_device=c.execute('SELECT 1 FROM native_devices WHERE subject=? AND device=? LIMIT 1',(who['subject'],who['device'])).fetchone()
++                        if native_device:
++                            await asyncio.sleep(reserve_rate(s,who['subject'],'native_requests',1,6))
++                            authenticate(s,token)
++                        request_limit(s,'user:'+who['subject'])
+                 else:
+                     request_limit(s,'anonymous:'+host,limit=10)
+             try:length=int(request.headers.get('content-length','0'))
+@@ -103,6 +120,15 @@
+         except Exception:
+             log.error('YiChat dependency unavailable; request denied',exc_info=False)
+             response=JSONResponse({'errcode':'M_UNKNOWN','code':'YICHAT_DEPENDENCY_UNAVAILABLE','error':'服务暂不可用，请稍后重试'},status_code=503)
++        if response.status_code==429 and token and not request.url.path.startswith('/auth/'):
++            # Both local admission errors and upstream 429s share a cooldown.
++            try:
++                who=authenticate(s,token)
++                seconds=min(60,max(1,int(response.headers.get('Retry-After','1'))))
++                with transaction(s.db) as c:
++                    c.execute("INSERT INTO rate VALUES(?,?,?) ON CONFLICT(subject,bucket) DO UPDATE SET next=max(next,excluded.next)",(who['subject'],'native_requests',time.time()+seconds))
++            except Exception:
++                log.warning('Shared cooldown persistence unavailable',exc_info=False)
+         response.headers.update({'Cache-Control':('public, max-age=31536000, immutable' if request.url.path.startswith('/assets/') else 'public, max-age=3600' if request.url.path.startswith('/render/') else 'no-store'),'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
+         return response
+ 
+@@ -130,6 +156,7 @@
+         if not state or not secrets.compare_digest(state,request.cookies.get('yc_login','')):fail(400,'登录状态校验失败')
+         with transaction(s.db) as c:
+             login=c.execute('SELECT * FROM logins WHERE state=? AND expires>?',(digest(state),time.time())).fetchone()
++            native=c.execute('SELECT * FROM native_logins WHERE state=?',(digest(state),)).fetchone()
+             c.execute('DELETE FROM logins WHERE state=?',(digest(state),))
+         if not login:fail(400,'登录请求已过期或被使用')
+         h=app.state.http
+@@ -145,6 +172,9 @@
+             if claims['sub']!=person['uid']:raise ValueError()
+             if not valid_sid(s,claims['sid'],person['username']):raise ValueError()
+         except Exception:fail(401,'主站 OIDC 验证失败，请重新登录')
++        if native:
++            from .native_auth import finish_authorization
++            return finish_authorization(s,native,claims,person)
+         subject=claims['sub'];username=person['username'];mxid=policy.mxid(s,username)
+         cipher=app.state.cipher
+         with transaction(s.db) as c:
+@@ -158,6 +188,9 @@
+         with transaction(s.db) as c:c.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0,0)',(digest(token),subject,username,claims['sid'],mxid,auth['device_id'],cipher.encrypt(auth['access_token'].encode()).decode(),time.time()+30*86400))
+         r=RedirectResponse('/');r.delete_cookie('yc_login');r.set_cookie('yc_session',token,secure=s.origin.startswith('https:'),httponly=True,samesite='strict',max_age=30*86400)
+         return r
++
++    from .native_auth import install as install_native_auth
++    install_native_auth(app,s)
+ 
+     @app.get('/api/session')
+     async def me(request:Request):
+@@ -296,6 +329,33 @@
+     @app.get('/api/rooms/{room}')
+     async def room_get(request:Request,room:str):
+         _,info=await room_access(request,room);return info
++
++    @app.api_route('/api/native/rooms/{room}/transactions/{txn}',methods=['GET','POST'])
++    async def native_transaction(request:Request,room:str,txn:str):
++        who,info=await room_access(request,room)
++        if not re.fullmatch(r'[A-Za-z0-9_.~-]{1,128}',txn):fail(400,'无效消息事务')
++        with connect(s.db) as c:
++            if not c.execute('SELECT 1 FROM native_devices WHERE subject=? AND device=?',(who['subject'],who['device'])).fetchone():fail(403,'需要原生设备会话')
++        if request.method=='POST':
++            require_send(who,info);data=await request.json()
++            if not isinstance(data,dict) or set(data)-{'attachments','business'}:fail(400,'只能登记附件或业务引用')
++            ids=data.get('attachments',[])
++            if not isinstance(ids,list) or len(ids)>100 or any(not isinstance(i,str) or not re.fullmatch(r'[a-f0-9]{48}',i) for i in ids):fail(400,'附件ID无效')
++            if data.get('business') is not None:
++                from .history import business_reference
++                business_reference(s,room,who['mxid'],{'org.yitiao.business':data['business']})
++            with connect(s.db) as c:
++                for fid in ids:
++                    if not c.execute('SELECT 1 FROM files WHERE id=? AND room=? AND uploader=? AND removed=0 AND expires>?',(fid,room,who['subject'],time.time())).fetchone():fail(403,'附件不属于本人的此会话上传')
++            metadata=json.dumps(data,sort_keys=True,separators=(',',':'))
++            with transaction(s.db) as c:
++                old=c.execute('SELECT metadata FROM native_transactions WHERE subject=? AND device=? AND room=? AND txn=?',(who['subject'],who['device'],room,txn)).fetchone()
++                if old and old['metadata']!=metadata:fail(409,'消息事务已绑定其他元数据')
++                c.execute('INSERT OR IGNORE INTO native_transactions VALUES(?,?,?,?,?,NULL)',(who['subject'],who['device'],room,txn,metadata))
++        with connect(s.db) as c:
++            record=c.execute('SELECT event FROM native_transactions WHERE subject=? AND device=? AND room=? AND txn=?',(who['subject'],who['device'],room,txn)).fetchone()
++        if not record:fail(404,'未登记此消息事务')
++        return {'txn':txn,'event_id':record['event'],'state':'accepted' if record['event'] else 'registered'}
+ 
+     @app.post('/api/files/{room}')
+     async def upload(request:Request,room:str):
+@@ -388,7 +448,9 @@
+             with connect(s.db) as c:r=c.execute('SELECT subject FROM identities WHERE mxid=?',(target,)).fetchone()
+             if not r:fail(409,'接收用户尚不可用')
+             recipient=policy.username(s,r['subject'])
+-        return app.state.funds.create(who,info,data,recipient)
++        with connect(s.db) as c:
++            native=bool(c.execute('SELECT 1 FROM native_devices WHERE subject=? AND device=? LIMIT 1',(who['subject'],who['device'])).fetchone())
++        return app.state.funds.create(who,info,data,recipient,native_return=native)
+ 
+     async def order_access(request,oid):
+         with connect(s.ledger) as c:o=c.execute('SELECT * FROM yichat_orders WHERE id=?',(oid,)).fetchone()
+@@ -469,6 +531,13 @@
+                 if action.startswith('send/'):
+                     parts=action.split('/')
+                     if len(parts)!=3:fail(400,'无效事件路径')
++                    with connect(s.db) as c:
++                        native_meta=c.execute('SELECT metadata FROM native_transactions WHERE subject=? AND device=? AND room=? AND txn=?',(who['subject'],who['device'],room,parts[2])).fetchone()
++                    if native_meta:
++                        metadata=json.loads(native_meta['metadata'])
++                        if metadata.get('attachments'):data[archive.ATTACHMENT_KEY]=metadata['attachments']
++                        if metadata.get('business'):data['org.yitiao.business']=metadata['business']
++                        body=json.dumps(data,ensure_ascii=False,separators=(',',':')).encode()
+                     declared=request.headers.get('x-yichat-attachments')
+                     if declared is not None:
+                         try:data[archive.ATTACHMENT_KEY]=json.loads(declared)
+@@ -498,6 +567,11 @@
+             data=json.loads(body);data['auth']={'type':'m.login.password','identifier':{'type':'m.id.user','user':who['mxid']},'password':app.state.cipher.decrypt(i['password'].encode()).decode(),'session':challenge.get('session')}
+             r=await app.state.http.post(s.synapse+'/_matrix/'+path,json=data,headers={'Authorization':'Bearer '+m.token(who)})
+         session(request) # Discard results if main-site logout occurred during upstream wait.
++        sent=re.fullmatch(r'client/(?:v3|r0)/rooms/([^/]+)/send/[^/]+/([^/]+)',path)
++        if sent and request.method=='PUT' and r.is_success:
++            eid=r.json().get('event_id')
++            if eid:
++                with transaction(s.db) as c:c.execute('UPDATE native_transactions SET event=? WHERE subject=? AND device=? AND room=? AND txn=? AND (event IS NULL OR event=?)',(eid,who['subject'],who['device'],sent[1],sent[2],eid))
+         return Response(r.content,status_code=r.status_code,media_type='application/json',headers={'Retry-After':r.headers['Retry-After']} if 'Retry-After' in r.headers else None)
+ 
+     from .archive_routes import install as install_archives
+--- a/source/yichat/backend/db.py
++++ b/source/yichat/backend/db.py
+@@ -9,6 +9,10 @@
+ CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, subject TEXT NOT NULL, username TEXT NOT NULL, sid TEXT NOT NULL, mxid TEXT NOT NULL, device TEXT NOT NULL, upstream TEXT NOT NULL, expires REAL NOT NULL, revoked INTEGER NOT NULL DEFAULT 0, cleaned INTEGER NOT NULL DEFAULT 0);
+ CREATE INDEX IF NOT EXISTS sessions_sid ON sessions(sid);
+ CREATE TABLE IF NOT EXISTS logins(state TEXT PRIMARY KEY, verifier TEXT NOT NULL, nonce TEXT NOT NULL, expires REAL NOT NULL);
++CREATE TABLE IF NOT EXISTS native_logins(state TEXT PRIMARY KEY REFERENCES logins(state) ON DELETE CASCADE,app_state TEXT NOT NULL,app_nonce TEXT NOT NULL,challenge TEXT NOT NULL);
++CREATE TABLE IF NOT EXISTS native_codes(code_hash TEXT PRIMARY KEY,app_state TEXT NOT NULL,app_nonce TEXT NOT NULL,challenge TEXT NOT NULL,subject TEXT NOT NULL,username TEXT NOT NULL,sid TEXT NOT NULL,expires REAL NOT NULL);
++CREATE TABLE IF NOT EXISTS native_devices(proof_hash TEXT PRIMARY KEY,subject TEXT NOT NULL,mxid TEXT NOT NULL,device TEXT NOT NULL,created REAL NOT NULL);
++CREATE TABLE IF NOT EXISTS native_transactions(subject TEXT NOT NULL,device TEXT NOT NULL,room TEXT NOT NULL,txn TEXT NOT NULL,metadata TEXT NOT NULL,event TEXT,PRIMARY KEY(subject,device,room,txn));
+ CREATE TABLE IF NOT EXISTS rooms(room TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('direct','group')), owner TEXT NOT NULL, peer TEXT, days INTEGER NOT NULL DEFAULT 7 CHECK(days BETWEEN 1 AND 30));
+ CREATE TABLE IF NOT EXISTS files(id TEXT PRIMARY KEY, room TEXT NOT NULL REFERENCES rooms(room), uploader TEXT NOT NULL, bytes INTEGER NOT NULL, completed REAL NOT NULL, expires REAL NOT NULL, removed INTEGER NOT NULL DEFAULT 0);
+ CREATE INDEX IF NOT EXISTS files_expiry ON files(expires,removed);
+--- a/source/yichat/backend/funds.py
++++ b/source/yichat/backend/funds.py
+@@ -57,7 +57,7 @@
+         b=self.y.binding(c,user,'yichat')
+         if not b: fail(409,'请先在 YIDT 绑定 YiChat 钱包')
+         return b
+-    def create(self,s,room,data,recipient=None):
++    def create(self,s,room,data,recipient=None,native_return=False):
+         self.require(); y=self.y
+         key=str(data.get('key',''))
+         if not re.fullmatch('[A-Za-z0-9_-]{16,100}',key): fail(400,'需要有效的幂等键')
+@@ -87,7 +87,8 @@
+             oid=secrets.token_urlsafe(24); intent=secrets.token_urlsafe(32); now=time.time()
+             path=f'/api/orders/{oid}/fund'; body={}
+             reason=f'YiChat 本金 {y.fmt(principal)}；付款钱包 {source["address"]}；收款钱包 {dest or "群成员领取时验证绑定钱包"}；出金手续费预留 {y.fmt(fees)}；入金 gas {y.fmt(y.GAS)}'
+-            c.execute('INSERT INTO yidt_intents VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(intent,s['username'],s['sid'],'yichat',y.payload_hash(path,body),str(gross),reason,self.s.origin+'/orders/'+oid,source['address'],'pending',now,now+900,None,source['created']))
++            return_url=self.s.origin+('/app/return?order=' if native_return else '/orders/')+oid
++            c.execute('INSERT INTO yidt_intents VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(intent,s['username'],s['sid'],'yichat',y.payload_hash(path,body),str(gross),reason,return_url,source['address'],'pending',now,now+900,None,source['created']))
+             c.execute('INSERT INTO yichat_orders(id,user,sid,room,kind,request_key,payload,source,recipient,destination,title,principal,remaining,count,left_count,fees,state,intent,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(oid,s['username'],s['sid'],room['room'],kind,key,payload,source['address'],recipient,dest,title,str(principal),str(principal),count,count,str(fees),'awaiting_deposit',intent,now))
+             c.execute('INSERT INTO yichat_order_participants VALUES(?,?,?,?)',(oid,s['subject'],recipient_uid,key))
+             return self.public(c,c.execute('SELECT * FROM yichat_orders WHERE id=?',(oid,)).fetchone(),s['username'])
+--- a/source/yichat/backend/matrix.py
++++ b/source/yichat/backend/matrix.py
+@@ -19,8 +19,10 @@
+         if m.get('membership')!='join': fail(403,'你不是此会话的有效成员')
+     async def provision(self, mxid, password, username):
+         await self.call('PUT','/_synapse/admin/v2/users/'+quote(mxid,safe=''),data={'displayname':username, 'password':password, 'logout_devices':False, 'admin':False})
+-    async def login(self, mxid, password):
+-        return await self.call('POST','/_matrix/client/v3/login',data={'type':'m.login.password','identifier':{'type':'m.id.user','user':mxid},'password':password,'initial_device_display_name':'YiChat 浏览器'})
++    async def login(self, mxid, password, device_id=None):
++        data={'type':'m.login.password','identifier':{'type':'m.id.user','user':mxid},'password':password,'initial_device_display_name':'YiChat Android' if device_id else 'YiChat 浏览器'}
++        if device_id:data['device_id']=device_id
++        return await self.call('POST','/_matrix/client/v3/login',data=data)
+     async def fence(self):
+         result=await self.call('GET','/_synapse/client/yichat/fence')
+         if type(result.get('sequence')) is not int:fail(503,'历史权限服务尚未就绪')
+--- /dev/null
++++ b/source/yichat/backend/native_auth.py
+@@ -0,0 +1,98 @@
++"""Gateway-native handoff; deliberately not an OIDC public client endpoint.
++
++Only one fixed HTTPS redirect. No gateway/upstream token ever enters a URL.
++The existing callback verifies the upstream signature, UID, nonce and SID first.
++"""
++import base64
++import hashlib
++import re
++import secrets
++import time
++from urllib.parse import urlencode
++
++from fastapi import Request
++from fastapi.responses import RedirectResponse, HTMLResponse
++from .db import transaction
++from .security import digest, fail, valid_sid
++from . import policy
++
++OPAQUE=re.compile(r'[A-Za-z0-9_-]{43,128}\Z')
++VERIFIER=re.compile(r'[A-Za-z0-9._~-]{43,128}\Z')
++
++def s256(verifier):
++    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode('ascii')).digest()).decode().rstrip('=')
++
++def finish_authorization(s,native,claims,person):
++    code=secrets.token_urlsafe(32)
++    with transaction(s.db) as c:
++        c.execute('DELETE FROM native_codes WHERE expires<=?',(time.time(),))
++        c.execute('INSERT INTO native_codes VALUES(?,?,?,?,?,?,?,?)',(
++            digest(code),native['app_state'],native['app_nonce'],native['challenge'],
++            claims['sub'],person['username'],claims['sid'],time.time()+60,
++        ))
++    r=RedirectResponse(s.origin+'/app/callback?'+urlencode({'code':code,'state':native['app_state']}),status_code=303)
++    r.delete_cookie('yc_login')
++    return r
++
++def install(app,s):
++    @app.get('/auth/native/login')
++    async def start(request:Request):
++        q=request.query_params
++        if set(q)!={'state','nonce','code_challenge','code_challenge_method','redirect_uri'}:fail(400,'原生登录参数不完整')
++        if q['redirect_uri']!=s.origin+'/app/callback' or q['code_challenge_method']!='S256':fail(400,'回跳或 PKCE 方法不匹配')
++        if not all(OPAQUE.fullmatch(q[k]) for k in ('state','nonce','code_challenge')) or len(q['code_challenge'])!=43:fail(400,'登录随机参数无效')
++        state=secrets.token_urlsafe(32);verifier=secrets.token_urlsafe(48);nonce=secrets.token_urlsafe(32)
++        with transaction(s.db) as c:
++            c.execute('DELETE FROM logins WHERE expires<=?',(time.time(),))
++            c.execute('INSERT INTO logins VALUES(?,?,?,?)',(digest(state),verifier,nonce,time.time()+600))
++            c.execute('INSERT INTO native_logins VALUES(?,?,?,?)',(digest(state),q['state'],q['nonce'],q['code_challenge']))
++        params=dict(client_id='yichat',response_type='code',scope='openid profile',redirect_uri=s.origin+'/auth/callback',
++                    state=state,nonce=nonce,code_challenge=s256(verifier),code_challenge_method='S256')
++        r=RedirectResponse(s.issuer+'/oidc/authorize?'+urlencode(params))
++        r.set_cookie('yc_login',state,secure=s.origin.startswith('https:'),httponly=True,samesite='lax',max_age=600)
++        return r
++
++    @app.post('/auth/native/exchange')
++    async def exchange(request:Request):
++        try:d=await request.json()
++        except ValueError:fail(400,'JSON 无效')
++        if not isinstance(d,dict):fail(400,'JSON 无效')
++        if not all(isinstance(d.get(k),str) for k in ('code','state','nonce','code_verifier','redirect_uri')):fail(400,'交换参数不完整')
++        if not OPAQUE.fullmatch(d['code']) or not VERIFIER.fullmatch(d['code_verifier']) or d['redirect_uri']!=s.origin+'/app/callback':fail(400,'交换参数无效')
++        with transaction(s.db) as c:
++            row=c.execute('SELECT * FROM native_codes WHERE code_hash=? AND expires>?',(digest(d['code']),time.time())).fetchone()
++            if not row or not all(secrets.compare_digest(row[k],v) for k,v in [('app_state',d['state']),('app_nonce',d['nonce']),('challenge',s256(d['code_verifier']))]):fail(400,'交换码过期、已使用或校验失败')
++            if not valid_sid(s,row['sid'],row['username']):fail(401,'主站会话已退出')
++            person=policy.identity(s,row['username'])
++            if row['subject']!=person['uid']:fail(401,'账户身份已改变')
++            c.execute('DELETE FROM native_codes WHERE code_hash=?',(row['code_hash'],))
++            resume=None
++            proof=d.get('device_proof')
++            if proof:
++                if not isinstance(proof,str) or not OPAQUE.fullmatch(proof):fail(400,'设备恢复凭据无效')
++                resume=c.execute('SELECT * FROM native_devices WHERE proof_hash=? AND subject=?',(digest(proof),row['subject'])).fetchone()
++                if not resume:fail(403,'设备恢复凭据与已登录账户不匹配')
++        username=row['username'];subject=row['subject'];mxid=policy.mxid(s,username);cipher=app.state.cipher
++        with transaction(s.db) as c:
++            c.execute('INSERT OR IGNORE INTO identities VALUES(?,?,?,?)',(subject,username,mxid,cipher.encrypt(secrets.token_urlsafe(48).encode()).decode()))
++            identity=c.execute('SELECT * FROM identities WHERE subject=?',(subject,)).fetchone()
++        if resume and resume['mxid']!=mxid:fail(403,'设备身份不匹配')
++        password=cipher.decrypt(identity['password'].encode()).decode()
++        m=app.state.matrix
++        await m.provision(mxid,password,username)
++        auth=await m.login(mxid,password,device_id=resume['device'] if resume else None)
++        if resume and auth['device_id']!=resume['device']:fail(503,'服务器未恢复原设备，拒绝打开原密钥库')
++        token=secrets.token_urlsafe(48);proof=proof or secrets.token_urlsafe(48)
++        expires=time.time()+30*86400
++        with transaction(s.db) as c:
++            if not valid_sid(s,row['sid'],username):fail(401,'主站会话已退出')
++            c.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0,0)',(digest(token),subject,username,row['sid'],mxid,auth['device_id'],cipher.encrypt(auth['access_token'].encode()).decode(),expires))
++            if not resume:c.execute('INSERT INTO native_devices VALUES(?,?,?,?,?)',(digest(proof),subject,mxid,auth['device_id'],time.time()))
++        return {'uid':subject,'user':username,'mxid':mxid,'device_id':auth['device_id'],'token':token,'expires':expires,
++                'device_proof':proof,'new_device':not bool(resume),'homeserver':s.origin}
++
++    @app.get('/app/callback')
++    @app.get('/app/return')
++    async def fallback():
++        # No JS, no rendering of query strings, no third-party resources or secrets.
++        return HTMLResponse('<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>返回 YiChat</title><h1>返回 YiChat App</h1><p>请打开已安装的 YiChat 完成操作。如未安装，请先安装应用后重新登录。交换码将在60秒后失效。</p><a href="/">打开网页版</a></html>')
+--- a/source/yichat/client/src/conversation.tsx
++++ b/source/yichat/client/src/conversation.tsx
+@@ -18,7 +18,7 @@
+ export function Composer({room,info,reply,edit,cancel,onBusiness,onSent}:{room:string;info?:RoomInfo;reply?:sdk.MatrixEvent;edit?:sdk.MatrixEvent;cancel:()=>void;onBusiness:()=>void;onSent:()=>void}){
+  const [text,setText]=useState(''),[uploads,setUploads]=useState<Upload[]>([]),[version,setVersion]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false),[noPreview,setNoPreview]=useState(false),[recording,setRecording]=useState(false);const file=useRef<HTMLInputElement>(null),input=useRef<HTMLTextAreaElement>(null),recorder=useRef<MediaRecorder>(),stream=useRef<MediaStream>(),recordTimer=useRef<ReturnType<typeof setTimeout>>(),uploadRows=useRef<Upload[]>([]),disposed=useRef(false),lastEdit=useRef<string>();uploadRows.current=uploads;
+  const changed=()=>setVersion(x=>x+1);void version;
+- useEffect(()=>{if(edit){setText(edit.getContent()['m.new_content']?.body||edit.getContent().body||'');lastEdit.current=edit.getId()}else if(lastEdit.current){setText('');lastEdit.current=undefined}setNoPreview(false);input.current?.focus()},[edit?.getId()]);
++ useLayoutEffect(()=>{if(edit){setText(edit.getContent()['m.new_content']?.body||edit.getContent().body||'');lastEdit.current=edit.getId()}else if(lastEdit.current){setText('');lastEdit.current=undefined}setNoPreview(false);input.current?.focus()},[edit?.getId()]);
+  useEffect(()=>{input.current?.focus();return()=>{disposed.current=true;for(const u of uploadRows.current)u.abort.abort();recorder.current?.stop();stream.current?.getTracks().forEach(t=>t.stop());clearTimeout(recordTimer.current)}},[]);
+  function add(files:FileList|File[]){if(edit){setError('编辑文字时不能添加附件');return}for(const f of Array.from(files)){const row:Upload={id:crypto.randomUUID(),file:f,progress:0,state:'queued',abort:new AbortController(),room};setUploads(old=>[...old,row]);void uploadFile(row,changed)}}
+  async function submit(){
+--- /dev/null
++++ b/source/yichat/docs/ANDROID-NATIVE-20261020.md
+@@ -0,0 +1,13 @@
++# Android 网关增量协议
++
++本文件是新增原生适配说明；现有业务接口仍以 `source/yichat/docs/CHAT-KERNEL-API.md`（含第16节取消订单）为准。
++
++身份分别保存 immutable uid、username、MXID、device_id、主站 SID。App 不接触主站密码、HttpOnly cookie、支付密码或主站签名私钥。服务端继承原 OIDC 签名验证与 SID 撤销规则，原生网关 token 不直连 Synapse。
++
++精确接口/迁移/代理配置/回滚见 DEPLOYMENT.md。native_login 使用固定 HTTPS callback，state/nonce、S256 verifier、60秒一次性交换码；TLS POST 的 JSON 返回 bearer。它不是可直接交给 AppAuth 的 OIDC authorization/token endpoint。URL 不含长期 token。
++
++`native_transactions` 针对官方高层加密 API 不能保留自定义外层 ID 的实际缺口：先持久化同一 SDK txnId 与 attachments/business 元数据，后恢复发送队列；网关只加入经过所属房间、文件所有者与业务权限复核的外层引用，不改 SDK 原密文。GET 查询 accepted_event 用于结果不明，重复不同元数据409。同一 SDK 队列中的原发送才能重试。
++
++原生设备的 Rust 与业务 HTTP 都经过网关同一 uid 调度；没有扩大 Synapse 管理/注册/联邦路径，没有绕过业务建房。429 推迟共享准入时钟，最终10次/秒保护保持。Android 自己的 OkHttp pacing 只覆盖业务请求。
++
++取消仍调用原 `POST /api/orders/{id}/cancel`，仅付款人/未入金；fund/cancel 沿用同一账本事务互斥。Android 先持久化独立业务 key，取消失败查原 id，重新开始才新建 key；取消不是退款。钱包回跳仅带 order 引用并查权威状态。金额为十进制字符串与 BigDecimal。
+--- /dev/null
++++ b/source/yichat/tests/android_fixture.py
+@@ -0,0 +1,58 @@
++"""Explicit opt-in loopback fixture for the Android SDK instrumentation suite.
++
++Run alone, after the other PG suites. Never deploy or expose this application.
++"""
++import json,os,secrets,threading,time
++from pathlib import Path
++import httpx,uvicorn
++from fastapi import Request
++from fastapi.testclient import TestClient
++from test_synapse_integration import synapse,free_port
++from backend.app import create_app
++from backend.db import connect
++from backend.security import digest
++
++def test_hold_android_fixture(synapse):
++    s,f,users,h,*_=synapse
++    port=18018;s.origin='http://127.0.0.1:'+str(port)
++    app=create_app(s);accounts={}
++    with TestClient(app) as c:
++        async def seed():
++            for name in ('alice','bob'):
++                who=users[name];m=app.state.matrix
++                with connect(s.db) as db:encrypted=db.execute('SELECT password FROM identities WHERE subject=?',(who['subject'],)).fetchone()[0]
++                password=app.state.cipher.decrypt(encrypted.encode()).decode()
++                await m.provision(who['mxid'],password,name);auth=await m.login(who['mxid'],password)
++                token=secrets.token_urlsafe(48);proof=secrets.token_urlsafe(48)
++                with connect(s.db) as db:
++                    db.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0,0)',(digest(token),who['subject'],name,who['sid'],who['mxid'],auth['device_id'],app.state.cipher.encrypt(auth['access_token'].encode()).decode(),time.time()+7200))
++                    db.execute('INSERT INTO native_devices VALUES(?,?,?,?,?)',(digest(proof),who['subject'],who['mxid'],auth['device_id'],time.time()))
++                accounts[name]={'uid':who['subject'],'user':name,'mxid':who['mxid'],'device':auth['device_id'],'token':token,'proof':proof}
++        c.portal.call(seed)
++    server_app=create_app(s)
++    @server_app.get('/__fixture/accounts/{name}')
++    async def fixture_account(request:Request,name:str):
++        assert request.client.host in ('127.0.0.1','::1') and name in accounts
++        return accounts[name]
++    server=uvicorn.Server(uvicorn.Config(server_app,host='127.0.0.1',port=port,log_level='warning',access_log=False))
++    thread=threading.Thread(target=server.run,daemon=True);thread.start()
++    directory=Path(os.environ.get('YICHAT_ANDROID_FIXTURE_DIRECTORY','/workspace/android-fixture-private'))
++    directory.mkdir(mode=0o700,exist_ok=True)
++    ready=directory/'ready.json';done=directory/'done'
++    try:
++        for _ in range(100):
++            if server.started:break
++            time.sleep(.1)
++        with httpx.Client(trust_env=False,base_url=s.origin,headers={'Authorization':'Bearer '+accounts['alice']['token']},timeout=45) as client:
++            direct=client.post('/api/rooms',json={'kind':'direct','users':['bob'],'key':'android-instrument-direct'});direct.raise_for_status()
++            group=client.post('/api/rooms',json={'kind':'group','users':['bob'],'name':'Android isolated group','key':'android-instrument-group'});group.raise_for_status()
++        with httpx.Client(trust_env=False,base_url=s.origin,headers={'Authorization':'Bearer '+accounts['bob']['token']},timeout=45) as client:
++            from urllib.parse import quote
++            for rid in (direct.json()['room_id'],group.json()['room_id']):
++                r=client.post('/_matrix/client/v3/rooms/'+quote(rid,safe='')+'/join',json={});r.raise_for_status()
++        ready.write_text(json.dumps({'port':port,'direct':direct.json()['room_id'],'group':group.json()['room_id']}));ready.chmod(0o600)
++        deadline=time.monotonic()+3600
++        while time.monotonic()<deadline and not done.exists():time.sleep(.5)
++        assert done.exists(),'Android fixture timed out; no success asserted'
++    finally:
++        server.should_exit=True;thread.join(timeout=20)
+--- /dev/null
++++ b/source/yichat/tests/test_native_auth.py
+@@ -0,0 +1,101 @@
++"""Signed isolated IDP transport; never contacts real accounts or Synapse."""
++import base64,hashlib,json,secrets,time
++from urllib.parse import urlsplit,parse_qs
++from unittest.mock import AsyncMock
++import httpx,jwt,pytest
++from cryptography.hazmat.primitives.asymmetric import rsa
++from fastapi.testclient import TestClient
++from backend.app import create_app
++from backend.db import connect
++
++@pytest.fixture
++def native(env):
++    s,_,users=env
++    app=create_app(s)
++    with TestClient(app) as c:
++        key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
++        public=json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key()));public['kid']='native-fixture'
++        verifier=secrets.token_urlsafe(48);state=secrets.token_urlsafe(32);nonce=secrets.token_urlsafe(32)
++        params=dict(state=state,nonce=nonce,code_challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('='),code_challenge_method='S256',redirect_uri=s.origin+'/app/callback')
++        app.state.matrix.provision=AsyncMock();app.state.matrix.login=AsyncMock(return_value={'access_token':'isolated-upstream','device_id':'NATIVE_DEVICE'})
++        async def authorize(**overrides):
++            start=c.get('/auth/native/login',params=params,follow_redirects=False)
++            assert start.status_code==307,start.text
++            q=parse_qs(urlsplit(start.headers['location']).query)
++            claims=dict(iss=s.issuer,aud='yichat',sub=users['alice']['subject'],preferred_username='alice',sid='sid-alice',nonce=q['nonce'][0],iat=int(time.time()),exp=int(time.time()+300))|overrides
++            encoded=jwt.encode(claims,key,algorithm='RS256',headers={'kid':'native-fixture'})
++            def handler(r):
++                if r.url.path=='/oidc/token':
++                    form=parse_qs(r.content.decode());assert base64.urlsafe_b64encode(hashlib.sha256(form['code_verifier'][0].encode()).digest()).decode().rstrip('=')==q['code_challenge'][0]
++                    return httpx.Response(200,json={'id_token':encoded})
++                return httpx.Response(200,json={'keys':[public]})
++            app.state.http=httpx.AsyncClient(transport=httpx.MockTransport(handler))
++            return c.get('/auth/callback',params={'state':q['state'][0],'code':'fixture'},follow_redirects=False)
++        yield c,app,s,params,verifier,authorize
++
++def exchange_data(n,r):
++    c,app,s,p,v,_=n;q=parse_qs(urlsplit(r.headers['location']).query)
++    return dict(code=q['code'][0],state=p['state'],nonce=p['nonce'],code_verifier=v,redirect_uri=p['redirect_uri'])
++
++@pytest.mark.asyncio
++async def test_native_signed_pkce_once_cookie_separation_and_sid(native):
++    c,app,s,p,v,authorize=native
++    c.cookies.set('yc_session','old-web-session')
++    r=await authorize();assert r.status_code==303,r.text
++    assert 'token' not in r.headers['location'] and 'sid' not in r.headers['location']
++    assert c.cookies.get('yc_session')=='old-web-session'
++    data=exchange_data(native,r);c.cookies.clear()
++    result=c.post('/auth/native/exchange',json=data);assert result.status_code==200,result.text
++    auth=result.json();assert auth['new_device'] and auth['device_id']=='NATIVE_DEVICE'
++    assert c.post('/auth/native/exchange',json=data).status_code==400
++    c.headers['Authorization']='Bearer '+auth['token']
++    assert c.get('/api/session').json()['device']=='NATIVE_DEVICE'
++    with connect(s.ledger) as db:db.execute("UPDATE yidt_sessions SET revoked=1 WHERE sid='sid-alice'")
++    assert c.get('/api/session').status_code==401
++
++@pytest.mark.parametrize('field,value',[('state','wrong'),('nonce','wrong'),('code_verifier','a'*64),('redirect_uri','https://evil.example/cb')])
++@pytest.mark.asyncio
++async def test_wrong_binding_rejected(native,field,value):
++    c,app,s,p,v,authorize=native;r=await authorize();data=exchange_data(native,r);c.cookies.clear()
++    assert c.post('/auth/native/exchange',json=data|{field:value}).status_code==400
++    assert c.post('/auth/native/exchange',json=data).status_code==200
++
++@pytest.mark.asyncio
++async def test_native_expiration_and_revoked_sid(native):
++    c,app,s,p,v,authorize=native;r=await authorize();data=exchange_data(native,r);c.cookies.clear()
++    with connect(s.db) as db:db.execute('UPDATE native_codes SET expires=0')
++    assert c.post('/auth/native/exchange',json=data).status_code==400
++
++@pytest.mark.asyncio
++async def test_restore_device_requires_possession_and_same_uid(native):
++    c,app,s,p,v,authorize=native
++    r=await authorize();data=exchange_data(native,r);c.cookies.clear()
++    first=c.post('/auth/native/exchange',json=data).json()
++    r=await authorize();data=exchange_data(native,r);c.cookies.clear()
++    second=c.post('/auth/native/exchange',json=data|{'device_proof':first['device_proof']})
++    assert second.status_code==200,second.text
++    assert not second.json()['new_device']
++    assert app.state.matrix.login.call_args.kwargs['device_id']=='NATIVE_DEVICE'
++    assert second.json()['device_proof']==first['device_proof']
++
++@pytest.mark.parametrize('claim,value',[('nonce','evil'),('sub','0'*32),('sid','revoked'),('aud','wrong'),('iss','https://evil.example')])
++@pytest.mark.asyncio
++async def test_signed_claims_are_verified(native,claim,value):
++    c,app,s,p,v,authorize=native
++    r=await authorize(**{claim:value});assert r.status_code==401
++    with connect(s.db) as db:assert db.execute('SELECT count(*) FROM native_codes').fetchone()[0]==0
++
++@pytest.mark.parametrize('params',[{'redirect_uri':'https://evil.example/cb'},{'code_challenge_method':'plain'},{'state':'short'},{'extra':'x'}])
++def test_fixed_redirect_and_entropy(native,params):
++    c,app,s,p,v,authorize=native
++    assert c.get('/auth/native/login',params=p|params,follow_redirects=False).status_code==400
++
++@pytest.mark.parametrize('headers',[{'Origin':'https://evil.example'},{'Sec-Fetch-Mode':'cors'}])
++def test_native_exchange_rejects_browser(native,headers):
++    c,*_=native
++    assert c.post('/auth/native/exchange',json={},headers=headers).status_code==403
++
++def test_uninstalled_fallback_never_reflects_code(native):
++    c,*_=native
++    r=c.get('/app/callback?code=secret&state=secret')
++    assert r.status_code==200 and 'secret' not in r.text and r.headers['Referrer-Policy']=='no-referrer'
+--- /dev/null
++++ b/source/yichat/tests/test_native_transactions.py
+@@ -0,0 +1,69 @@
++import json,time
++import httpx,pytest
++from backend.db import connect
++from test_gateway import gateway
++
++def native(c,s):
++    c.cookies.clear();c.headers.pop('Origin',None);c.headers['Authorization']='Bearer session-token'
++    with connect(s.db) as db:
++        who=db.execute("SELECT * FROM sessions WHERE username='alice' LIMIT 1").fetchone()
++        db.execute('INSERT INTO native_devices VALUES(?,?,?,?,?)',('fixture-proof',who['subject'],who['mxid'],who['device'],time.time()))
++
++def test_metadata_binds_room_device_txn_and_original_ciphertext(gateway):
++    c,app,s=gateway;native(c,s)
++    uploaded=c.post('/api/files/!direct',content=b'original-matrix-ciphertext');assert uploaded.status_code==200,uploaded.text
++    fid=uploaded.json()['id'];path='/api/native/rooms/!direct/transactions/stable-sdk-txn'
++    r=c.post(path,json={'attachments':[fid]});assert r.status_code==200,r.text
++    assert c.post(path,json={'attachments':[fid]}).status_code==200
++    assert c.post(path,json={'attachments':[]}).status_code==409
++    seen=[]
++    def handler(req):
++        seen.append(json.loads(req.content));return httpx.Response(200,json={'event_id':'$original'})
++    app.state.http=httpx.AsyncClient(transport=httpx.MockTransport(handler))
++    opaque={'algorithm':'m.megolm.v1.aes-sha2','ciphertext':'unchanged','session_id':'native'}
++    sent=c.put('/_matrix/client/v3/rooms/!direct/send/m.room.encrypted/stable-sdk-txn',json=opaque)
++    assert sent.status_code==200,sent.text
++    assert seen[0]==opaque|{'org.yitiao.attachments':[fid]}
++    status=c.get(path);assert status.status_code==200 and status.json()['event_id']=='$original'
++    c.headers['Authorization']='Bearer bob-token'
++    assert c.get(path).status_code==403
++
++def test_metadata_rejects_body_keys_wrong_room_and_non_native(gateway):
++    c,app,s=gateway;path='/api/native/rooms/!direct/transactions/txn'
++    assert c.post(path,json={}).status_code==403
++    native(c,s)
++    for value in ({'body':'never upload decrypted text'},{'key':'never upload keys'},{'attachments':['not-a-file-id']},{'business':{'kind':'order','id':'not-real'}}):
++        assert c.post(path,json=value).status_code in (400,403)
++    fid=c.post('/api/files/!direct',content=b'cipher').json()['id']
++    assert c.post('/api/native/rooms/!group/transactions/txn',json={'attachments':[fid]}).status_code==403
++
++def test_native_admission_paces_business_and_rust_routes_together(gateway):
++    c,app,s=gateway;native(c,s)
++    app.state.http=httpx.AsyncClient(transport=httpx.MockTransport(lambda r:httpx.Response(200,json={})))
++    start=time.monotonic()
++    for path in ('/api/session','/_matrix/client/v3/keys/query','/api/wallet','/_matrix/client/v3/sync','/api/session','/api/wallet'):
++        assert c.get(path).status_code==200
++    assert time.monotonic()-start>=.95
++    with connect(s.db) as db:
++        who=db.execute("SELECT subject FROM sessions WHERE username='alice' LIMIT 1").fetchone()[0]
++        db.execute("INSERT INTO rate VALUES(?,?,?) ON CONFLICT(subject,bucket) DO UPDATE SET next=excluded.next",(who,'native_requests',time.time()+.4))
++    start=time.monotonic();assert c.get('/_matrix/client/v3/sync').status_code==200
++    assert time.monotonic()-start>=.4
++
++def test_native_yidt_return_is_fixed_and_cancel_still_invalidates(env):
++    s,f,u=env
++    o=f.create(u['alice'],{'room':'!test:chat.yitiao.org','kind':'direct'},{'key':'native-return-fixture-key','amount':'0.01'},'bob',native_return=True)
++    with connect(s.ledger) as db:
++        row=db.execute('SELECT * FROM yidt_intents WHERE id=(SELECT intent FROM yichat_orders WHERE id=?)',(o['id'],)).fetchone()
++        assert row['return_url']==s.origin+'/app/return?order='+o['id'] and row['state']=='pending'
++    assert f.cancel(u['alice'],o['id'])['state']=='cancelled'
++    with connect(s.ledger) as db:assert db.execute('SELECT state FROM yidt_intents WHERE id=?',(row['id'],)).fetchone()[0]=='cancelled'
++
++def test_local_uid_guard_429_also_cools_native_sdk(gateway):
++    c,app,s=gateway;native(c,s)
++    with connect(s.db) as db:
++        uid=db.execute("SELECT subject FROM sessions WHERE username='alice' LIMIT 1").fetchone()[0]
++        db.executemany('INSERT INTO request_hits(subject,at) VALUES(?,?)',[('user:'+uid,time.time())]*10)
++    response=c.get('/_matrix/client/v3/sync');assert response.status_code==429
++    with connect(s.db) as db:cooldown=db.execute("SELECT next FROM rate WHERE subject=? AND bucket='native_requests'",(uid,)).fetchone()[0]
++    assert cooldown>=time.time()+.8
+--- a/source/yidt.py
++++ b/source/yidt.py
+@@ -167,7 +167,11 @@
+                 c.execute("UPDATE yidt_intents SET state='cancelled' WHERE id=?",(token,));return redirect(r['return_url'])
+             if b['locked']:pin_check(c)
+             c.execute("UPDATE yidt_intents SET state='approved' WHERE id=?",(token,))
+-            return redirect(r['return_url']+'?'+urlencode({'yidt_intent':token}))
++            # Native return carries only the fixed order reference. The App
++            # queries its original order and requires another explicit fund.
++            if r['return_url'].startswith('https://chat.yitiao.org/app/return?order='):
++                return redirect(r['return_url'])
++            return redirect(r['return_url']+('&' if '?' in r['return_url'] else '?')+urlencode({'yidt_intent':token}))
+     return render_template('yidt.html',screen='authorize',title='确认付款',intent=r,binding=b,debit=y.fmt(debit),credit=y.fmt(credit))
+ 
+ @app.route('/wallet/<address>',methods=['GET','POST'])

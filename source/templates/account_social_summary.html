@@ -1,0 +1,16 @@
+<meta name="social-csrf" content="{{ social_csrf }}">
+<div style="display:flex;gap:22px;margin:20px 0;flex-wrap:wrap">
+{% for key,label in [('following','关注'),('followers','粉丝'),('friends','朋友')] %}
+{% if key != 'friends' or account_section is defined %}
+{% if social.lists_visible[key] %}<a href="/account/relations/{{ social.uid }}/{{ key }}/" style="color:inherit;text-decoration:none">{% else %}<span title="名单未公开">{% endif %}
+<strong data-count="{{ key }}" title="{{ social.counts[key] }}">{{ compact_count(social.counts[key]) }}</strong> {{ label }}{% if social.lists_visible[key] %}</a>{% else %}</span>{% endif %}
+{% endif %}{% endfor %}
+</div>
+{% if not social.is_self %}
+{% if session.get('user') %}
+<button type="button" data-social-follow="{{ social.uid }}" data-following="{{ 'true' if social.following else 'false' }}">{{ '互相关注' if social.mutual else '已关注' if social.following else '关注' }}</button>
+{% if social.can_message %}<button type="button" data-social-message="{{ social.username }}">发送消息</button>{% endif %}
+{% else %}<a href="/login/">登录后关注</a>{% endif %}
+{% endif %}
+<p id="social-status" role="status" aria-live="polite"></p>
+<script src="/static/account-social.js" defer></script>

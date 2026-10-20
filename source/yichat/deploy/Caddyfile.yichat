@@ -1,0 +1,9 @@
+# Append to the existing Caddyfile. Never replace existing site blocks.
+chat.yitiao.org {
+    encode zstd gzip
+    header Strict-Transport-Security "max-age=31536000"
+    # Only the authenticated gateway is exposed. No direct Synapse/media route.
+    reverse_proxy 127.0.0.1:5018 {
+        flush_interval -1
+    }
+}
