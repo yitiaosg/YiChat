@@ -1,0 +1,57 @@
+[
+  {
+    "path": "source/yichat/backend/app.py",
+    "new": false,
+    "sha256": "f682a7fd5bd0369b4ae8933609443e1cdc642f18da8f1aa683d26d9343e7baba"
+  },
+  {
+    "path": "source/yichat/backend/db.py",
+    "new": false,
+    "sha256": "b2afae4f56c0ae555670f2c6a472aa2ad24dab20e8154063b859628ffb3f99f8"
+  },
+  {
+    "path": "source/yichat/backend/funds.py",
+    "new": false,
+    "sha256": "0493a2b7aa88418cf691fe06838ad0d348b4d754cfc63b531e97cfbd33fab778"
+  },
+  {
+    "path": "source/yichat/backend/matrix.py",
+    "new": false,
+    "sha256": "430fe24840567f307e0b8e3899791b08f075ca2c57ca89d0f407d3372990511e"
+  },
+  {
+    "path": "source/yichat/backend/native_auth.py",
+    "new": true,
+    "sha256": "acdfa92364fa770813e7754f4869975049776a823c2edacfb022e94638e23ca5"
+  },
+  {
+    "path": "source/yichat/client/src/conversation.tsx",
+    "new": false,
+    "sha256": "bf76ffcbd00d675cbe9c91e17cb3b9bedb8d4f4166b3fd6e3a39f3c69b92ac20"
+  },
+  {
+    "path": "source/yichat/docs/ANDROID-NATIVE-20261020.md",
+    "new": true,
+    "sha256": "0f7663e4055dfc9835bfb8df6f65ee7add4af9e20813154bd32fe271a5f68ee9"
+  },
+  {
+    "path": "source/yichat/tests/android_fixture.py",
+    "new": true,
+    "sha256": "eed461e2469127e1aaf73c4bd7da5347594db7dcc8233fde4c4cb67004223f32"
+  },
+  {
+    "path": "source/yichat/tests/test_native_auth.py",
+    "new": true,
+    "sha256": "d938da76c5c3ff5a944f44f944b98ed701c80d4e64170f1fd04196a9f794c56c"
+  },
+  {
+    "path": "source/yichat/tests/test_native_transactions.py",
+    "new": true,
+    "sha256": "946b1ce9d922c83f8d551eeaf5d8cb08a583baa7068dcbc2cdf782b26b6d3263"
+  },
+  {
+    "path": "source/yidt.py",
+    "new": false,
+    "sha256": "4d2570a4a324ff202d870ac9e71559a79fd3175e7cd646260c9d04e73d565653"
+  }
+]

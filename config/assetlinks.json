@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "org.yitiao.yichat",
+      "sha256_cert_fingerprints": [
+        "6A:B2:1F:96:1A:37:35:69:C0:67:E0:48:E0:E0:E5:D3:8B:49:0D:07:D9:40:B9:74:A4:A3:29:05:F0:62:85:ED"
+      ]
+    }
+  }
+]

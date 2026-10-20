@@ -1,0 +1,8 @@
+
+org.yitiao.yichat.UpgradePersistenceTest:.
+
+Time: 0.963
+
+OK (1 test)
+
+

@@ -1,0 +1,1 @@
+扫描当前源码tar全部普通文件：无本次签名密码、fixture bearer/proof、keystore、数据库、node_modules或build目录。SHA256SUMS逐项复核通过。签名材料独立私有归档，未包含在本公开ZIP中。

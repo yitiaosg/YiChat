@@ -1,0 +1,11 @@
+checking file source/yichat/backend/app.py
+checking file source/yichat/backend/db.py
+checking file source/yichat/backend/funds.py
+checking file source/yichat/backend/matrix.py
+checking file source/yichat/backend/native_auth.py
+checking file source/yichat/client/src/conversation.tsx
+checking file source/yichat/docs/ANDROID-NATIVE-20261020.md
+checking file source/yichat/tests/android_fixture.py
+checking file source/yichat/tests/test_native_auth.py
+checking file source/yichat/tests/test_native_transactions.py
+checking file source/yidt.py

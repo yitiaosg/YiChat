@@ -1,0 +1,2 @@
+对两个release APK的所有classes*.dex作精确字节检查：不含127.0.0.1:18018、/__fixture/accounts/、本次生成的签名密码或测试账号token/proof。该检查不是完整网络/日志泄露审计。
+release固定HTTPS chat域名，测试端点仅由显式fixture与androidTest提供。

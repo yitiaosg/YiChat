@@ -1,0 +1,43 @@
+
+org.yitiao.yichat.NativeKeyBackupTest:
+Error in officialSdkRecoveryCreationUploadAndRecovery(org.yitiao.yichat.NativeKeyBackupTest):
+java.lang.AssertionError: expected:<ENABLED> but was:<INCOMPLETE>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at org.yitiao.yichat.NativeKeyBackupTest$officialSdkRecoveryCreationUploadAndRecovery$1$1.invokeSuspend(NativeKeyBackupTest.kt:32)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at org.yitiao.yichat.NativeKeyBackupTest.officialSdkRecoveryCreationUploadAndRecovery(NativeKeyBackupTest.kt:13)
+
+
+Time: 45.835
+There was 1 failure:
+1) officialSdkRecoveryCreationUploadAndRecovery(org.yitiao.yichat.NativeKeyBackupTest)
+java.lang.AssertionError: expected:<ENABLED> but was:<INCOMPLETE>
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.junit.Assert.failNotEquals(Assert.java:835)
+	at org.junit.Assert.assertEquals(Assert.java:120)
+	at org.junit.Assert.assertEquals(Assert.java:146)
+	at org.yitiao.yichat.NativeKeyBackupTest$officialSdkRecoveryCreationUploadAndRecovery$1$1.invokeSuspend(NativeKeyBackupTest.kt:32)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at org.yitiao.yichat.NativeKeyBackupTest.officialSdkRecoveryCreationUploadAndRecovery(NativeKeyBackupTest.kt:13)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
