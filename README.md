@@ -6,12 +6,16 @@ Android 聊天客户端：Kotlin、Jetpack Compose、Material 3，以及官方�
 
 ## 下载
 
-[候选 APK、完整交付包与源码归档 → GitHub Releases](https://github.com/yitiaosg/YiChat/releases)
+[候选版本说明 → GitHub Releases](https://github.com/yitiaosg/YiChat/releases)
 
-- `YiChat-0.1.0-2-arm64-v8a.apk`：常用手机 ABI。
-- `YiChat-0.1.0-2-x86_64.apk`：模拟器 ABI，已实际安装与同签名覆盖升级。
-- `YiChat-public-delivery-20261020.zip`：APK、源码、测试结果、截图、部署回滚说明及摘要。
-- `YiChat-source-20261020.tar.gz`：原交付源码快照，源码也已完整展开在本仓库。
+| 文件 | 下载 |
+| --- | --- |
+| arm64-v8a 签名 APK（常用手机 ABI） | [YiChat-0.1.0-2-arm64-v8a.apk](https://github.com/yitiaosg/YiChat/raw/refs/tags/android-20261020-artifacts.2/apk/YiChat-0.1.0-2-arm64-v8a.apk) |
+| x86_64 签名 APK（已实际安装及覆盖升级） | [YiChat-0.1.0-2-x86_64.apk](https://github.com/yitiaosg/YiChat/raw/refs/tags/android-20261020-artifacts.2/apk/YiChat-0.1.0-2-x86_64.apk) |
+| 完整交付文件 ZIP（含隔离测试 APK、源码、报告和截图） | [下载制品快照](https://github.com/yitiaosg/YiChat/archive/refs/tags/android-20261020-artifacts.2.zip) |
+| 原交付源码 tar.gz | [YiChat-source-20261020.tar.gz](https://github.com/yitiaosg/YiChat/raw/refs/tags/android-20261020-artifacts.2/YiChat-source-20261020.tar.gz) |
+
+安装包与交付文件保存在独立的 [制品分支](https://github.com/yitiaosg/YiChat/tree/artifacts/android-20261020-candidate.2) 和固定标签 `android-20261020-artifacts.2`；主分支保存展开的源码与审查资料。GitHub 打包 ZIP 与原交付 ZIP 的封装不同，内部文件逐字节保持一致；解压后使用制品快照内的 `SHA256SUMS` 校验。
 
 [APK SHA256](delivery/APK-SHA256SUMS) · [验证报告及剩余项](VERIFICATION-ANDROID.md) · [测试证据](delivery/evidence/)
 

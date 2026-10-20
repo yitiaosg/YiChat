@@ -1,6 +1,6 @@
 # 2026-10-20 候选版交付材料
 
-APK、完整交付包和原交付源码压缩包通过 [GitHub Releases](https://github.com/yitiaosg/YiChat/releases) 下载，不放入 Git 历史。该候选版尚未完成正式发布验收。
+APK、完整交付文件和原交付源码压缩包存于 [独立制品分支](https://github.com/yitiaosg/YiChat/tree/artifacts/android-20261020-candidate.2)，不进入主分支源码历史。固定标签为 `android-20261020-artifacts.2`，从 [候选版本页面](https://github.com/yitiaosg/YiChat/releases) 或根 README 下载。该候选版尚未完成正式发布验收。
 
 - [验证报告与剩余项](../VERIFICATION-ANDROID.md)
 - [APK SHA256](APK-SHA256SUMS)
