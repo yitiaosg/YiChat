@@ -1,0 +1,8 @@
+{
+  "checks": [
+    "App notification settings and per-room mute call real preference API",
+    "notification paging retains every unread conversation beyond the twenty-room page limit",
+    "older App bridges keep working and omit unsupported notification controls"
+  ],
+  "errors": []
+}

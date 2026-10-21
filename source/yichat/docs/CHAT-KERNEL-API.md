@@ -515,3 +515,19 @@ Chat 不再提供设备 SAS 验证。主站 `/account/` 的登录设备管理通
 `POST /api/records/verify-files` 请求 `{room,start,end,days:[{day,spec,bytes,sha256}]}`，spec 为两种既有归档规格，返回 `format:yichat-archive-v1` 与每日 state/sha256/bytes。仅传本地计算的文件摘要，服务端按全日权限与已封存根比对；实体已清理但可信根保留时仍可核验本地 ZIP。
 
 App 在核验通过后独立只读显示对应原消息包；私聊先本地验证用户输入的 Matrix 恢复密钥，再恢复标准加密密钥备份并本地解密，不上传密钥或正文。文件模式支持同一会话连续1至5个统一每日 ZIP（单文件<=100MB，事件文本<=20MB），与内部原包模式分开。`.ycb` 口令快照不是统一每日 ZIP。本页不导入实时会话、不恢复/发送旧消息、不将普通实时消息标记成已校验。失败、缺包、无权限、未封存不展示为可信。退出清空页面中核验数据与明文。
+
+### 18.3 群生命周期、个人会话与通知（0.3.1）
+
+私聊不允许主动 leave；账户最终注销后的服务器退场例外。群主通过 manage 的 action=dissolve/key 解散群；已有至少两名成员的群在确认成员变更后仅剩一人时自动解散。未完成成员变更时保守等待。解散状态存于账本 yichat_group_lifecycle，与成员和资产准入同锁；不可解除、不删除既有数据。解散或退出后禁发、禁上传及资产新操作，仍按原历史权限读取；原已确认付款/退款继续结算。最多8名管理员，由 gateway 写事务强制，原生事件不得绕过。
+
+GET /api/rooms 包含本人已退出的历史会话，并返回 membership、dissolved_at、peer_deleted、revision。SDK 使用 include_leave，界面仅保留可读历史；没有权限读取退出后的消息。GET /api/groups/{room} 增加 admin_count/admin_limit:8、dissolved_at、revision；旧成员不返回当前成员名单。
+
+GET /api/conversations/preferences 返回本人的 `{room,pinned,archived,muted}`；POST /api/conversations/{room}/preferences 接受对应布尔设置，或 `{read:true,event:已接受事件ID}` 推进已读序号。状态按稳定UID隔离，不能更改其他用户设置；归档不删除记录。右滑置顶、左滑归档有桌面/键盘等效按钮。
+
+GET /api/notifications?after=sequence 返回 `{cursor,rooms:[{room,event,sequence,count}]}`，每页聚合最近24小时、最多20个可通知会话，不返回正文/密钥/附件。扫描最多200条候选记录，返回has_more；有后续时cursor仅推进到实际处理边界，避免20会话上限丢失通知。App每轮最多连续取两页，余下留到后续调度。排除本人消息、已读、已撤回、归档、免打扰、非当前成员和已解散群。不提供 after 时只返回基线游标。App前台复用SDK真实新事件，后台WorkManager约15分钟调度聚合查询，受系统后台/省电限制；没有第二个Matrix同步循环或外部FCM推送。通知为通用文字，需系统授权，点击仅导航，不执行业务写操作。
+
+GET /api/transactions?before=id 按本人稳定UID查询实际账本交易（发送转账/红包、收款/领取及退款），每页30条，返回金额字符串和真实YIDT explorer hash URL；不包含未入金订单，不把授权视为扣款。
+
+主站过冷静期完成purge后，SID即时撤销，Chat登录/发送/邀请拒绝，资料查询只返回用户名与删除标记。Synapse通过官方模块API有界退场，群主优先交给有效管理员，否则按MXID选择成员；若人数降到1则解散。UID/MXID及历史存证、必要账本记录保留，用户名不复用。退出/解散/注销不改变归档格式或绕过30日清理规则。
+
+App原生session响应增加capabilities.notifications=true。网页只在明确支持时展示/调用原生通知能力；旧App桥接仍可使用聊天与备份，不显示不支持的通知按钮。

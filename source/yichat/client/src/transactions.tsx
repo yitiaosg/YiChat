@@ -1,0 +1,7 @@
+import {useEffect,useState} from 'preact/hooks';import {ExternalLink} from 'lucide-preact';import {requests} from './api';import {Modal,ErrorText} from './shared';
+export function Transactions({close}:{close:()=>void}){
+ const [items,setItems]=useState<any[]>([]),[next,setNext]=useState<number|null>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function load(before?:number){setBusy(true);setError('');try{const r=await requests.api('/api/transactions'+(before?'?before='+before:''));setItems(old=>before?[...old,...r.items]:r.items);setNext(r.next_before)}catch(e:any){setError(e.message)}finally{setBusy(false)}}
+ useEffect(()=>{void load()},[]);
+ return <Modal title="我的交易详情" close={close}><p class="small muted">仅显示本人已入账的 YiChat 转账、红包及退款。金额以真实账本为准；点击进入 YIDT 区块链浏览器。</p>{items.map(row=><a key={row.hash} class="transaction-row" href={row.url} target="_blank" rel="noopener noreferrer"><strong>{row.action} · {row.amount} YIDT <ExternalLink size={14}/></strong><small>{new Date(row.created).toLocaleString()} · {row.hash.slice(0,10)}…{row.hash.slice(-8)}</small><small>{row.source} → {row.destination}</small><small>交易 gas：{row.gas} YIDT</small></a>)}{!busy&&!error&&!items.length&&<p class="notice">暂无已入账的相关交易。</p>}{next&&<button type="button" disabled={busy} onClick={()=>void load(next)}>加载更多交易</button>}{busy&&<p role="status">正在读取交易…</p>}{error&&<><ErrorText>{error}</ErrorText><button type="button" disabled={busy} onClick={()=>void load()}>重试读取交易</button></>}</Modal>;
+}

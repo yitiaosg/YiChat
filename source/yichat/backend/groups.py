@@ -7,7 +7,7 @@ from urllib.parse import quote
 from fastapi import Request,HTTPException
 from .db import connect,transaction
 from .security import fail,valid_sid
-from . import membership
+from . import membership,lifecycle
 
 MARK='org.yitiao.group_operation'
 SCHEMA='''
@@ -35,6 +35,8 @@ def joined(s,room):
     with connect(s.ledger) as c:return [r['mxid'] for r in c.execute("SELECT mxid FROM yichat_memberships WHERE room=? AND membership='join' AND pending_event IS NULL",(room,))]
 
 def require_send(s,room,mxid):
+    with connect(s.ledger) as ledger:
+        lifecycle.require_active(ledger,room);membership.require(ledger,room,mxid)
     with connect(s.db) as c:r=c.execute('SELECT * FROM group_members WHERE room=? AND mxid=?',(room,mxid)).fetchone()
     if r and (r['banned'] or r['muted_until']>int(time.time()*1000)):
         fail(403,{'code':'YICHAT_GROUP_MUTED' if not r['banned'] else 'YICHAT_GROUP_BANNED','error':'你已被禁言，暂时不能发送消息或附件' if not r['banned'] else '你已被移出群组且不允许重新加入'})
@@ -46,9 +48,12 @@ def admitted(s,room,sender,typ,content,state_key=''):
     opid=content.get(MARK)
     if not isinstance(opid,str):return None
     with connect(s.db) as c:r=c.execute('SELECT o.*,a.sender,a.type,a.state_key,a.digest,a.expires FROM group_operations o JOIN group_admissions a USING(id) WHERE o.id=? AND o.room=?',(opid,room)).fetchone()
-    if not r or r['done'] or r['expires']<time.time() or r['sender']!=sender or r['type']!=typ or r['state_key']!=(state_key or '') or r['digest']!=normalize(content) or not valid_sid(s,r['sid'],r['username']):fail(403,'群管理授权无效或已过期')
-    if r['action'] not in ('join','direct_join'):
+    if not r or r['done'] or r['expires']<time.time() or r['sender']!=sender or r['type']!=typ or r['state_key']!=(state_key or '') or r['digest']!=normalize(content) or not (valid_sid(s,r['sid'],r['username']) or (r['action']=='account_transfer' and lifecycle.purged(s,r['actor']))):fail(403,'群管理授权无效或已过期')
+    if r['action'] not in ('join','direct_join','account_transfer'):
         with connect(s.db) as c:permission(c,room,r['actor'],r['action'],r['target'])
+    elif r['action']=='account_transfer':
+        with connect(s.db) as c:
+            if role(c,room,r['actor'])!='owner':fail(403,'账户群主已变更')
     elif r['action']=='join':
         with connect(s.db) as c:g=c.execute('SELECT searchable FROM group_settings WHERE room=?',(room,)).fetchone()
         if not g or not g['searchable']:fail(403,'群主已关闭群号加入')
@@ -63,7 +68,7 @@ def apply(s,content,event_id):
     with transaction(s.db) as c:
         op=c.execute('SELECT * FROM group_operations WHERE id=?',(opid,)).fetchone()
         if not op or op['done']:return
-        if op['action']=='transfer':
+        if op['action'] in ('transfer','account_transfer'):
             c.execute('UPDATE rooms SET owner=? WHERE room=? AND owner=?',(op['target'],op['room'],op['actor']))
             c.execute('UPDATE group_members SET admin=0,muted_until=0 WHERE room=? AND mxid=?',(op['room'],op['target']))
         if op['action']=='avatar':
@@ -76,6 +81,9 @@ def apply(s,content,event_id):
 
 def validate_member(s,info,sender,target,content,control=None):
     m=content.get('membership');room=info['room']
+    if m in ('invite','join') and lifecycle.purged(s,target):fail(403,'该账户已注销，不能加入群聊')
+    with connect(s.ledger) as ledger:
+        if m!='leave':lifecycle.require_active(ledger,room)
     with connect(s.db) as c:
         settings=c.execute('SELECT * FROM group_settings WHERE room=?',(room,)).fetchone()
         ban=c.execute('SELECT banned FROM group_members WHERE room=? AND mxid=?',(room,target)).fetchone()
@@ -83,11 +91,11 @@ def validate_member(s,info,sender,target,content,control=None):
         if control:return
         if m=='invite' and settings and not settings['member_invites'] and role(c,room,sender)=='member':fail(403,'群主已关闭成员邀请')
         if m in ('ban',) or (m=='leave' and sender!=target):fail(403,'请通过群管理接口移除成员')
-        if m=='leave' and sender==target==info['owner'] and len(joined(s,room))>1:fail(409,'请先转让群主，再退出群聊')
+        if m=='leave' and sender==target==info['owner'] and len(joined(s,room))>1 and not lifecycle.status(s,room) and not lifecycle.purged(s,sender):fail(409,'请先转让群主，再退出群聊')
 
 def permission(c,room,actor,action,target=None):
     rank=role(c,room,actor)
-    if action in ('settings','transfer','admin','unban','avatar') and rank!='owner':fail(403,'只有群主可以执行此操作')
+    if action in ('settings','transfer','admin','unban','avatar','dissolve') and rank!='owner':fail(403,'只有群主可以执行此操作')
     if action in ('name','topic') and rank not in ('owner','admin'):fail(403,'需要群主或管理员权限')
     if action in ('mute','kick','redact'):
         if rank not in ('owner','admin'):fail(403,'需要群主或管理员权限')
@@ -112,19 +120,23 @@ def install(app,s,session,room_access):
             levels=await app.state.matrix.call('GET','/_matrix/client/v3/rooms/'+quote(room,safe='')+'/state/m.room.power_levels',app.state.matrix.token(who))
             with transaction(s.db) as c:
                 for uid,level in levels.get('users',{}).items():
-                    if uid!=info['owner'] and level>=50:c.execute('INSERT INTO group_members(room,mxid,admin) VALUES(?,?,1) ON CONFLICT(room,mxid) DO UPDATE SET admin=1',(room,uid))
+                    if uid!=info['owner'] and level>=50 and c.execute('SELECT count(*) FROM group_members WHERE room=? AND admin=1',(room,)).fetchone()[0]<8:c.execute('INSERT INTO group_members(room,mxid,admin) VALUES(?,?,1) ON CONFLICT(room,mxid) DO UPDATE SET admin=1',(room,uid))
                 c.execute('UPDATE group_settings SET seeded=1 WHERE room=?',(room,))
         ids=joined(s,room)
         with connect(s.db) as c:
             settings=dict(c.execute('SELECT * FROM group_settings WHERE room=?',(room,)).fetchone());myrole=role(c,room,who['mxid'])
             extra={r['mxid']:dict(r) for r in c.execute('SELECT * FROM group_members WHERE room=?',(room,))}
             members=[dict(mxid=mxid,role='owner' if mxid==info['owner'] else 'admin' if extra.get(mxid,{}).get('admin') else 'member',muted_until=extra.get(mxid,{}).get('muted_until',0),banned=bool(extra.get(mxid,{}).get('banned',0)),joined=mxid in ids) for mxid in sorted(set(ids)|{k for k,v in extra.items() if v['banned']})]
-        return dict(room=room,owner=info['owner'],number=settings['number'],searchable=bool(settings['searchable']),member_invites=bool(settings['member_invites']),role=myrole,members=members,member_count=len(ids),can_invite=myrole!='member' or bool(settings['member_invites']))
+        former=who['mxid'] not in ids
+        if former:members=[];myrole='former'
+        return dict(revision=info.get('revision',0),dissolved_at=lifecycle.status(s,room),admin_count=sum(m['role']=='admin' and m['joined'] for m in members),admin_limit=8,room=room,owner=info['owner'],number=settings['number'],searchable=bool(settings['searchable']),member_invites=bool(settings['member_invites']),role=myrole,members=members,member_count=None if former else len(ids),can_invite=not former and not lifecycle.status(s,room) and (myrole!='member' or bool(settings['member_invites'])))
     async def room_access_dummy(who,room):
         from . import policy
         info=policy.room(s,room)
         if info['kind']!='group':fail(403,'非群聊')
-        with connect(s.ledger) as c:membership.require(c,room,who['mxid'])
+        with connect(s.ledger) as c:
+            member=c.execute('SELECT membership,event_id FROM yichat_memberships WHERE room=? AND mxid=?',(room,who['mxid'])).fetchone()
+            if not member or not member['event_id']:fail(403,'没有此群聊记录的访问权限')
         return who,info
     @app.get('/api/groups/{room}')
     async def detail(request:Request,room:str):return await read(session(request),room)
@@ -132,7 +144,7 @@ def install(app,s,session,room_access):
     async def lookup(request:Request,number:str):
         session(request)
         with connect(s.db) as c:r=c.execute('SELECT g.*,r.owner FROM group_settings g JOIN rooms r USING(room) WHERE number=? AND searchable=1',(number,)).fetchone()
-        if not r or not re.fullmatch(r'[1-9][0-9]{8}',number) or r['owner'] not in joined(s,r['room']):fail(404,'群号不存在或未开放搜索')
+        if not r or not re.fullmatch(r'[1-9][0-9]{8}',number) or r['owner'] not in joined(s,r['room']) or lifecycle.status(s,r['room']):fail(404,'群号不存在或未开放搜索')
         return {'room':r['room'],'number':number,'member_count':len(joined(s,r['room']))}
     async def emit(who,info,op,actor,typ,content,state_key='',endpoint=None):
         content=dict(content,**{MARK:op['id']})
@@ -146,11 +158,14 @@ def install(app,s,session,room_access):
     @app.post('/api/groups/{room}/manage')
     async def manage(request:Request,room:str):
         who=session(request);data=await request.json();action=data.get('action');target=data.get('target');key=data.get('key')
-        if action not in ('settings','transfer','admin','mute','kick','unban','redact','name','topic','avatar') or not isinstance(key,str) or not re.fullmatch('[A-Za-z0-9_-]{16,100}',key):fail(400,'无效群管理请求')
+        if action not in ('settings','transfer','admin','mute','kick','unban','redact','name','topic','avatar','dissolve') or not isinstance(key,str) or not re.fullmatch('[A-Za-z0-9_-]{16,100}',key):fail(400,'无效群管理请求')
         if action in ('transfer','admin','mute','kick','unban','redact') and not isinstance(target,str):fail(400,'需要目标成员')
         async with locks.setdefault(room,asyncio.Lock()):
             _,info=await room_access_dummy(who,room)
             await read(who,room)
+            with connect(s.ledger) as ledger:
+                membership.require(ledger,room,who['mxid'])
+                if action!='dissolve':lifecycle.require_active(ledger,room)
             payload=json.dumps(data,sort_keys=True,ensure_ascii=False)
             ids=joined(s,room)
             with transaction(s.db) as c:
@@ -158,10 +173,12 @@ def install(app,s,session,room_access):
                 if old and (old['payload']!=payload or old['room']!=room):fail(409,'请求键已用于不同操作')
                 if not old:
                     rank=permission(c,room,who['mxid'],action,target)
-                    if action not in ('settings','unban','redact','name','topic','avatar') and target not in ids:fail(409,'目标不是当前群成员')
+                    if action not in ('settings','unban','redact','name','topic','avatar','dissolve') and target not in ids:fail(409,'目标不是当前群成员')
                     if action=='kick' and data.get('ban') and rank!='owner':fail(403,'只有群主可以禁止再次加入')
                     if action=='mute' and (type(data.get('seconds'))!=int or not 0<=data['seconds']<=86400):fail(400,'单次禁言最多24小时')
                     if action in ('settings','admin') and any(type(data.get(k))!=bool for k in (('searchable','member_invites') if action=='settings' else ('enabled',))):fail(400,'需要布尔设置')
+                    if action=='admin' and role(c,room,target)=='owner':fail(400,'群主不需要设置为管理员')
+                    if action=='admin' and data['enabled'] and not c.execute('SELECT 1 FROM group_members WHERE room=? AND mxid=? AND admin=1',(room,target)).fetchone() and c.execute('SELECT count(*) FROM group_members WHERE room=? AND admin=1',(room,)).fetchone()[0]>=8:fail(409,'群聊最多设置8个管理员')
                     if action=='transfer' and target==who['mxid']:fail(400,'新群主不能是本人')
                     oid=secrets.token_urlsafe(24)
                     c.execute('INSERT INTO group_operations VALUES(?,?,?,?,?,?,?,?,?,?,0)',(oid,room,who['mxid'],who['sid'],who['username'],key,payload,action,target,time.time()))
@@ -176,6 +193,13 @@ def install(app,s,session,room_access):
                 op=dict(old)
             if not op['done']:
                 with connect(s.db) as c:permission(c,room,who['mxid'],action,target)
+            if action=='dissolve':
+                if not op['done']:
+                    with transaction(s.ledger) as ledger:
+                        with connect(s.db) as db:permission(db,room,who['mxid'],action)
+                        ledger.execute('INSERT INTO yichat_group_lifecycle(room,dissolved_ms) VALUES(?,?) ON CONFLICT(room) DO UPDATE SET dissolved_ms=coalesce(dissolved_ms,excluded.dissolved_ms)',(room,int(time.time()*1000)))
+                    with transaction(s.db) as db:db.execute('UPDATE group_operations SET done=1 WHERE id=?',(op['id'],))
+                return await read(who,room)
             if not op['done'] and action in ('transfer','kick','redact','name','topic','avatar'):
                 if action=='avatar':
                     from .group_avatars import content

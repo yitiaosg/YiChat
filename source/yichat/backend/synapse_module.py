@@ -101,7 +101,10 @@ class YiChatModule:
             with connect(self.s.db) as c:
                 sessions=c.execute('SELECT username,sid FROM sessions WHERE mxid=? AND revoked=0 AND expires>strftime(\'%s\',\'now\')',(event.sender,)).fetchall()
             from .security import valid_sid
-            if not control and not any(valid_sid(self.s,r['sid'],r['username']) for r in sessions):
+            from . import lifecycle
+            retirement=event.type=='m.room.member' and event.sender==event.state_key and event.content.get('membership')=='leave' and lifecycle.purged(self.s,event.sender)
+            if not control and not retirement and lifecycle.purged(self.s,event.sender):raise HTTPException(401,'账户已注销')
+            if not control and not retirement and not any(valid_sid(self.s,r['sid'],r['username']) for r in sessions):
                 raise HTTPException(401,'主站会话已退出')
             if event.type=='m.room.create':
                 token=event.content.get('org.yitiao.ticket','')
@@ -148,6 +151,7 @@ class YiChatModule:
         if not original or original.room_id!=event.room_id or original.is_state():raise HTTPException(403,'不能撤回此事件')
         info=policy.room(self.s,event.room_id)
         control=groups.admitted(self.s,event.room_id,event.sender,event.type,unfreeze(event.content))
+        if info['kind']=='direct' and original.sender!=event.sender:raise HTTPException(403,'只能撤回自己的私聊消息')
         if info['kind']=='group' and original.sender!=event.sender and not control:
             with connect(self.s.db) as c:groups.permission(c,event.room_id,event.sender,'redact',original.sender)
         content=unfreeze(original.content)
@@ -180,9 +184,15 @@ class YiChatModule:
             policy.finish_attachments(self.s,event.event_id,accepted_ms)
         if event.type=='m.room.member':
             accepted=state.get(('m.room.member',event.state_key),event)
+            from . import lifecycle
+            info=policy.room(self.s,event.room_id)
             with transaction(self.s.ledger) as c:
                 c.execute('UPDATE yichat_memberships SET membership=?,event_id=?,pending_event=CASE WHEN pending_event=? THEN NULL ELSE pending_event END WHERE room=? AND mxid=?',
                     (accepted.content.get('membership','unknown'),accepted.event_id,event.event_id,event.room_id,event.state_key))
+                if info['kind']=='group':lifecycle.transition(c,event.room_id)
+            if info['kind']=='group':
+                if accepted.content.get('membership')=='leave':
+                    with transaction(self.s.db) as db:db.execute('UPDATE group_members SET admin=0,muted_until=0 WHERE room=? AND mxid=?',(event.room_id,event.state_key))
         # Never rely on this hook alone. Sweep resumes from a durable PG cursor.
         self.api.run_as_background_process('yichat_ingest_notice',self.sweep)
 
@@ -208,6 +218,15 @@ class YiChatModule:
                     # abandoned. Other live writers' transitions remain barriers.
                     c.execute('UPDATE yichat_memberships SET membership=?,event_id=?,pending_event=NULL WHERE room=? AND mxid=? AND pending_worker=? AND pending_boot<>?',
                         (event.content.get('membership','unknown'),event.event_id,room,mxid,self.instance,self.boot))
+            if policy.room(self.s,room)['kind']=='group':
+                from .lifecycle import transition
+                with transaction(self.s.ledger) as ledger:
+                    with archive.connect(self.s.archive_reader) as pg:ever=pg.execute("SELECT count(DISTINCT mxid) n FROM memberships WHERE room=%s AND membership='join'",(room,)).fetchone()['n']
+                    if ever>=2:ledger.execute('INSERT INTO yichat_group_lifecycle(room,had_multiple) VALUES(?,1) ON CONFLICT(room) DO UPDATE SET had_multiple=1',(room,))
+                    transition(ledger,room)
+                with transaction(self.s.db) as db:
+                    for (_,mxid),event in state.items():
+                        if event.content.get('membership')!='join':db.execute('UPDATE group_members SET admin=0,muted_until=0 WHERE room=? AND mxid=?',(room,mxid))
             self.initialized_rooms.add(room)
 
     async def revoke_sessions(self):
@@ -257,6 +276,12 @@ class YiChatModule:
             await defer_to_thread(reactor,archive.ingest_batch,self.s.archive_ingest,rows,through,at,fences)
             await defer_to_thread(reactor,history.backfill,self.s)
             self.ready=True
+            if time.time()-getattr(self,'retirement_at',0)>15:
+                self.retirement_at=time.time()
+                try:
+                    from .lifecycle import retire_accounts
+                    await retire_accounts(self)
+                except Exception:log.exception('Account chat retirement pending; will retry')
         except Exception:
             self.ready=False
             log.exception('YiChat durable ingestion failed; sealing and cleanup paused')

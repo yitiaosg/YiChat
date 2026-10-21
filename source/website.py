@@ -603,6 +603,9 @@ def purge_account(username: str) -> None:
                 recovery_codes=NULL,
                 nickname='',
                 biography='',
+                last_login_at=NULL,
+                role='guest',
+                created_at='',
                 purged_at=?
             WHERE username=?
             """,
@@ -615,9 +618,21 @@ def purge_account(username: str) -> None:
         conn.execute("DELETE FROM passkey_challenges WHERE user=?",(username,))
         conn.execute("DELETE FROM email_codes WHERE username=?", (username,))
         conn.execute("DELETE FROM trusted_devices WHERE username=?", (username,))
+        identity=conn.execute('SELECT uid FROM account_ids WHERE username=?',(username,)).fetchone()
+        if identity:
+            uid=identity[0]
+            conn.execute('DELETE FROM social_follows WHERE source=? OR target=?',(uid,uid))
+            conn.execute('DELETE FROM social_blocks WHERE source=? OR target=?',(uid,uid))
+            conn.execute('DELETE FROM social_privacy WHERE uid=?',(uid,))
         conn.commit()
     finally:
         conn.close()
+
+    import yidt_core as retirement_yidt
+    with retirement_yidt.connect() as ledger:
+        ledger.execute('UPDATE yidt_sessions SET revoked=1 WHERE user=?',(username,))
+        if ledger.execute("SELECT 1 FROM sqlite_master WHERE name='account_login_devices'").fetchone():
+            ledger.execute('DELETE FROM account_login_devices WHERE sid IN (SELECT sid FROM yidt_sessions WHERE user=?)',(username,))
 
 
 @app.before_request

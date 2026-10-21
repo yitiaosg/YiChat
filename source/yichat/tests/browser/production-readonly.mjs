@@ -1,6 +1,6 @@
 // Anonymous read-only smoke check. Does not sign in or create business operations.
 import {chromium} from 'playwright';import assert from 'node:assert/strict';import {resolve} from 'node:path';import {writeFile} from 'node:fs/promises';
-const output=resolve(import.meta.dirname,'../../../../delivery/production-20261021'),browser=await chromium.launch({headless:true,args:['--no-sandbox']}),errors=[];
+const output=process.env.YICHAT_DELIVERY?resolve(process.env.YICHAT_DELIVERY):resolve(import.meta.dirname,'../../../../delivery/production-20261021'),browser=await chromium.launch({headless:true,args:['--no-sandbox']}),errors=[];
 try{
  for(const [name,viewport] of [['desktop',{width:1440,height:1000}],['mobile',{width:412,height:915}]]){
   const context=await browser.newContext({viewport}),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));

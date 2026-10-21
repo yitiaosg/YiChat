@@ -2,6 +2,7 @@
 No production ports, accounts or assets are used.
 """
 import asyncio
+import os
 import hashlib
 import hmac
 import json
@@ -65,6 +66,7 @@ def synapse(env,tmp_path):
         r=h.post(s.synapse+'/_synapse/admin/v1/register',json={'nonce':nonce,'username':user,'password':password,'admin':True,'mac':mac});r.raise_for_status()
         s.admin_token=r.json()['access_token']
         stop(process)
+        if os.environ.get('YICHAT_NOTIFICATION_PAGING_TEST')=='1':config['rc_room_creation']={'per_second':50,'burst_count':100}
         config['modules']=[{'module':'backend.synapse_module.YiChatModule','config':{
             'root':str(s.root),'site':str(s.site),'synapse':s.synapse,'session_key':s.session_key,'admin_token':s.admin_token,
             'archive_ingest':s.archive_ingest,'archive_reader':s.archive_reader}}]

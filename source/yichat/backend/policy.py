@@ -55,6 +55,8 @@ def subject(s,matrix_id):
 
 
 def require_send(s,info,sender):
+    from .lifecycle import purged
+    if purged(s,sender):fail(403,'账户已注销，不能继续发送')
     if info['kind']!='direct':
         from .groups import require_send as group_send
         group_send(s,info.get('room',''),sender);return
@@ -96,12 +98,15 @@ def register_room(s,token,room):
 
 def room(s,room_id):
     with connect(s.db) as c:
-        r=c.execute('SELECT r.*,m.encryption FROM rooms r JOIN room_modes m USING(room) WHERE room=?',(room_id,)).fetchone()
+        r=c.execute('SELECT r.*,m.encryption,coalesce((SELECT max(rowid) FROM group_operations g WHERE g.room=r.room AND g.done=1),0) revision FROM rooms r JOIN room_modes m USING(room) WHERE room=?',(room_id,)).fetchone()
     if not r:fail(403,'非 YiChat 会话')
     return dict(r)
 
 
 def validate_event(s,info,event_type,content,sender,state_key=None,control=None):
+    from . import lifecycle
+    if info['kind']=='group' and not (event_type=='m.room.member' and content.get('membership')=='leave' and sender==state_key and lifecycle.purged(s,sender)):
+        with connect(s.ledger) as ledger:lifecycle.require_active(ledger,info['room'])
     if event_type=='m.room.member':
         membership=content.get('membership')
         if info['kind']=='direct':
@@ -110,7 +115,7 @@ def validate_event(s,info,event_type,content,sender,state_key=None,control=None)
                 # Joining does not send content, but an invite is a sender action.
                 if membership=='invite':require_send(s,info,sender)
             elif membership not in ('leave',):fail(403,'私聊成员固定')
-            elif sender!=state_key:fail(403,'私聊只能由本人离开')
+            elif sender!=state_key or not lifecycle.purged(s,sender):fail(403,'私聊不支持离开会话，请使用归档')
         else:
             from .groups import validate_member
             validate_member(s,info,sender,state_key,content,control)

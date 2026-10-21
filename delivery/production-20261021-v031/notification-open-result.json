@@ -1,0 +1,6 @@
+{
+  "checks": [
+    "notification tap opens its conversation before room metadata finishes loading"
+  ],
+  "errors": []
+}

@@ -1,3 +1,5 @@
+最新 0.3.1 / code 9；先读 PRODUCTION-0.3.1.md。仍共用网页前端。群解散不可恢复，退出者只读，管理员最多8人；个人会话归档/置顶/静音按UID保存。后台通知使用WorkManager约15分钟聚合查询，不是即时厂商推送，禁止新增第二个Matrix同步消耗密钥队列。主站最终purge只保留用户名公开资料，官方Synapse API自动退出群聊和私聊；不要破坏UID/MXID、历史存证或资金幂等。
+
 当前版本 0.3.0 / code8；先读 PRODUCTION-20261021.md、README.md、AGENTS.md（如存在）、source/yichat/docs/CHAT-KERNEL-API.md 和 delivery/production-20261021。
 
 请接力维护 YiChat Android。先读 README.md、WEB-APP-REFACTOR.md、ARCHITECTURE.md、android/README.md 和 source/yichat/docs/CHAT-KERNEL-API.md（若文件路径不同先定位），然后查看 git 状态，保护所有未提交改动、原数据和密钥。

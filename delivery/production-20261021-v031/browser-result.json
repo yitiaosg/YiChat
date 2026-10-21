@@ -1,0 +1,15 @@
+{
+  "checks": [
+    "private chats have bubbles only, no leave action and no peer redaction",
+    "group messages group consecutive avatar/nickname and expose only allowed undo actions",
+    "App notification settings and per-room mute call real preference API",
+    "swipe archive and pin persist; archived/muted conversations never produce notification hints",
+    "personal settled transactions link to their real ledger explorer hashes",
+    "eight administrators are accepted and a ninth is rejected authoritatively",
+    "owner dissolution is permanent and preserves a readable timeline while rejecting all writes",
+    "last remaining member triggers automatic dissolution and leaving users retain read-only history after refresh",
+    "final account purge removes memberships, blocks direct sending and exposes username only",
+    "a known native session lock also clears the web view on return"
+  ],
+  "errors": []
+}

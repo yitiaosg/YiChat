@@ -1,3 +1,5 @@
+当前版本 **0.3.1 / code 9**；新增群解散/只读历史、8名管理员上限、个人归档/置顶、App通知、交易记录及账户最终注销联动。见 [PRODUCTION-0.3.1.md](PRODUCTION-0.3.1.md)。
+
 # YiChat Android 0.3.0
 
 App 使用独立 Android WebView 运行 **chat.yitiao.org 的同一套 Preact / TypeScript 前端**，不再维护 Compose 聊天界面。Matrix JS SDK + Rust WASM 负责原有 E2EE；Kotlin 只负责系统浏览器授权、离线框架缓存、内部加密原包备份、按天外部导出和系统文件选择。
