@@ -21,8 +21,8 @@ jobs:
           def raw(path):
               return urllib.request.urlopen('https://raw.githubusercontent.com/'+repo+'/'+rev+'/'+path).read()
           manifest=json.loads(raw('release/manifest.json'))
-          def api(url,data=None,content_type='application/json'):
-              req=urllib.request.Request(url,data=data,headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':content_type,'X-GitHub-Api-Version':'2022-11-28'})
+          def api(url,data=None,content_type='application/json',method=None):
+              req=urllib.request.Request(url,data=data,method=method,headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':content_type,'X-GitHub-Api-Version':'2022-11-28'})
               return json.load(urllib.request.urlopen(req))
           files=[]
           for file in manifest['files']:
@@ -31,10 +31,11 @@ jobs:
               assert len(body)==file['bytes'] and hashlib.sha256(body).hexdigest()==file['sha256'],name
               files.append((name,body))
           base='https://api.github.com/repos/'+repo+'/releases'
-          data=json.dumps({'tag_name':manifest['tag'],'target_commitish':rev,'name':manifest['name'],'body':manifest['notes'],'draft':False,'prerelease':False,'make_latest':'true'}).encode()
+          data=json.dumps({'tag_name':manifest['tag'],'target_commitish':rev,'name':manifest['name'],'body':manifest['notes'],'draft':True,'prerelease':False}).encode()
           release=api(base,data)
           for name,body in files:
               from urllib.parse import quote
               api(release['upload_url'].split('{')[0]+'?name='+quote(name),body,'application/octet-stream')
+          release=api(base+'/'+str(release['id']),json.dumps({'draft':False,'make_latest':'true'}).encode(),method='PATCH')
           print(release['html_url'])
           PY
