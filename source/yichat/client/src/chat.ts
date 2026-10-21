@@ -5,7 +5,7 @@ import { requests, path, codepoints, shareUrls } from './api';
 import { Vault } from './vault';
 import {History} from './history';
 import {isApp,appCall} from './app';
-export type RoomInfo={room:string;kind:'direct'|'group';owner:string;peer:string|null;encryption:'direct'|'plain'|'legacy_encrypted';membership?:string;peer_deleted?:boolean;revision?:number;dissolved_at?:number|null};
+export type RoomInfo={room:string;kind:'direct'|'group';owner:string;peer:string|null;encryption:'direct'|'plain'|'legacy_encrypted';membership?:string;peer_deleted?:boolean;revision?:number;has_messages?:boolean;dissolved_at?:number|null};
 export type Outgoing={txn:string;room:string;content:any;attachments:string[];state:'sending'|'failed';error?:string;time:number};
 export type Profile={mxid:string;username:string;nickname:string;biography?:string;avatar_url?:string;profile_url?:string};
 // This gateway does not expose calls. Disable the SDK's TURN poll explicitly.
@@ -13,7 +13,7 @@ class MessagingClient extends sdk.MatrixClient {protected canSupportVoip=false;}
 export class Chat {
   client!:sdk.MatrixClient; history=new History(this);private historyStarted=false; session:any;vault=new Vault();businessVault=new Vault();phase='loading';error='';sync='正在连接';
   private preferencePending=new Set<string>();private preferenceRevision=0;private preferenceVersions=new Map<string,number>();
-  appNotifications=false;activeRoom='';preferences=new Map<string,{pinned?:boolean;archived?:boolean;muted?:boolean}>();
+  appNotifications=false;activeRoom='';preferences=new Map<string,{pinned?:boolean;archived?:boolean;muted?:boolean;deleted?:boolean}>();
   rooms: sdk.Room[]=[];info=new Map<string,RoomInfo>();profiles=new Map<string,Profile>();outbox:Outgoing[]=[];business:any[]=[];
   backupRemaining:number|null=null;private recovery?:Uint8Array;private keys=new Map<string,Uint8Array>();
   offline=false;private saveTimer?:ReturnType<typeof setTimeout>;
@@ -78,7 +78,7 @@ export class Chat {
         if(isApp&&['PREPARED','SYNCING'].includes(state)){clearTimeout(this.saveTimer);this.saveTimer=setTimeout(()=>void store.save(true).catch(()=>{}),1200)}
       });
       const update=()=>{this.updateRooms()};
-      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,update);this.client.on(sdk.RoomEvent.Name,update);this.client.on(sdk.RoomEvent.Receipt,update);this.client.on(sdk.RoomEvent.Redaction,update);
+      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{update();if(room&&!toStart&&data.liveEvent&&this.preferences.get(room.roomId)?.deleted&&['m.room.message','m.room.encrypted'].includes(event.getWireType()))this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Name,update);this.client.on(sdk.RoomEvent.Receipt,update);this.client.on(sdk.RoomEvent.Redaction,update);
       this.client.on(sdk.MatrixEventEvent.Decrypted,update);this.client.on(sdk.RoomEvent.MyMembership,()=>{this.scheduleRefresh();update()});this.client.on(sdk.ClientEvent.Room,()=>{this.scheduleRefresh();update()});
       this.client.on('crypto.keyBackupSessionsRemaining' as any,(count:number)=>{this.backupRemaining=count;this.changed()});
 
@@ -91,7 +91,7 @@ export class Chat {
     }catch(e:any){if(!this.closed){this.phase='error';this.error=e.message;this.changed()}}
   }
   fail(e:any){if(e?.name!=='AbortError'){this.error=e.message||String(e);this.changed()}}
-  updateRooms(){if(!this.client||this.closed)return;this.rooms=this.client.getRooms().filter(r=>['join','invite'].includes(r.getMyMembership())||(r.getMyMembership()==='leave'&&this.info.has(r.roomId))).sort((a,b)=>Number(!!this.preferences.get(b.roomId)?.pinned)-Number(!!this.preferences.get(a.roomId)?.pinned)||b.getLastActiveTimestamp()-a.getLastActiveTimestamp());this.changed()}
+  updateRooms(){if(!this.client||this.closed)return;this.rooms=this.client.getRooms().filter(r=>!this.preferences.get(r.roomId)?.deleted&&(r.getMyMembership()==='invite'||(['join','leave'].includes(r.getMyMembership())&&this.info.has(r.roomId)))).sort((a,b)=>Number(!!this.preferences.get(b.roomId)?.pinned)-Number(!!this.preferences.get(a.roomId)?.pinned)||b.getLastActiveTimestamp()-a.getLastActiveTimestamp());this.changed()}
   scheduleRefresh(){if(this.offline||this.closed)return;clearTimeout(this.refreshTimer);this.refreshTimer=setTimeout(()=>void this.refresh().catch(e=>this.fail(e)),800)}
   async refresh(){const revision=this.preferenceRevision;const [rows,prefs]:[RoomInfo[],any[]]=await Promise.all([requests.single('rooms',()=>requests.api('/api/rooms')),requests.single('preferences',()=>requests.api('/api/conversations/preferences'))]);if(this.closed)return;for(const r of rows){const old=this.info.get(r.room);if(old?.dissolved_at)r.dissolved_at=old.dissolved_at;if(old?.peer_deleted)r.peer_deleted=true;if((old?.revision||0)>(r.revision||0)){r.owner=old!.owner;r.revision=old!.revision}}this.info=new Map(rows.map(r=>[r.room,r]));const fresh=new Map(prefs.map(r=>[r.room,r]));for(const [id,version] of this.preferenceVersions)if(version>revision||this.preferencePending.has(id)){if(this.preferences.has(id))fresh.set(id,this.preferences.get(id));else fresh.delete(id)};this.preferences=fresh;this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences]})}
   async loadProfiles(mxids:string[],usernames:string[]=[]):Promise<void>{
@@ -108,10 +108,11 @@ export class Chat {
   preferenceSaving(room:string){return this.preferencePending.has(room)}
   async setPreference(room:string,value:any){
     if(this.offline)throw Error('联网后才能保存会话设置');
+    if(value.archived&&this.info.get(room)?.has_messages===false&&this.outbox.some(row=>row.room===room))throw Error('此会话还有未发送草稿，请先发送或移除草稿');
     if(value.read){await requests.api('/api/conversations/'+path(room)+'/preferences',{read:true,event:value.event});if(isApp)void appCall('cancelNotification',{room}).catch(()=>{});return}
     if(this.preferencePending.has(room))throw Error('会话设置正在保存，请稍后');
     const old=this.preferences.get(room);this.preferenceVersions.set(room,++this.preferenceRevision);this.preferencePending.add(room);this.preferences.set(room,{...old,...value});this.updateRooms();
-    try{const result=await requests.api('/api/conversations/'+path(room)+'/preferences',value);if(this.closed)return;this.preferences.set(room,result);if(isApp&&(result.archived||result.muted))void appCall('cancelNotification',{room}).catch(()=>{});this.updateRooms();if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences]})}
+    try{const result=await requests.api('/api/conversations/'+path(room)+'/preferences',value);if(this.closed)return;this.preferences.set(room,result);if(value.archived)this.scheduleRefresh();if(isApp&&(result.archived||result.muted||result.deleted))void appCall('cancelNotification',{room}).catch(()=>{});this.updateRooms();if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences]})}
     catch(e){if(!this.closed){if(old)this.preferences.set(room,old);else this.preferences.delete(room);this.updateRooms()}throw e}
     finally{this.preferencePending.delete(room);if(!this.closed)this.changed()}
   }
@@ -186,16 +187,17 @@ export class Chat {
   }
   async retry(row:Outgoing){return this.send(row.room,row.content,row.attachments,row.txn)}
   async discard(row:Outgoing){const event=this.client.getRoom(row.room)?.getPendingEvents().find(e=>e.getTxnId()===row.txn);if(event?.status===sdk.EventStatus.NOT_SENT)this.client.cancelPendingEvent(event);this.outbox=this.outbox.filter(x=>x!==row);await this.persist()}
+  private openedRoom(room:string){const pref=this.preferences.get(room);if(pref?.deleted||pref?.archived){this.preferenceVersions.set(room,++this.preferenceRevision);this.preferences.set(room,{...pref,deleted:false,archived:false})}this.scheduleRefresh();this.changed();return room}
   async create(kind:'direct'|'group',users:Profile[],name:string){
     await this.refresh();
     for(const room of this.rooms){const info=this.info.get(room.roomId);if(info?.kind!==kind)continue;
-      if(kind==='direct'&&users.length===1&&[info.owner,info.peer].includes(users[0].mxid))return room.roomId;
+      // Private pair reuse is authoritative on the server, including hidden rooms.
       if(kind==='group'&&room.name===name){const ids=room.getMembers().filter(m=>['join','invite'].includes(m.membership||'')).map(m=>m.userId).sort();if(JSON.stringify(ids)===JSON.stringify([this.session.mxid,...users.map(x=>x.mxid)].sort()))return room.roomId}
     }
     if(sessionStorage.getItem('yc:create:'+this.session.uid))return this.resumeCreation();
     const payload={kind,users:users.map(u=>u.username),name,key:crypto.randomUUID()};
     sessionStorage.setItem('yc:create:'+this.session.uid,JSON.stringify(payload));
-    try{const result=await requests.api('/api/rooms',payload);sessionStorage.removeItem('yc:create:'+this.session.uid);this.scheduleRefresh();return result.room_id}
+    try{const result=await requests.api('/api/rooms',payload);sessionStorage.removeItem('yc:create:'+this.session.uid);return this.openedRoom(result.room_id)}
     catch(e:any){if(e.status&&e.status<500&&e.data?.code!=='YICHAT_ROOM_CREATE_PENDING'&&e.status!==429)sessionStorage.removeItem('yc:create:'+this.session.uid);throw e}
   }
   get pendingCreation(){return sessionStorage.getItem('yc:create:'+this.session.uid)}
@@ -204,7 +206,8 @@ export class Chat {
     let result:any;
     try{result=await requests.api('/api/room-creations/'+path(payload.key))}
     catch(e:any){if(e.status!==404)throw e;result=await requests.api('/api/rooms',payload)}
-    if(result.room_id){sessionStorage.removeItem('yc:create:'+this.session.uid);this.scheduleRefresh();return result.room_id}
+    if(result.state==='deleted'){sessionStorage.removeItem('yc:create:'+this.session.uid);throw Error('原测试会话已删除，请重新选择用户')}
+    if(result.room_id){sessionStorage.removeItem('yc:create:'+this.session.uid);return this.openedRoom(result.room_id)}
     if(result.state==='not_created'){sessionStorage.removeItem('yc:create:'+this.session.uid);throw Error('原请求已确认未创建会话。现在可以重新选择并创建。')}
     throw Error('原请求仍在处理中，已保留创建请求键；请稍后核实，不会重复创建。');
   }

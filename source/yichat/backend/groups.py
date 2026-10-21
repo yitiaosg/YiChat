@@ -49,11 +49,15 @@ def admitted(s,room,sender,typ,content,state_key=''):
     if not isinstance(opid,str):return None
     with connect(s.db) as c:r=c.execute('SELECT o.*,a.sender,a.type,a.state_key,a.digest,a.expires FROM group_operations o JOIN group_admissions a USING(id) WHERE o.id=? AND o.room=?',(opid,room)).fetchone()
     if not r or r['done'] or r['expires']<time.time() or r['sender']!=sender or r['type']!=typ or r['state_key']!=(state_key or '') or r['digest']!=normalize(content) or not (valid_sid(s,r['sid'],r['username']) or (r['action']=='account_transfer' and lifecycle.purged(s,r['actor']))):fail(403,'群管理授权无效或已过期')
-    if r['action'] not in ('join','direct_join','account_transfer'):
+    if r['action'] not in ('join','direct_join','direct_open','account_transfer'):
         with connect(s.db) as c:permission(c,room,r['actor'],r['action'],r['target'])
     elif r['action']=='account_transfer':
         with connect(s.db) as c:
             if role(c,room,r['actor'])!='owner':fail(403,'账户群主已变更')
+    elif r['action']=='direct_open':
+        from . import policy
+        info=policy.room(s,room);peer=info['peer'] if r['actor']==info['owner'] else info['owner']
+        if info['kind']!='direct' or r['actor'] not in (info['owner'],info['peer']) or r['target']!=r['actor'] or state_key!=r['actor'] or typ!='m.room.member' or content.get('membership') not in ('invite','join') or sender!=(peer if content['membership']=='invite' else r['actor']) or lifecycle.purged(s,r['actor']):fail(403,'私聊打开授权不匹配本人加入')
     elif r['action']=='join':
         with connect(s.db) as c:g=c.execute('SELECT searchable FROM group_settings WHERE room=?',(room,)).fetchone()
         if not g or not g['searchable']:fail(403,'群主已关闭群号加入')
