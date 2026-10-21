@@ -1,0 +1,52 @@
+{
+  "tag": "android-20261021-release",
+  "name": "YiChat Android 0.3.0",
+  "notes": "YiChat Android 0.3.0 (8)\n\nWebView 与网页共用同一前端；系统浏览器完成站外登录和钱包授权。包含状态栏安全区、用户提供的应用图标、群号和群管理、群主头像、私聊自动加入及隐私拒绝、红包份数/最低额/发送者手续费规则。\n\n移除 Chat 设备验证，改由主站 /account/ 撤销登录设备并联动 Chat 锁定。App 可选择内部备份或每日 ZIP 文件，按连续 1–5 个 UTC 日期核验摘要并只读查看，私聊恢复密钥在本地使用。口令加密 .ycb 快照与每日 ZIP 规格分开。\n\n15 项实际浏览器检查通过；线上桌面/手机匿名检查通过。遵照要求，Android 真机由用户安装后测试；不宣称完整原生验收。资金压力测试使用隔离账本。\n\n包名 org.yitiao.yichat.mobile；沿用此前随机生成的签名，可从同签名 0.2.0 覆盖升级。请勿卸载或清除加密存储。证书 SHA256: 9e7505f84f84c28ac920a5da3470a452e7923b76c54167ce1c942afc56c7af3e。\n\nAPK SHA256: 3081b630a1d6c1c552d8857a109d044317d996ef1573ff470585a47dc3887ea4\n\n下载 APK、完整已跟踪源码 tar.gz 和 SHA256SUMS；源码不含签名私钥、生产配置或用户数据。构建部署、回滚与边界见 PRODUCTION-20261021.md 和 delivery/production-20261021/TEST-RESULTS.md。",
+  "files": [
+    {
+      "name": "YiChat-0.3.0-8.apk",
+      "bytes": 8460053,
+      "sha256": "3081b630a1d6c1c552d8857a109d044317d996ef1573ff470585a47dc3887ea4",
+      "parts": [
+        "release/artifacts/YiChat-0.3.0-8.apk.part000",
+        "release/artifacts/YiChat-0.3.0-8.apk.part001",
+        "release/artifacts/YiChat-0.3.0-8.apk.part002",
+        "release/artifacts/YiChat-0.3.0-8.apk.part003",
+        "release/artifacts/YiChat-0.3.0-8.apk.part004",
+        "release/artifacts/YiChat-0.3.0-8.apk.part005",
+        "release/artifacts/YiChat-0.3.0-8.apk.part006",
+        "release/artifacts/YiChat-0.3.0-8.apk.part007",
+        "release/artifacts/YiChat-0.3.0-8.apk.part008",
+        "release/artifacts/YiChat-0.3.0-8.apk.part009",
+        "release/artifacts/YiChat-0.3.0-8.apk.part010",
+        "release/artifacts/YiChat-0.3.0-8.apk.part011",
+        "release/artifacts/YiChat-0.3.0-8.apk.part012",
+        "release/artifacts/YiChat-0.3.0-8.apk.part013",
+        "release/artifacts/YiChat-0.3.0-8.apk.part014",
+        "release/artifacts/YiChat-0.3.0-8.apk.part015",
+        "release/artifacts/YiChat-0.3.0-8.apk.part016"
+      ]
+    },
+    {
+      "name": "YiChat-0.3.0-source.tar.gz",
+      "bytes": 3031998,
+      "sha256": "0a5bfbca4cb9b49ed2116a80b55eda3056a527bd855f02f923d54648e38575f0",
+      "parts": [
+        "release/artifacts/YiChat-0.3.0-source.tar.gz.part000",
+        "release/artifacts/YiChat-0.3.0-source.tar.gz.part001",
+        "release/artifacts/YiChat-0.3.0-source.tar.gz.part002",
+        "release/artifacts/YiChat-0.3.0-source.tar.gz.part003",
+        "release/artifacts/YiChat-0.3.0-source.tar.gz.part004",
+        "release/artifacts/YiChat-0.3.0-source.tar.gz.part005"
+      ]
+    },
+    {
+      "name": "SHA256SUMS",
+      "bytes": 178,
+      "sha256": "cdbcd29c72eaca3417a1c4f07d8955cf1153669147de6b41f2eae4a06892104f",
+      "parts": [
+        "release/artifacts/SHA256SUMS.part000"
+      ]
+    }
+  ]
+}
