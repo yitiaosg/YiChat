@@ -78,6 +78,9 @@ class Funds:
             if old:
                 if old['payload']!=payload: fail(409,'幂等键已用于不同订单')
                 return self.public(c,old,s['username'])
+            if kind=='group':
+                members=c.execute("SELECT count(*) FROM yichat_memberships WHERE room=? AND membership='join' AND pending_event IS NULL",(room['room'],)).fetchone()[0]
+                if count>members:fail(400,'红包份数不得超过群内当前人数')
             source=self.binding(c,s['username'])
             dest=self.binding(c,recipient)['address'] if recipient else None
             if dest==source['address'] or source['address']==self.s.official: fail(400,'发送和接收钱包不能相同')
@@ -115,6 +118,9 @@ class Funds:
             membership.require(c,o['room'],s['mxid'])
             if o['state']=='cancelled': fail(409,'订单已取消，不再入金或发送')
             if o['state']!='awaiting_deposit': return self.public(c,o,s['username'])
+            if o['kind']=='group':
+                members=c.execute("SELECT count(*) FROM yichat_memberships WHERE room=? AND membership='join' AND pending_event IS NULL",(o['room'],)).fetchone()[0]
+                if o['count']>members:fail(409,'当前群人数少于红包份数，请取消订单后重新设置')
             if o['kind']=='direct':policy.require_uid_send(self.s,participant['sender_uid'],participant['recipient_uid'])
             intent=c.execute('SELECT * FROM yidt_intents WHERE id=?',(o['intent'],)).fetchone(); b=self.binding(c,s['username'])
             gross=int(o['principal'])+int(o['fees'])

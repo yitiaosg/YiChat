@@ -1,0 +1,3 @@
+Earlier attempts included an adb-assisted submit and unsupported accessibility-text lookup; these were not counted as unattended passes.
+Final fresh run: real original browser form, immediate Android input down/up using actual button bounds, no human login assistance or injected callback/token; OK (1 test), 302.614 seconds.
+Emulator used its default screen size/density and a fresh App/browser session.

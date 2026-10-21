@@ -13,7 +13,7 @@ from .matrix import Matrix
 from .funds import Funds
 from . import previews
 from .limits import BodyLimitMiddleware
-from . import policy, archive
+from . import policy, archive, direct, group_avatars
 from .security import request_limit
 
 log=logging.getLogger('yichat')
@@ -113,7 +113,7 @@ def create_app(settings=None):
                     request_limit(s,'anonymous:'+host,limit=10)
             try:length=int(request.headers.get('content-length','0'))
             except ValueError:fail(400,'无效请求长度')
-            is_upload=request.method=='POST' and (request.url.path.startswith('/api/files/') or request.url.path in ('/_matrix/media/v3/upload','/_matrix/client/v1/media/upload'))
+            is_upload=request.method=='POST' and (request.url.path.startswith('/api/files/') or request.url.path in ('/_matrix/media/v3/upload','/_matrix/client/v1/media/upload') or bool(re.fullmatch(r'/api/groups/[^/]+/avatar',request.url.path)))
             if not is_upload and length>262144: fail(413,'请求体过大')
             response=await call_next(request)
         except HTTPException as e:response=error_response(e)
@@ -129,7 +129,7 @@ def create_app(settings=None):
                     c.execute("INSERT INTO rate VALUES(?,?,?) ON CONFLICT(subject,bucket) DO UPDATE SET next=max(next,excluded.next)",(who['subject'],'native_requests',time.time()+seconds))
             except Exception:
                 log.warning('Shared cooldown persistence unavailable',exc_info=False)
-        response.headers.update({'Cache-Control':('public, max-age=31536000, immutable' if request.url.path.startswith('/assets/') else 'public, max-age=3600' if request.url.path.startswith('/render/') else 'no-store'),'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
+        response.headers.update({'Cache-Control':('public, max-age=31536000, immutable' if request.url.path.startswith('/assets/') else 'public, max-age=3600' if (request.url.path.startswith('/render/') or request.url.path=='/.well-known/assetlinks.json') else 'no-store'),'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
         return response
 
     @app.get('/health')
@@ -244,6 +244,17 @@ def create_app(settings=None):
                 if e.status_code!=404:raise
         return result
 
+    @app.get('/api/people/{username}')
+    async def person_view(request:Request,username:str):
+        who=session(request);person=policy.identity(s,username)
+        with policy.social.database(s.accounts) as c:result=policy.social.view(c,person['uid'],who['subject'])
+        return dict(result,**public_profile(username))
+    @app.post('/api/people/{username}/{action}')
+    async def person_action(request:Request,username:str,action:str):
+        who=session(request);person=policy.identity(s,username)
+        try:return policy.social.mutate(s.accounts,who['subject'],person['uid'],action)
+        except policy.social.PolicyError as e:fail(e.status,{'code':e.code,'error':str(e)})
+
     @app.get('/api/avatars/{username}')
     async def avatar(request:Request,username:str):
         session(request);profile=public_profile(username)
@@ -256,7 +267,9 @@ def create_app(settings=None):
         joined=await app.state.matrix.call('GET','/_matrix/client/v3/joined_rooms',app.state.matrix.token(who))
         result=[]
         for rid in joined.get('joined_rooms',[]):
-            try:result.append(room_info(rid))
+            try:
+                info=room_info(rid)
+                if direct.visible(s,info,who['mxid']):result.append(info)
             except HTTPException as exc:
                 if exc.status_code not in (403,404):raise
         return result
@@ -270,7 +283,11 @@ def create_app(settings=None):
         names=list(dict.fromkeys(n for n in names if n!=who['username']))
         if kind=='direct' and len(names)!=1:fail(400,'私聊必须有且只有一位接收方')
         if kind=='direct':
-            target=policy.mxid(s,names[0]);require_send(who,{'kind':'direct','owner':who['mxid'],'peer':target})
+            target=policy.mxid(s,names[0])
+            with connect(s.db) as c:reusable=c.execute("SELECT room FROM rooms WHERE kind='direct' AND ((owner=? AND peer=?) OR (owner=? AND peer=?)) ORDER BY rowid",(who['mxid'],target,target,who['mxid'])).fetchall()
+            from .groups import joined
+            for row in reusable:
+                if who['mxid'] in joined(s,row['room']):return {'room_id':row['room']}
         invite=[]
         for name in names:
             with connect(s.site/'account.db') as c:exists=c.execute('SELECT 1 FROM users WHERE username=?',(name,)).fetchone()
@@ -297,7 +314,7 @@ def create_app(settings=None):
         else:ticket=policy.issue_ticket(s,who['mxid'],kind,invite[0] if kind=='direct' else None)
         initial=[{'type':'m.room.history_visibility','state_key':'','content':{'history_visibility':'joined'}}]
         if kind=='direct':initial.insert(0,{'type':'m.room.encryption','state_key':'','content':{'algorithm':'m.megolm.v1.aes-sha2'}})
-        body={'preset':'private_chat','name':str(data.get('name') or (names[0] if kind=='direct' else '新群聊'))[:100],'is_direct':kind=='direct','invite':invite,'creation_content':{'m.federate':False,'org.yitiao.ticket':ticket},'initial_state':initial}
+        body={'preset':'private_chat','name':str(data.get('name') or (names[0] if kind=='direct' else '新群聊'))[:100],'is_direct':kind=='direct','invite':invite if kind=='group' else [],'room_version':'11','creation_content':{'m.federate':False,'org.yitiao.ticket':ticket},'initial_state':initial}
         result=await app.state.matrix.call('POST','/_matrix/client/v3/createRoom',app.state.matrix.token(who),body)
         policy.register_room(s,ticket,result['room_id'])
         return result
@@ -437,7 +454,8 @@ def create_app(settings=None):
     async def wallet(request:Request):
         who=session(request)
         with connect(s.ledger) as c:b=app.state.funds.y.binding(c,who['username'],'yichat')
-        return {'enabled':app.state.funds.enabled(),'binding':b['address'] if b else None,'bind_url':'https://yidt.yitiao.org/services/yichat/','fees':{'incoming':app.state.funds.y.fmt(app.state.funds.y.GAS),'outgoing_per_share':app.state.funds.y.fmt(app.state.funds.y.GAS)}}
+        with connect(s.db) as c:native=bool(c.execute('SELECT 1 FROM native_devices WHERE subject=? AND device=? LIMIT 1',(who['subject'],who['device'])).fetchone())
+        return {'enabled':app.state.funds.enabled(),'binding':b['address'] if b else None,'bind_url':'https://yidt.yitiao.org/services/yichat/'+('?client=android' if native else ''),'fees':{'incoming':app.state.funds.y.fmt(app.state.funds.y.GAS),'outgoing_per_share':app.state.funds.y.fmt(app.state.funds.y.GAS)}}
 
     @app.post('/api/orders')
     async def order_create(request:Request):
@@ -509,6 +527,12 @@ def create_app(settings=None):
             if not room:fail(403,'原生上传需要 room_id 或 X-YiChat-Room，以校验所属会话和隐私权限')
             result=await upload(request,room)
             return dict(result,content_uri=result['url'])
+        avatar_match=re.fullmatch(r'(?:media/v3|client/v1/media)/download/chat\.yitiao\.org/ycga_([a-f0-9]{64})(?:/[^/]+)?',path)
+        if request.method=='GET' and avatar_match:
+            who=session(request)
+            with connect(s.db) as c:r=c.execute('SELECT room FROM group_avatar_refs WHERE id=?',(avatar_match[1],)).fetchone()
+            if not r:fail(404,'群头像已更换')
+            return group_avatars.read(s,who,r['room'],avatar_match[1])
         media_match=re.fullmatch(r'(?:media/v3|client/v1/media)/download/chat\.yitiao\.org/([a-f0-9]{48})(?:/[^/]+)?',path)
         if request.method=='GET' and media_match:return await download(request,media_match[1])
         if request.method=='GET' and path in ('media/v3/config','client/v1/media/config'):
@@ -572,7 +596,17 @@ def create_app(settings=None):
             eid=r.json().get('event_id')
             if eid:
                 with transaction(s.db) as c:c.execute('UPDATE native_transactions SET event=? WHERE subject=? AND device=? AND room=? AND txn=? AND (event IS NULL OR event=?)',(eid,who['subject'],who['device'],sent[1],sent[2],eid))
+        if path.endswith('/sync') and r.is_success:
+            session(request) # Recheck a main-site revocation during the long poll.
+            return JSONResponse(await app.state.filter_direct_sync(who,r.json()))
         return Response(r.content,status_code=r.status_code,media_type='application/json',headers={'Retry-After':r.headers['Retry-After']} if 'Retry-After' in r.headers else None)
+
+    from .groups import install as install_groups
+    install_groups(app,s,session,room_access)
+    direct.install(app,s,session)
+    group_avatars.install(app,s,session)
+    from .record_audit import install as install_record_audit
+    install_record_audit(app,s,session)
 
     from .archive_routes import install as install_archives
     install_archives(app,s,session)
@@ -592,8 +626,9 @@ def create_app(settings=None):
         return FileResponse(target if target.is_file() else Path(__file__).parent.parent/'web'/'index.html')
     @app.get('/assets/{name}')
     @app.get('/render/{name}')
+    @app.get('/brand/{name}')
     async def web_asset(request:Request,name:str):
-        folder='render' if request.url.path.startswith('/render/') else 'assets'
+        folder='brand' if request.url.path.startswith('/brand/') else 'render' if request.url.path.startswith('/render/') else 'assets'
         target=(webroot/folder/name).resolve()
         if not target.is_relative_to((webroot/folder).resolve()) or not target.is_file():fail(404,'资源不存在')
         return FileResponse(target)

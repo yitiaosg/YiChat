@@ -1,0 +1,82 @@
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+CHECK homepage wallet binding through original YIDT service form
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+CHECK new private conversation and invitation
+CHECK two accounts native Megolm E2EE
+CHECK local system timezone, main-site avatars and biography
+CHECK temporary Web does not cache or exchange peer history packets
+CHECK key persistence after refresh
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+CHECK reply and edit without duplicate messages
+CHECK game snapshot auto-renders for both participants
+CHECK YCard real renderer auto-renders on receiving side
+CHECK encrypted private attachment and authenticated download
+CHECK private image, microphone recording and video playback
+CHECK multi-tab crypto exclusion and take over
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+CHECK plain group creation and join
+CHECK history, read receipts and group details
+CHECK group invite, administrator permission and own leave
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+CHECK mobile navigation, theme and no horizontal overflow
+CHECK funds use real wallet/order API without automatic payment
+CHECK redaction
+CHECK offline recall uses server metadata with a ten-minute overlap
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+CHECK native crypto backup setup and recovery on a second device
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+HTTP 404 /_matrix/client/v3/room_keys/keys/!ScAYNhAp27SGC1310dWLV_uPUuiu_V_GOmJmL6hxuvo/qOrYeL6%2Bd3uvre78ZBo5UAD%2FDPrY3AsIcQpWNs63irA
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+HTTP 404 /_matrix/client/v3/room_keys/keys/!ScAYNhAp27SGC1310dWLV_uPUuiu_V_GOmJmL6hxuvo/qOrYeL6%2Bd3uvre78ZBo5UAD%2FDPrY3AsIcQpWNs63irA
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+CHECK privacy denial is authoritative and retry keeps one transaction
+HTTP 403 /api/preview
+BROWSER_ERROR Failed to load resource: the server responded with a status of 403 (Forbidden)
+HTTP 403 /_matrix/client/v3/rooms/!ScAYNhAp27SGC1310dWLV_uPUuiu_V_GOmJmL6hxuvo/send/m.room.encrypted/17595153-e5bc-4069-82e8-2b7845be1065
+BROWSER_ERROR Failed to load resource: the server responded with a status of 403 (Forbidden)
+CHECK 429 Retry-After, lost send response and stable txn deduplication
+HTTP 429 /_matrix/client/v3/rooms/!ScAYNhAp27SGC1310dWLV_uPUuiu_V_GOmJmL6hxuvo/send/m.room.encrypted/dc4c0826-c667-4b2e-a065-795100ec7453
+BROWSER_ERROR Failed to load resource: the server responded with a status of 429 (Too Many Requests)
+BROWSER_ERROR Failed to load resource: net::ERR_FAILED
+CHECK group funds explicit authorization/fund/claim and idempotent repeat
+HTTP 409 /api/orders/9FpRz8m2aJW6LXoz5MSwAY6-SM98qLAO/fund
+BROWSER_ERROR Failed to load resource: the server responded with a status of 409 (Conflict)
+CHECK gift preview, explicit transfer and independently retried message
+CHECK private transfer explicit receive and duplicate receive idempotency
+HTTP 503 /api/files/2a902ab58cbea6504c713460b25ecf2bbfd65fc9f713b881/content
+BROWSER_ERROR Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+HTTP_DETAIL YICHAT_HISTORY_PENDING 历史权限证据正在同步，请稍后重试
+ACTION_REQUEST {"room":"!ScAYNhAp27SGC1310dWLV_uPUuiu_V_GOmJmL6hxuvo"}
+BROWSER_ERROR Failed to load resource: net::ERR_FAILED
+BROWSER_ERROR Failed to load resource: net::ERR_FAILED
+CHECK cancel unfunded packet and approved transfer without funding or sending
+BROWSER_ERROR Failed to load resource: net::ERR_FAILED
+CHECK media 503 and 410 are distinct (injected responses)
+HTTP 404 /_matrix/client/v3/room_keys/version
+BROWSER_ERROR Failed to load resource: the server responded with a status of 404 (Not Found)
+HTTP 503 /api/files/108f9709309e479a6a7f7af7d336766bf62a52a5e791744d/content
+BROWSER_ERROR Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+HTTP_DETAIL  隔离依赖故障
+HTTP 410 /api/files/108f9709309e479a6a7f7af7d336766bf62a52a5e791744d/content
+BROWSER_ERROR Failed to load resource: the server responded with a status of 410 (Gone)
+CHECK integrated UTC archive UI enforces complete-day permission
+HTTP 403 /api/archives/!GfZCxugL3NBtGOuCkuMDyIhFsIzoakzKTbrhXcP9saU/2026-10-20/summary
+BROWSER_ERROR Failed to load resource: the server responded with a status of 403 (Forbidden)
+HTTP 403 /api/archives/!GfZCxugL3NBtGOuCkuMDyIhFsIzoakzKTbrhXcP9saU/2026-10-20/snapshot
+BROWSER_ERROR Failed to load resource: the server responded with a status of 403 (Forbidden)
+CHECK lost room creation response resolves original request
+BROWSER_ERROR Failed to load resource: net::ERR_FAILED
+CHECK logout revokes gateway session and locks data
+CHECK browser OAuth through existing provider, PKCE and signed callback
+{"passed":33,"errors":[],"networkRequests":857}

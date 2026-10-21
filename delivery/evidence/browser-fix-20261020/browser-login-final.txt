@@ -1,0 +1,6 @@
+
+org.yitiao.yichat.BrowserLoginTest:.
+
+Time: 302.614
+
+OK (1 test)

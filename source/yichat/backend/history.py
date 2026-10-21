@@ -141,6 +141,24 @@ def install(app,s,session):
                     if accessible(pg,rooms,who,row,s):result.append(dict(row)|{'tombstone':tombstone(c,row)})
         return {'records':result,'until':end,'next_after':rows[-1]['sequence'] if len(rows)==100 else None,'scanned_after':rows[-1]['sequence'] if rows else after,'server_ms':int(time.time()*1000),'rooms':sorted(rooms)}
 
+    @app.post('/api/history/recall-ciphertexts')
+    async def recall_ciphertexts(request:Request):
+        # A read-only crypto capability check for a withdrawn encrypted event.
+        # Never returns plaintext or peer-supplied data, never restores a body.
+        who=session(request);data=await request.json();ids=data.get('ids',[])
+        if not isinstance(ids,list) or not 1<=len(ids)<=20 or any(not isinstance(i,str) or len(i)>255 for i in ids):fail(400,'每次最多20个撤回事件')
+        rooms=current_rooms(s,who);result=[]
+        with archive.connect(s.archive_reader) as pg,connect(s.db) as c:
+            for eid in dict.fromkeys(ids):
+                row=c.execute('SELECT * FROM history_receipts WHERE event_id=?',(eid,)).fetchone()
+                if not row or row['type']!='m.room.encrypted' or not accessible(pg,rooms,who,row,s) or not tombstone(c,row):fail(403,'没有此加密撤回消息的历史权限')
+                source=pg.execute('SELECT body FROM events WHERE event_id=%s AND room=%s',(eid,row['room'])).fetchone()
+                if not source:result.append({'event_id':eid,'available':False});continue
+                raw=bytes(source['body'])
+                if hashlib.sha256(raw).hexdigest()!=row['sha256']:fail(503,'原加密事件存证不一致')
+                result.append({'event_id':eid,'room':row['room'],'sha256':row['sha256'],'raw':base64.b64encode(raw).decode(),'available':True})
+        return result
+
     @app.post('/api/history/packets')
     async def packets(request:Request):
         who=session(request);app_transport(request);data=await request.json();ids=data.get('ids',[])

@@ -10,12 +10,23 @@ import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.ExistingWorkPolicy
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import org.matrix.rustcomponents.sdk.*
 import java.util.UUID
 
-class YiChatApplication : Application() { val graph by lazy { Graph(this) } }
+class YiChatApplication : Application() {
+    val graph by lazy { Graph(this) }
+    override fun onCreate() {
+        super.onCreate()
+        org.matrix.rustsdk.Android.init(this)
+        // Platform init precedes every Client/worker. Do not persist SDK logs,
+        // send tracing to third parties, or weaken certificate verification.
+        initPlatform(TracingConfiguration(LogLevel.ERROR, emptyList(), emptyList(), false, null, null), false)
+    }
+}
 class Graph(val context: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val vault = SecureStore(context)
@@ -50,9 +61,11 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     val mediaPreview = MutableStateFlow<Pair<Attachment, MediaFileHandle>?>(null)
     val recording = MutableStateFlow(false)
     val voice = MutableStateFlow<Pair<java.io.File, String>?>(null)
+    var pendingExport: Pair<String, Int>? = null // Survives directory-picker Activity recreation, never persisted as plaintext.
     fun openAttachment(a: Attachment) = act { mediaPreview.value?.second?.close(); mediaPreview.value = a to graph.media.download(a) }
     fun closeAttachment() { mediaPreview.value?.second?.close(); mediaPreview.value = null }
     private var poll: Job? = null
+    private val roomCreationMutex = Mutex()
     private var foreground = false
     private var pendingOrderReference: String? = null
     private var verificationController: SessionVerificationController? = null
@@ -60,7 +73,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
         graph.matrix.onInvalidSession = { viewModelScope.launch { lock() } }
         act {
             graph.completePendingLogout()
-            graph.auth.restore()?.let { a -> graph.gateway.call("/api/session"); graph.matrix.open(a); state.update { it.copy(account = a,newDeviceNotice=a.newDevice) }; refreshAuthority();background() }
+            graph.auth.restore()?.let { a -> graph.gateway.call("/api/session"); graph.matrix.open(a); graph.backup.activate(); state.update { it.copy(account = a,newDeviceNotice=a.newDevice) }; refreshAuthority();background() }
         }
     }
     fun act(block: suspend () -> Unit) {
@@ -86,6 +99,8 @@ class AppModel(application: Application) : AndroidViewModel(application) {
                 runCatching { graph.gateway.call("/api/session") }.onFailure { if (it is GatewayError && it.status == 401) lock() }
                 runCatching { graph.history.catchUp(); graph.history.exchange() }
                     .onFailure { graph.history.status.value = "原包增量备份未完成；水位保留，稍后重试" }
+                runCatching { graph.backup.saveInternal() }
+                    .onFailure { graph.backup.status.value = "内部快照未完成；已保存原消息包保留，将重试" }
                 delay(60000)
             }
         }
@@ -98,7 +113,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
             require(ref.matches(Regex("[A-Za-z0-9_-]{32}"))) { "订单回跳引用无效" }
             pendingOrderReference=ref
         }
-        if (a != null) { graph.matrix.open(a); state.update { it.copy(account = a,newDeviceNotice=a.newDevice) }; background() }
+        if (a != null) { graph.matrix.open(a); graph.backup.activate(); state.update { it.copy(account = a,newDeviceNotice=a.newDevice) }; background() }
         refreshAuthority()
     }
     suspend fun refreshAuthority() {
@@ -117,7 +132,8 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     fun login(resume: Boolean, open: (Uri) -> Unit) = act { graph.completePendingLogout(); open(graph.auth.begin(resume)) }
     fun cancelLogin() { graph.auth.cancel(); state.update { it.copy(error = "已取消本次登录，可重新开始") } }
     fun acknowledgeDevice() { val a=graph.auth.acknowledgeDevice(); state.update { it.copy(account=a,newDeviceNotice=false) } }
-    fun openRoom(id: String) = act {
+    fun openRoom(id: String) = act { enterRoom(id) }
+    private suspend fun enterRoom(id: String) {
         graph.history.catchUp()
         graph.matrix.select(id)
         val info = runCatching { graph.gateway.call("/api/rooms/${Gateway.segment(id)}").jsonObject }.getOrNull()
@@ -130,13 +146,21 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     fun join(id: String) = act { graph.matrix.joined(id); delay(1000); graph.matrix.refreshRooms() }
     fun leave() = act { graph.matrix.leave(requireNotNull(state.value.room)); closeRoom() }
     fun search(q: String) = act { val found = graph.gateway.call("/api/users?q=${Gateway.segment(q)}").jsonArray; state.update { it.copy(profiles = found) } }
-    fun createRoom(users: List<String>, group: Boolean, name: String) = act {
+    fun createRoom(users: List<String>, group: Boolean, name: String, ready: () -> Unit = {}) = act { roomCreationMutex.withLock {
+        if (!group) {
+            val own = requireNotNull(state.value.account).mxid
+            val profiles = graph.gateway.call("/api/profiles", buildJsonObject { put("usernames", JsonArray(users.map(::JsonPrimitive))) }).jsonArray
+            val peer = profiles.single().jsonObject.s("mxid")
+            val registered = graph.gateway.call("/api/rooms").jsonArray
+            reusableDirectRoom(registered, own, peer)?.let { id -> enterRoom(id); ready(); return@withLock }
+        }
         val key = UUID.randomUUID().toString(); val data = buildJsonObject { put("kind", if (group) "group" else "direct"); put("users", JsonArray(users.map(::JsonPrimitive))); put("name", name); put("key", key) }
         graph.business.persist(key, "room", "pending", data)
         val id = try { graph.gateway.call("/api/rooms", data).jsonObject.s("room_id") }
         catch (e: Exception) { graph.gateway.call("/api/room-creations/$key").jsonObject.s("room_id").ifBlank { throw e } }
-        graph.business.persist(key, "room", "created", obj("room" to id)); delay(500); graph.matrix.refreshRooms(); openRoom(id)
-    }
+        graph.business.persist(key, "room", "created", obj("room" to id))
+        enterRoom(id); ready()
+    } }
     fun invite(username: String) = act { graph.gateway.call("/api/rooms/${Gateway.segment(requireNotNull(state.value.room))}/invite", obj("username" to username)) }
     fun roomDetails() = act {
         val room = requireNotNull(state.value.room)
@@ -273,7 +297,9 @@ class AppModel(application: Application) : AndroidViewModel(application) {
         poll?.let { if(it!==self) it.cancel() };poll=null
         viewModelScope.coroutineContext[Job]?.children?.filter { it!==self }?.forEach { it.cancel() }
         withContext(NonCancellable) {
+            pendingExport = null
             WorkManager.getInstance(getApplication()).cancelUniqueWork("yichat-backup")
+            WorkManager.getInstance(getApplication()).cancelUniqueWork("yichat-export")
             closeAttachment(); voice.value?.first?.delete();voice.value=null; graph.matrix.close(); graph.auth.lock(); graph.business.clear(); state.value = AppState(dark=savedTheme())
         }
     }

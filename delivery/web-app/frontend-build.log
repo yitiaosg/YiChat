@@ -1,0 +1,19 @@
+
+> yichat-web@1.0.0 prebuild
+> node scripts/copy-renderers.mjs
+
+
+> yichat-web@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 1901 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                          0.91 kB │ gzip:     0.58 kB
+dist/assets/matrix_sdk_crypto_wasm_bg-dMeGppz-.wasm  5,513.88 kB │ gzip: 1,831.16 kB
+dist/assets/index-D3BVRUEL.css                          27.23 kB │ gzip:     6.45 kB
+dist/assets/index-DT_agrAc.js                          218.37 kB │ gzip:    44.78 kB
+dist/assets/index-Dhx0q50v.js                        1,019.77 kB │ gzip:   291.09 kB
+✓ built in 11.75s

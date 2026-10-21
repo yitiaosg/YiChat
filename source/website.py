@@ -3118,6 +3118,7 @@ _ACCOUNT_BODY = """
       </a>
     </div>
 
+    {% include 'account_devices.html' %}
     <a class="btn-delete" href="{{ url_for('delete_account') }}" style="display:block;text-align:center;margin:18px 0 12px;padding:13px;background:rgba(255,69,58,0.12);border:1px solid rgba(255,69,58,0.28);border-radius:10px;color:#ff6b6b;font-size:14.5px;font-weight:500;text-decoration:none;">删除账户</a>
 
     <form method="post" action="{{ url_for('logout') }}">
@@ -4930,7 +4931,7 @@ def index():
               <button class="menu-item" type="button" data-target="0"><span><strong>Games</strong><small>轻松玩一会儿</small></span><span class="arrow">→</span></button>
               <button class="menu-item" type="button" data-target="1"><span><strong>YitiaoAiGo</strong><small>AI 驱动的量化交易平台</small></span><span class="arrow">→</span></button>
               <button class="menu-item" type="button" data-target="2"><span><strong>YCards</strong><small>创作、生产与收藏闪卡</small></span><span class="arrow">→</span></button>
-              <button class="menu-item" type="button" data-target="3"><span><strong>YiChat</strong><small>端到端加密聊天 · 敬请期待</small></span><span class="arrow">→</span></button>
+              <button class="menu-item" type="button" data-target="3"><span><strong>YiChat</strong><small>端到端加密聊天 · 立即开始</small></span><span class="arrow">→</span></button>
               <button class="menu-item" type="button" data-target="4"><span><strong>YiHub</strong><small>分享观点，发现讨论</small></span><span class="arrow">→</span></button>
             </aside>
 
@@ -4971,8 +4972,8 @@ def index():
                 <div class="panel-inner">
                   <p class="eyebrow">PRIVATE · CONNECT</p>
                   <h2 class="big-title">YiChat</h2>
-                  <p class="subtitle">正在构想中的 Web 端到端加密聊天应用，让每一次交流都安心私密。敬请期待。</p>
-                  <a class="panel-link coming-soon" href="#">敬请期待 <span class="arrow" aria-hidden="true">↗</span></a>
+                  <p class="subtitle">私聊端到端加密，与朋友和群组自在交流。支持网页版与 Android App。</p>
+                  <a class="panel-link" href="https://chat.yitiao.org/">打开 YiChat <span class="arrow" aria-hidden="true">↗</span></a>
                 </div>
               </section>
               <section class="panel panel--hub" style="--bg-wide:url('{{ url_for('static', filename='home-yihub-wide.webp') }}');--bg-mobile:url('{{ url_for('static', filename='home-yihub-mobile.webp') }}')">
@@ -5369,6 +5370,9 @@ def passkey_verify_finish():
 
 import yidt_bridge
 yidt_bridge.install(app)
+import account_devices
+import yidt_core as _devices_yidt
+account_devices.install(app,_devices_yidt.connect)
 
 
 import account_social

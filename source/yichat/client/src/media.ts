@@ -1,6 +1,7 @@
 import { encryptAttachment, decryptAttachment } from 'matrix-encrypt-attachment';
 import { requests, path, ApiError, retryDelay, sleep } from './api';
 import { chat } from './chat';
+import {isApp,appSave} from './app';
 export type Upload={id:string;file:File;progress:number;state:string;error?:string;abort:AbortController;content?:any;attachment?:string;room:string};
 let tail:Promise<any>=Promise.resolve();
 export function uploadFile(upload:Upload,changed:()=>void){
@@ -48,4 +49,4 @@ export async function attachment(content:any,signal:AbortSignal){
   const type=String(content.info?.mimetype||'application/octet-stream');
   return new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});
 }
-export function saveBlob(blob:Blob,name:string){const url=blobUrl(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>releaseUrl(url),30000)}
+export async function saveBlob(blob:Blob,name:string){if(isApp){await appSave(blob,name);return}const url=blobUrl(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>releaseUrl(url),30000)}

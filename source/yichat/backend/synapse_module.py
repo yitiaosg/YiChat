@@ -18,7 +18,7 @@ from synapse.util.frozenutils import unfreeze
 from synapse.http.server import DirectServeJsonResource
 from .config import Settings
 from .db import connect,transaction
-from . import policy, archive, history
+from . import policy, archive, history, groups
 
 log=logging.getLogger('yichat.module')
 
@@ -77,9 +77,8 @@ class YiChatModule:
             if not self.ready:raise HTTPException(503,'会话服务正在恢复，请稍后重试')
             token=config.get('creation_content',{}).get('org.yitiao.ticket','')
             t=policy.validate_ticket(self.s,token,requester.user.to_string())
-            expected=[t['peer']] if t['kind']=='direct' else config.get('invite',[])
+            expected=[] if t['kind']=='direct' else config.get('invite',[])
             if sorted(config.get('invite',[]))!=sorted(expected):raise HTTPException(403,'私聊参与者与服务器记录不符')
-            if t['kind']=='direct':policy.require_send(self.s,t, t['owner'])
             config['visibility']='private';config['creation_content']['m.federate']=False
             initial=config.setdefault('initial_state',[])
             if not any(e['type']=='m.room.guest_access' for e in initial):
@@ -98,15 +97,15 @@ class YiChatModule:
         try:
             if not self.ready:raise HTTPException(503,'会话服务正在恢复，请稍后重试')
             # A stable, live main-site grant is required even for a stolen raw token.
+            control=groups.admitted(self.s,event.room_id,event.sender,event.type,unfreeze(event.content),event.state_key if event.is_state() else '')
             with connect(self.s.db) as c:
                 sessions=c.execute('SELECT username,sid FROM sessions WHERE mxid=? AND revoked=0 AND expires>strftime(\'%s\',\'now\')',(event.sender,)).fetchall()
             from .security import valid_sid
-            if not any(valid_sid(self.s,r['sid'],r['username']) for r in sessions):
+            if not control and not any(valid_sid(self.s,r['sid'],r['username']) for r in sessions):
                 raise HTTPException(401,'主站会话已退出')
             if event.type=='m.room.create':
                 token=event.content.get('org.yitiao.ticket','')
                 ticket=policy.validate_ticket(self.s,token,event.sender)
-                if ticket['kind']=='direct':policy.require_send(self.s,ticket,event.sender)
                 if event.content.get('m.federate') is not False:raise HTTPException(403,'外部联邦已关闭')
                 policy.register_room(self.s,token,event.room_id)
             else:
@@ -119,7 +118,10 @@ class YiChatModule:
                     if event.type=='m.room.join_rules' and event.content.get('join_rule')!='invite':raise HTTPException(403,'只允许邀请加入')
                     if info['kind']=='direct' and (event.type,event.state_key) in state and event.type in ('m.room.encryption','m.room.power_levels','m.room.join_rules','m.room.history_visibility','m.room.guest_access'):
                         raise HTTPException(403,'私聊加密和成员策略固定')
-                policy.validate_event(self.s,info,event.type,unfreeze(event.content),event.sender,event.state_key if event.is_state() else None)
+                if info['kind']=='group' and event.is_state() and event.type in ('m.room.power_levels','m.room.name','m.room.topic','m.room.avatar') and not control:
+                    with connect(self.s.db) as c:rank=groups.role(c,event.room_id,event.sender)
+                    if event.type=='m.room.avatar' or (event.type=='m.room.power_levels' and ('m.room.power_levels','') in state) or rank not in ('owner','admin'):raise HTTPException(403,'请通过群管理接口修改权限或群资料')
+                policy.validate_event(self.s,info,event.type,unfreeze(event.content),event.sender,event.state_key if event.is_state() else None,control)
                 if event.type in ('m.room.message','m.room.encrypted'):history.business_reference(self.s,event.room_id,event.sender,unfreeze(event.content))
                 if event.type=='m.room.redaction':await self.validate_redaction(event)
             # Archive outages stop new accepted timeline events; poll also repairs
@@ -144,6 +146,10 @@ class YiChatModule:
         if not target:raise HTTPException(400,'缺少撤回目标')
         original=await self.api._store.get_event(target,allow_none=True)
         if not original or original.room_id!=event.room_id or original.is_state():raise HTTPException(403,'不能撤回此事件')
+        info=policy.room(self.s,event.room_id)
+        control=groups.admitted(self.s,event.room_id,event.sender,event.type,unfreeze(event.content))
+        if info['kind']=='group' and original.sender!=event.sender and not control:
+            with connect(self.s.db) as c:groups.permission(c,event.room_id,event.sender,'redact',original.sender)
         content=unfreeze(original.content)
         if content.get(history.BUSINESS) or history.business_reference(self.s,event.room_id,event.sender,content):raise HTTPException(403,{'code':'YICHAT_BUSINESS_IMMUTABLE','error':'转账、红包和赠卡消息不允许撤回'})
         def accepted(txn):
@@ -163,6 +169,9 @@ class YiChatModule:
             raise HTTPException(503,{'errcode':'M_UNKNOWN','code':'YICHAT_ARCHIVE_UNAVAILABLE','error':'存证服务暂不可用，发送已暂停'})
 
     async def on_new_event(self,event,state):
+        groups.apply(self.s,unfreeze(event.content),event.event_id)
+        if event.type=='m.room.encrypted':
+            with transaction(self.s.db) as c:c.execute('UPDATE direct_visibility SET visible=1 WHERE room=?',(event.room_id,))
         if event.content.get(archive.ATTACHMENT_KEY):
             def received(txn):
                 txn.execute('SELECT received_ts FROM events WHERE event_id=?',(event.event_id,))
@@ -240,6 +249,10 @@ class YiChatModule:
             fences=[];day=first
             while day<=yesterday:
                 fences.append((day,allocated,at));day+=timedelta(days=1)
+            for eid,rid,_,_,raw in rows:
+                accepted=json.loads(raw);groups.apply(self.s,accepted.get('content',{}),eid)
+                if accepted.get('type')=='m.room.encrypted':
+                    with transaction(self.s.db) as c:c.execute('UPDATE direct_visibility SET visible=1 WHERE room=?',(rid,))
             await defer_to_thread(reactor,history.record_rows,self.s,rows)
             await defer_to_thread(reactor,archive.ingest_batch,self.s.archive_ingest,rows,through,at,fences)
             await defer_to_thread(reactor,history.backfill,self.s)

@@ -10,5 +10,17 @@
         "6A:B2:1F:96:1A:37:35:69:C0:67:E0:48:E0:E0:E5:D3:8B:49:0D:07:D9:40:B9:74:A4:A3:29:05:F0:62:85:ED"
       ]
     }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "org.yitiao.yichat.mobile",
+      "sha256_cert_fingerprints": [
+        "9E:75:05:F8:4F:84:C2:8A:C9:20:A5:DA:34:70:A4:52:E7:92:3B:76:C5:41:67:CE:1C:94:2A:FC:56:C7:AF:3E"
+      ]
+    }
   }
 ]

@@ -1,3 +1,5 @@
+> 2026-10-20 接力修复：当前版本为 0.1.1 / code 3、可并存包 `org.yitiao.yichat.mobile`。当前部署、下载及验证以根目录 [BROWSER-LOGIN-FIX.md](../BROWSER-LOGIN-FIX.md) 为准。以下候选版记录保留为历史，原 APK 链接不是本次修复包。
+
 # 下载与校验
 
 - [arm64-v8a APK](https://github.com/yitiaosg/YiChat/raw/refs/tags/android-20261020-artifacts.2/apk/YiChat-0.1.0-2-arm64-v8a.apk)

@@ -67,3 +67,9 @@ def test_local_uid_guard_429_also_cools_native_sdk(gateway):
     response=c.get('/_matrix/client/v3/sync');assert response.status_code==429
     with connect(s.db) as db:cooldown=db.execute("SELECT next FROM rate WHERE subject=? AND bucket='native_requests'",(uid,)).fetchone()[0]
     assert cooldown>=time.time()+.8
+
+def test_native_wallet_binding_returns_to_app_and_web_url_stays_unchanged(gateway):
+    c,app,s=gateway
+    assert c.get('/api/wallet').json()['bind_url']=='https://yidt.yitiao.org/services/yichat/'
+    native(c,s)
+    assert c.get('/api/wallet').json()['bind_url']=='https://yidt.yitiao.org/services/yichat/?client=android'

@@ -28,6 +28,7 @@ CREATE INDEX IF NOT EXISTS history_receipts_room_sequence ON history_receipts(ro
 CREATE INDEX IF NOT EXISTS history_receipts_time ON history_receipts(received_ms,sequence);
 CREATE INDEX IF NOT EXISTS history_receipts_redacts ON history_receipts(room,redacts);
 CREATE TABLE IF NOT EXISTS history_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS direct_visibility(room TEXT PRIMARY KEY,visible INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS room_modes(room TEXT PRIMARY KEY REFERENCES rooms(room),encryption TEXT NOT NULL CHECK(encryption IN ('direct','plain','legacy_encrypted')),created_ms INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS file_hashes(id TEXT PRIMARY KEY REFERENCES files(id),sha256 TEXT NOT NULL CHECK(length(sha256)=64));
 CREATE TABLE IF NOT EXISTS attachment_admissions(event TEXT NOT NULL,file TEXT NOT NULL REFERENCES files(id),worker TEXT NOT NULL,boot TEXT NOT NULL,PRIMARY KEY(event,file));
@@ -69,4 +70,10 @@ def migrate(settings):
         c.execute("INSERT OR IGNORE INTO room_modes SELECT room,CASE WHEN kind='direct' THEN 'direct' ELSE 'legacy_encrypted' END,0 FROM rooms")
         c.execute('UPDATE rooms SET days=30')
         c.execute('UPDATE files SET expires=max(expires,(CAST(completed/86400 AS INTEGER)+31)*86400)')
+        from . import groups,group_avatars,record_audit
+        c.executescript(groups.SCHEMA)
+        c.executescript(group_avatars.SCHEMA)
+        c.executescript(record_audit.SCHEMA)
+        for row in c.execute("SELECT room FROM rooms WHERE kind='group'").fetchall():groups.register(c,row['room'],seeded=0)
+        c.execute("INSERT OR IGNORE INTO direct_visibility SELECT room,EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=rooms.room AND h.type='m.room.encrypted') FROM rooms WHERE kind='direct'")
         c.execute('INSERT OR IGNORE INTO yc_migrations VALUES(2)')

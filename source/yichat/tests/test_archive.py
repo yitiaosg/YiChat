@@ -214,3 +214,19 @@ def test_earlier_day_cleanup_preserves_blob_needed_by_later_reference(env,postgr
     assert cleanup_entities(s,'!room',DAY,now)
     assert (s.objects/fid).read_bytes()==data
     with connect(s.db) as local:assert local.execute('SELECT removed FROM files WHERE id=?',(fid,)).fetchone()[0]==0
+
+def test_empty_full_day_binds_date_and_retains_redacted_ciphertext(env):
+    from datetime import timedelta
+    s,_,_=env
+    seeded(s)
+    first=archive.seal_day(s,'!room',DAY,'events-manifest',END+1000)
+    empty_day=DAY+timedelta(days=1);_,empty_end=archive.day_bounds(empty_day)
+    archive.ingest_batch(s.archive_ingest,[],3,empty_end+1,[(empty_day,3,empty_end+1)])
+    assert any(r['day']==empty_day and r['room']=='!room' for r in archive.pending_days(s))
+    empty=archive.seal_day(s,'!room',empty_day,'events-manifest',empty_end+1)
+    assert empty['event_count']==0 and empty['sha256']!=first['sha256']
+    with zipfile.ZipFile(archive.artifact_path(s.archive_path,'!room',empty_day,'events-manifest')) as z:
+        header=json.loads(z.read('archive.json'));assert header['day']==str(empty_day)
+        assert z.read('events.ndjson')==b''
+    with zipfile.ZipFile(archive.artifact_path(s.archive_path,'!room',DAY,'events-manifest')) as z:
+        data=z.read('events.ndjson');assert b'CIPHER-2' in data and b'm.room.redaction' in data

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun addPacket(value: Packet)
     @Query("SELECT * FROM Packet WHERE room=:room AND event=:event") suspend fun packet(room: String, event: String): Packet?
     @Query("SELECT * FROM Packet") suspend fun packets(): List<Packet>
+    @Query("SELECT COUNT(*) FROM Packet") suspend fun packetCount(): Long
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun tombstone(value: Tombstone)
     @Query("SELECT * FROM Tombstone WHERE room=:room AND event=:event") suspend fun tombstone(room: String, event: String): Tombstone?
     @Query("SELECT * FROM Tombstone") suspend fun tombstones(): List<Tombstone>
@@ -24,6 +25,8 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM Watermark") suspend fun watermarks(): List<Watermark>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun receipt(value: TrustedReceipt)
     @Query("SELECT * FROM TrustedReceipt WHERE room=:room AND event=:event") suspend fun receipt(room: String, event: String): TrustedReceipt?
+    @Query("SELECT DISTINCT room FROM TrustedReceipt ORDER BY room") suspend fun recordRooms(): List<String>
+    @Query("SELECT * FROM TrustedReceipt WHERE room=:room AND sequence>:after ORDER BY sequence LIMIT :limit") suspend fun recordReceipts(room: String, after: Long, limit: Int): List<TrustedReceipt>
     @Query("SELECT * FROM TrustedReceipt") suspend fun receipts(): List<TrustedReceipt>
     @Query("DELETE FROM Packet WHERE room=:room AND event=:event") suspend fun deletePacket(room: String, event: String)
 }

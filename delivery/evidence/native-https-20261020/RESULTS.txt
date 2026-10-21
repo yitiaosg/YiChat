@@ -1,0 +1,5 @@
+Before fix: anonymous native HTTPS probe failed with InternalException: Expect rustls-platform-verifier to be initialized. OkHttp HTTPS succeeded.
+After fix: installed 0.1.4/code6 non-debuggable release on API28 software emulator; same anonymous probe OK (1 test), 16.582s.
+6 focused JVM tests passed: RoomReuseTest + SyncRecoveryTest.
+Release strict dependency verification/build + lintVital passed; arm64 v2/v3 signature + 16KB alignment passed.
+No full regression, real-user login, production messages, asset or fund operations. No backend deployment. Emulator stopped.

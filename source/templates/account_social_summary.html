@@ -1,16 +1,18 @@
 <meta name="social-csrf" content="{{ social_csrf }}">
-<div style="display:flex;gap:22px;margin:20px 0;flex-wrap:wrap">
+<link rel="stylesheet" href="/static/account-social.css">
+<section class="social-summary">
+<div class="social-stats">
 {% for key,label in [('following','关注'),('followers','粉丝'),('friends','朋友')] %}
-{% if key != 'friends' or account_section is defined %}
-{% if social.lists_visible[key] %}<a href="/account/relations/{{ social.uid }}/{{ key }}/" style="color:inherit;text-decoration:none">{% else %}<span title="名单未公开">{% endif %}
+{% if social.lists_visible[key] %}<a href="/account/relations/{{ social.uid }}/{{ key }}/">{% else %}<span title="名单未公开">{% endif %}
 <strong data-count="{{ key }}" title="{{ social.counts[key] }}">{{ compact_count(social.counts[key]) }}</strong> {{ label }}{% if social.lists_visible[key] %}</a>{% else %}</span>{% endif %}
-{% endif %}{% endfor %}
+{% endfor %}
 </div>
-{% if not social.is_self %}
+{% if not social.is_self %}<div class="social-actions">
 {% if session.get('user') %}
-<button type="button" data-social-follow="{{ social.uid }}" data-following="{{ 'true' if social.following else 'false' }}">{{ '互相关注' if social.mutual else '已关注' if social.following else '关注' }}</button>
-{% if social.can_message %}<button type="button" data-social-message="{{ social.username }}">发送消息</button>{% endif %}
-{% else %}<a href="/login/">登录后关注</a>{% endif %}
-{% endif %}
+<button type="button" data-social-follow="{{ social.uid }}" data-following="{{ 'true' if social.following else 'false' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 7h6m-3-3v6"/><circle cx="9" cy="7" r="4"/></svg><span data-follow-label>{{ '互相关注' if social.mutual else '已关注' if social.following else '关注' }}</span></button>
+{% if social.can_message %}<button type="button" data-social-message="{{ social.username }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/></svg>发送消息</button>{% endif %}
+{% else %}<a class="social-button" href="/login/">登录后关注</a>{% endif %}
+</div>{% endif %}
 <p id="social-status" role="status" aria-live="polite"></p>
+</section>
 <script src="/static/account-social.js" defer></script>

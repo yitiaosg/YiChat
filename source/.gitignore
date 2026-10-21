@@ -43,3 +43,5 @@ static/avatar/
 yichat/client/dist/
 yichat/client/public/render/*.js
 !yichat/client/public/render/*.svg
+
+!yichat/client/public/brand/*.png

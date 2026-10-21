@@ -1,3 +1,4 @@
+import hashlib
 import base64,json,time
 from datetime import timedelta
 import pytest
@@ -109,6 +110,11 @@ def test_redaction_catchup_never_redistributes_original_body(gateway):
     assert result['tombstone']['redaction']['content']['redacts']=='$packet'
     update=c.get('/api/history/updates',params={'since':at-600000}).json()
     assert any(r['redacts']=='$packet' for r in update['records'])
+    proof=c.post('/api/history/recall-ciphertexts',json={'ids':['$packet']})
+    assert proof.status_code==200,proof.text
+    raw=json.loads(base64.b64decode(proof.json()[0]['raw']))
+    assert raw['type']=='m.room.encrypted' and raw['content'].get('ciphertext')
+    assert proof.json()[0]['sha256']==hashlib.sha256(base64.b64decode(proof.json()[0]['raw'])).hexdigest()
 
 
 def test_redaction_window_uses_server_accept_time_not_client_timestamp(env):
@@ -118,10 +124,13 @@ def test_redaction_window_uses_server_accept_time_not_client_timestamp(env):
     from backend.synapse_module import YiChatModule
     from fastapi import HTTPException
     instance=YiChatModule.__new__(YiChatModule);instance.s=env[0]
-    original=SimpleNamespace(room_id='!room',is_state=lambda:False,content={},origin_server_ts=int(time.time()*1000)+86400000)
+    with connect(env[0].db) as c:
+        c.execute("INSERT INTO rooms VALUES('!room','group','@alice:chat.yitiao.org',NULL,30)")
+        c.execute("INSERT INTO room_modes VALUES('!room','plain',0)")
+    original=SimpleNamespace(room_id='!room',sender='@alice:chat.yitiao.org',is_state=lambda:False,content={},origin_server_ts=int(time.time()*1000)+86400000)
     store=SimpleNamespace(get_event=AsyncMock(return_value=original))
     instance.api=SimpleNamespace(_store=store,run_db_interaction=AsyncMock(return_value=int(time.time()*1000)-301000))
-    event=SimpleNamespace(room_id='!room',sender='@alice:chat.yitiao.org',content={'redacts':'$original'})
+    event=SimpleNamespace(room_id='!room',type='m.room.redaction',sender='@alice:chat.yitiao.org',content={'redacts':'$original'})
     with pytest.raises(HTTPException) as error:asyncio.run(instance.validate_redaction(event))
     assert error.value.detail['code']=='YICHAT_REDACTION_WINDOW'
     instance.api.run_db_interaction.return_value=int(time.time()*1000)-1000
