@@ -144,6 +144,7 @@ export class Chat {
     op.state='announced';await this.saveBusiness();
   }
   async send(room:string,content:any,attachments:string[]=[],txn:string=crypto.randomUUID()){
+    if(content['m.relates_to']?.rel_type==='m.replace'||content['m.new_content'])throw Error('消息编辑已停用，请撤回后重新发送');
     if(this.readOnly(room))throw Error('已退出或已解散的群聊仅可查看记录');
     if(codepoints(content.body||'')>2000||codepoints(content['m.new_content']?.body||'')>2000)throw Error('文字最多 2000 个 Unicode 码点');
     if(!this.info.has(room))throw Error('会话类型尚未核实，请稍后重试');
@@ -158,6 +159,7 @@ export class Chat {
   async dispatch(row:Outgoing){
     if(this.inflight.has(row.txn))return;this.inflight.add(row.txn);this.outer.set(row.txn,row.attachments);if(row.content['org.yitiao.business'])this.outerBusiness.set(row.txn,row.content['org.yitiao.business']);
     try{
+      if(row.content['m.relates_to']?.rel_type==='m.replace'||row.content['m.new_content'])throw Error('消息编辑已停用，请撤回后重新发送');
       if(this.info.get(row.room)?.encryption!=='plain')await this.prepareEncryption(row.room);
       const old=this.client.getRoom(row.room)?.getPendingEvents().find(e=>e.getTxnId()===row.txn);
       if(old)await this.client.resendEvent(old,this.client.getRoom(row.room)!);else await this.client.sendEvent(row.room,sdk.EventType.RoomMessage,row.content,row.txn);

@@ -1,0 +1,9 @@
+{
+  "checks": [
+    "numeric zero preference flags never render as preview text, including after refresh",
+    "group send/reply/recall work, edit buttons do not exist",
+    "E2EE private messages keep recall and have no editing controls",
+    "desktop preview flags show icons only when enabled and no numeric placeholders"
+  ],
+  "errors": []
+}
