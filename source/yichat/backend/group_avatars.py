@@ -16,6 +16,9 @@ def access(s,who,room,owner=False):
     info=policy.room(s,room)
     if info['kind']!='group':fail(403,'只有群聊可以设置群头像')
     with connect(s.ledger) as c:membership.require(c,room,who['mxid'])
+    if owner:
+        from .lifecycle import require_active
+        with connect(s.ledger) as ledger:require_active(ledger,room)
     if owner and info['owner']!=who['mxid']:fail(403,'只有群主可以设置群头像')
 
 def normalize(raw):

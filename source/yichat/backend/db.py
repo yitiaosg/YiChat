@@ -70,10 +70,13 @@ def migrate(settings):
         c.execute("INSERT OR IGNORE INTO room_modes SELECT room,CASE WHEN kind='direct' THEN 'direct' ELSE 'legacy_encrypted' END,0 FROM rooms")
         c.execute('UPDATE rooms SET days=30')
         c.execute('UPDATE files SET expires=max(expires,(CAST(completed/86400 AS INTEGER)+31)*86400)')
-        from . import groups,group_avatars,record_audit
+        from . import groups,group_avatars,record_audit,conversations
         c.executescript(groups.SCHEMA)
         c.executescript(group_avatars.SCHEMA)
         c.executescript(record_audit.SCHEMA)
+        c.executescript(conversations.SCHEMA)
         for row in c.execute("SELECT room FROM rooms WHERE kind='group'").fetchall():groups.register(c,row['room'],seeded=0)
         c.execute("INSERT OR IGNORE INTO direct_visibility SELECT room,EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=rooms.room AND h.type='m.room.encrypted') FROM rooms WHERE kind='direct'")
+        for room in c.execute('SELECT DISTINCT room FROM group_members WHERE admin=1').fetchall():
+            for row in c.execute('SELECT mxid FROM group_members WHERE room=? AND admin=1 ORDER BY mxid LIMIT -1 OFFSET 8',(room['room'],)).fetchall():c.execute('UPDATE group_members SET admin=0 WHERE room=? AND mxid=?',(room['room'],row['mxid']))
         c.execute('INSERT OR IGNORE INTO yc_migrations VALUES(2)')

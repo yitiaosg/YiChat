@@ -47,7 +47,9 @@ class Funds:
     def require(self):
         if not self.enabled(): fail(503,'资金功能未启用：需要配置已核实的官方钱包和显式启用开关')
     def migrate(self):
-        with connect(self.s.ledger) as c: c.executescript(SCHEMA+membership.SCHEMA)
+        with connect(self.s.ledger) as c:
+            from .lifecycle import SCHEMA as lifecycle_schema
+            c.executescript(SCHEMA+membership.SCHEMA+lifecycle_schema)
         with transaction(self.s.ledger) as c:
             for o in c.execute('SELECT * FROM yichat_orders WHERE id NOT IN (SELECT order_id FROM yichat_order_participants)').fetchall():
                 c.execute('INSERT INTO yichat_order_participants VALUES(?,?,?,?)',(o['id'],policy.historical_uid(self.s,o['user']),policy.historical_uid(self.s,o['recipient']) if o['recipient'] else None,o['request_key']))
@@ -72,6 +74,8 @@ class Funds:
         payload=y.canonical([room['room'],kind,amount,count,title,recipient_uid])
         with transaction(self.s.ledger) as c:
             if not y.sid_valid(c,s['sid'],s['username']): fail(401,'主站已退出')
+            from .lifecycle import require_active
+            require_active(c,room['room'])
             membership.require(c,room['room'],s['mxid'])
             if kind=='direct':policy.require_uid_send(self.s,s['subject'],recipient_uid)
             old=c.execute('SELECT o.* FROM yichat_orders o JOIN yichat_order_participants p ON p.order_id=o.id WHERE p.sender_uid=? AND p.request_key=?',(s['subject'],key)).fetchone()
@@ -102,6 +106,8 @@ class Funds:
             participant=c.execute('SELECT * FROM yichat_order_participants WHERE order_id=?',(oid,)).fetchone()
             if not o or not participant or participant['sender_uid']!=s['subject']: fail(403,'只有付款人可以取消订单')
             if not self.y.sid_valid(c,s['sid'],s['username']): fail(401,'主站已退出')
+            from .lifecycle import require_active
+            require_active(c,o['room'])
             membership.require(c,o['room'],s['mxid'])
             if o['state']=='cancelled': return self.public(c,o,s['username'])
             if o['state']!='awaiting_deposit' or o['deposit']: fail(409,'订单已入金，不能取消；请按收款、领取或到期退款流程处理')
@@ -115,6 +121,8 @@ class Funds:
             participant=c.execute('SELECT * FROM yichat_order_participants WHERE order_id=?',(oid,)).fetchone()
             if not o or not participant or participant['sender_uid']!=s['subject'] or o['sid']!=s['sid']: fail(403,'订单不属于当前付款会话')
             if not y.sid_valid(c,s['sid'],s['username']): fail(401,'主站已退出')
+            from .lifecycle import require_active
+            require_active(c,o['room'])
             membership.require(c,o['room'],s['mxid'])
             if o['state']=='cancelled': fail(409,'订单已取消，不再入金或发送')
             if o['state']!='awaiting_deposit': return self.public(c,o,s['username'])
@@ -142,6 +150,8 @@ class Funds:
             participant=c.execute('SELECT * FROM yichat_order_participants WHERE order_id=?',(oid,)).fetchone()
             if not o or not participant or o['kind']!='direct' or o['room']!=room or participant['recipient_uid']!=s['subject'] or participant['sender_uid']==s['subject']:
                 fail(403,'只有此私聊转账的指定收款人可以确认收款')
+            from .lifecycle import require_active
+            require_active(c,room)
             membership.require(c,room,s['mxid'])
             # Acknowledged requests stay idempotent after payout, expiry, or wallet changes.
             if c.execute("SELECT 1 FROM yichat_payouts WHERE order_id=? AND kind='claim' AND user=?",(oid,s['username'])).fetchone():
@@ -163,6 +173,8 @@ class Funds:
             if not y.sid_valid(c,s['sid'],s['username']): fail(401,'主站已退出')
             o=c.execute('SELECT * FROM yichat_orders WHERE id=?',(oid,)).fetchone()
             if not o or o['kind']!='group' or o['room']!=room: fail(403,'此红包不属于当前群聊')
+            from .lifecycle import require_active
+            require_active(c,room)
             membership.require(c,room,s['mxid'])
             participant=c.execute('SELECT * FROM yichat_order_participants WHERE order_id=?',(oid,)).fetchone()
             if not participant or participant['sender_uid']==s['subject']: fail(403,'不能领取自己的红包')
@@ -228,7 +240,11 @@ class Funds:
                 recipient=identities.execute('SELECT mxid FROM identities WHERE subject=?',(participants['recipient_uid'],)).fetchone()
             recipient_mxid=recipient['mxid'] if recipient else '@u_'+digest(participants['recipient_uid'])+':'+self.s.server_name
         actions=dict(fund=self.enabled() and viewer_uid==participants['sender_uid'] and o['state']=='awaiting_deposit',receive=self.enabled() and viewer_uid==participants['recipient_uid'] and o['state']=='awaiting_receipt' and o['expires']>time.time(),claim=self.enabled() and o['kind']=='group' and viewer_uid!=participants['sender_uid'] and o['state']=='active' and o['expires']>time.time() and not any(p['user_id']==viewer_uid for p in claims))
-        actions['cancel']=viewer_uid==participants['sender_uid'] and o['state']=='awaiting_deposit' and not o['deposit']
+        with connect(self.s.db) as ids:viewer_mxid=ids.execute('SELECT mxid FROM identities WHERE subject=?',(viewer_uid,)).fetchone()
+        live=c.execute("SELECT 1 FROM yichat_memberships WHERE room=? AND mxid=? AND membership='join' AND pending_event IS NULL",(o['room'],viewer_mxid[0] if viewer_mxid else '')).fetchone()
+        closed=c.execute('SELECT dissolved_ms FROM yichat_group_lifecycle WHERE room=?',(o['room'],)).fetchone()
+        if not live or (closed and closed[0]):actions={k:False for k in actions}
+        actions['cancel']=bool(live) and not (closed and closed[0]) and viewer_uid==participants['sender_uid'] and o['state']=='awaiting_deposit' and not o['deposit']
         return dict(recipient_mxid=recipient_mxid,actions=actions,sender_uid=participants['sender_uid'],recipient_uid=participants['recipient_uid'],id=o['id'],room=o['room'],kind=o['kind'],title=o['title'],sender=o['user'],recipient=o['recipient'],destination=o['destination'],source=o['source'],amount=self.y.fmt(o['principal']),count=o['count'],state=('expired' if o['state'] in ('active','awaiting_receipt') and o['expires']<=time.time() else o['state']),expires=o['expires'],receipt_ttl_seconds=self.s.transfer_ttl if o['kind']=='direct' else None,deposit=o['deposit'],claims=claims,refund=next(({'principal':str(p['principal']),'amount':self.y.fmt(p['principal']),'state':p['state'],'tx':p['tx']} for p in payouts if p['kind']=='refund'),None),best=max(claims,key=lambda x:int(x['principal']))['user'] if claims else None,my_amount=next((p['amount'] for p in claims if p['user_id']==viewer_uid),None),incoming_fee=self.y.fmt(self.y.GAS),outgoing_fee_reserve=self.y.fmt(int(o['principal']) and o['count']*self.y.GAS),authorize_url=self.y.ORIGIN+'/authorize/'+o['intent'] if actions['fund'] else None,url=self.s.origin+'/orders/'+o['id'])
     def reconcile(self):
         y=self.y; result=[]

@@ -5,13 +5,15 @@ import { requests, path, codepoints, shareUrls } from './api';
 import { Vault } from './vault';
 import {History} from './history';
 import {isApp,appCall} from './app';
-export type RoomInfo={room:string;kind:'direct'|'group';owner:string;peer:string|null;encryption:'direct'|'plain'|'legacy_encrypted'};
+export type RoomInfo={room:string;kind:'direct'|'group';owner:string;peer:string|null;encryption:'direct'|'plain'|'legacy_encrypted';membership?:string;peer_deleted?:boolean;revision?:number;dissolved_at?:number|null};
 export type Outgoing={txn:string;room:string;content:any;attachments:string[];state:'sending'|'failed';error?:string;time:number};
 export type Profile={mxid:string;username:string;nickname:string;biography?:string;avatar_url?:string;profile_url?:string};
 // This gateway does not expose calls. Disable the SDK's TURN poll explicitly.
 class MessagingClient extends sdk.MatrixClient {protected canSupportVoip=false;}
 export class Chat {
   client!:sdk.MatrixClient; history=new History(this);private historyStarted=false; session:any;vault=new Vault();businessVault=new Vault();phase='loading';error='';sync='正在连接';
+  private preferencePending=new Set<string>();private preferenceRevision=0;private preferenceVersions=new Map<string,number>();
+  appNotifications=false;activeRoom='';preferences=new Map<string,{pinned?:boolean;archived?:boolean;muted?:boolean}>();
   rooms: sdk.Room[]=[];info=new Map<string,RoomInfo>();profiles=new Map<string,Profile>();outbox:Outgoing[]=[];business:any[]=[];
   backupRemaining:number|null=null;private recovery?:Uint8Array;private keys=new Map<string,Uint8Array>();
   offline=false;private saveTimer?:ReturnType<typeof setTimeout>;
@@ -21,6 +23,7 @@ export class Chat {
   subscribe=(fn:()=>void)=>{this.listeners.add(fn);return()=>this.listeners.delete(fn)};
   changed=()=>{for(const fn of this.listeners)fn()};
   async boot(){
+    window.addEventListener('yc:app-session-locked',()=>this.lock('login'),{once:true});
     requests.onUnauthorized=()=>{if(isApp)void appCall('lock').catch(()=>{});this.lock('login')};
     try{
       if(!navigator.locks||!window.indexedDB||!window.isSecureContext)throw Error('此浏览器需要 HTTPS、IndexedDB 和 Web Locks 才能安全保存加密密钥。请使用新版浏览器。');
@@ -32,7 +35,7 @@ export class Chat {
       });
       if(!active){this.phase='other-tab';this.changed();return}
       this.channel=new BroadcastChannel('yc:lifecycle');this.channel.onmessage=e=>{if(e.data==='logout')this.lock('login');if(e.data==='release')this.lock('other-tab')};
-      const app=isApp?await appCall('session'):undefined;
+      const app=isApp?await appCall('session'):undefined;this.appNotifications=app?.capabilities?.notifications===true;
       if(isApp&&!app.session){this.phase='login';this.error=app.pendingLogout?'已锁定本地数据，服务器退出将在联网后完成。':'';this.changed();return}
       if(app?.session)requests.token=app.session.token;
       if(app?.session&&(!app.online||!navigator.onLine)){this.session=app.session;this.offline=true}
@@ -48,7 +51,7 @@ export class Chat {
       const scope=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
       await this.vault.open(scope);if(this.closed){this.vault.close();return}this.outbox=(await this.vault.outbox()).map((x:Outgoing)=>({...x,state:'failed',error:'上次发送结果未知；重试将沿用原事务 ID'}));if(this.closed)return;await this.businessVault.open('account:'+this.session.uid+':business');if(this.closed){this.businessVault.close();return}this.business=await this.businessVault.business();
       if(this.closed)return;
-      if(isApp){const cached=await this.businessVault.state('app-ui');if(cached){this.info=new Map(cached.info);this.profiles=new Map(cached.profiles)}}
+      if(isApp){const cached=await this.businessVault.state('app-ui');if(cached){this.info=new Map(cached.info);this.profiles=new Map(cached.profiles);this.preferences=new Map(cached.preferences||[])}}
       const marker=await this.vault.get('rust-initialized');
       if(this.offline&&!marker)throw Error('首次加密初始化尚未完成，请联网后继续；已存在的密钥不会删除。');
       const existing=this.offline?{}:await requests.api('/_matrix/client/v3/keys/query',{device_keys:{[this.session.mxid]:[this.session.device_id]}});if(this.closed)return;
@@ -75,20 +78,22 @@ export class Chat {
         if(isApp&&['PREPARED','SYNCING'].includes(state)){clearTimeout(this.saveTimer);this.saveTimer=setTimeout(()=>void store.save(true).catch(()=>{}),1200)}
       });
       const update=()=>{this.updateRooms()};
-      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update()});this.client.on(sdk.RoomEvent.Timeline,update);this.client.on(sdk.RoomEvent.Name,update);this.client.on(sdk.RoomEvent.Receipt,update);this.client.on(sdk.RoomEvent.Redaction,update);
+      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,update);this.client.on(sdk.RoomEvent.Name,update);this.client.on(sdk.RoomEvent.Receipt,update);this.client.on(sdk.RoomEvent.Redaction,update);
       this.client.on(sdk.MatrixEventEvent.Decrypted,update);this.client.on(sdk.RoomEvent.MyMembership,()=>{this.scheduleRefresh();update()});this.client.on(sdk.ClientEvent.Room,()=>{this.scheduleRefresh();update()});
       this.client.on('crypto.keyBackupSessionsRemaining' as any,(count:number)=>{this.backupRemaining=count;this.changed()});
 
-      await this.client.startClient({initialSyncLimit:40,lazyLoadMembers:true,pendingEventOrdering:sdk.PendingEventOrdering.Detached});
+      this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{if(!isApp||!this.appNotifications||this.phase!=='ready'||toStart||!data.liveEvent||!room||event.getSender()===this.session?.mxid||!['m.room.message','m.room.encrypted'].includes(event.getWireType()))return;const p=this.preferences.get(room.roomId);if(!p?.archived&&!p?.muted&&!this.readOnly(room.roomId)&&(document.hidden||this.activeRoom!==room.roomId))void appCall('notifyRoom',{room:room.roomId,event:event.getId(),label:this.roomName(room)}).catch(()=>{})});
+      const filter=new sdk.Filter(this.session.mxid);filter.setIncludeLeaveRooms(true);
+      await this.client.startClient({filter,initialSyncLimit:40,lazyLoadMembers:true,pendingEventOrdering:sdk.PendingEventOrdering.Detached});
       if(isApp){window.addEventListener('yc:background',()=>void store.save(true).catch(()=>{}));if(this.offline){this.phase='ready';this.sync='离线 · 本机缓存';this.history.status='离线 · 撤回更新待联网核对';this.changed()}}
       this.watchSession();
       window.addEventListener('pagehide',()=>this.lock('loading'),{once:true});
     }catch(e:any){if(!this.closed){this.phase='error';this.error=e.message;this.changed()}}
   }
   fail(e:any){if(e?.name!=='AbortError'){this.error=e.message||String(e);this.changed()}}
-  updateRooms(){if(!this.client||this.closed)return;this.rooms=this.client.getRooms().filter(r=>['join','invite'].includes(r.getMyMembership())).sort((a,b)=>b.getLastActiveTimestamp()-a.getLastActiveTimestamp());this.changed()}
+  updateRooms(){if(!this.client||this.closed)return;this.rooms=this.client.getRooms().filter(r=>['join','invite'].includes(r.getMyMembership())||(r.getMyMembership()==='leave'&&this.info.has(r.roomId))).sort((a,b)=>Number(!!this.preferences.get(b.roomId)?.pinned)-Number(!!this.preferences.get(a.roomId)?.pinned)||b.getLastActiveTimestamp()-a.getLastActiveTimestamp());this.changed()}
   scheduleRefresh(){if(this.offline||this.closed)return;clearTimeout(this.refreshTimer);this.refreshTimer=setTimeout(()=>void this.refresh().catch(e=>this.fail(e)),800)}
-  async refresh(){const rows:RoomInfo[]=await requests.single('rooms',()=>requests.api('/api/rooms'));if(this.closed)return;this.info=new Map(rows.map(r=>[r.room,r]));this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles]})}
+  async refresh(){const revision=this.preferenceRevision;const [rows,prefs]:[RoomInfo[],any[]]=await Promise.all([requests.single('rooms',()=>requests.api('/api/rooms')),requests.single('preferences',()=>requests.api('/api/conversations/preferences'))]);if(this.closed)return;for(const r of rows){const old=this.info.get(r.room);if(old?.dissolved_at)r.dissolved_at=old.dissolved_at;if(old?.peer_deleted)r.peer_deleted=true;if((old?.revision||0)>(r.revision||0)){r.owner=old!.owner;r.revision=old!.revision}}this.info=new Map(rows.map(r=>[r.room,r]));const fresh=new Map(prefs.map(r=>[r.room,r]));for(const [id,version] of this.preferenceVersions)if(version>revision||this.preferencePending.has(id)){if(this.preferences.has(id))fresh.set(id,this.preferences.get(id));else fresh.delete(id)};this.preferences=fresh;this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences]})}
   async loadProfiles(mxids:string[],usernames:string[]=[]):Promise<void>{
     const missing=[...new Set(mxids)].filter(id=>!this.profiles.has(id)||(this.profileTimes.get(id)||0)<Date.now()-300000).slice(0,100);if(!missing.length)return;
     if(this.profileFlight){await this.profileFlight;return this.loadProfiles(mxids,usernames)}
@@ -99,7 +104,18 @@ export class Chat {
   roomName(room:sdk.Room){const info=this.info.get(room.roomId);if(info?.kind==='direct')return this.name(info.owner===this.session.mxid?info.peer!:info.owner);return room.name||'会话'}
   timeline(room:sdk.Room){return this.history.timeline(room)}
   findEvent(room:sdk.Room,id:string){return room.findEventById(id)}
-  canRedact(event:sdk.MatrixEvent){const receipt=this.history.receipts.get(event.getId()!);return !receipt?.business&&!event.getContent()['org.yitiao.business']&&!event.getWireContent()['org.yitiao.business']&&!['gift','order'].includes(event.getContent()['org.yitiao.share']?.type)&&Date.now()-(receipt?.received_ms||event.getTs())<=300000}
+  readOnly(room:string){const info=this.info.get(room);return !!info?.peer_deleted||!!info?.dissolved_at||this.client?.getRoom(room)?.getMyMembership()!=='join'}
+  preferenceSaving(room:string){return this.preferencePending.has(room)}
+  async setPreference(room:string,value:any){
+    if(this.offline)throw Error('联网后才能保存会话设置');
+    if(value.read){await requests.api('/api/conversations/'+path(room)+'/preferences',{read:true,event:value.event});if(isApp)void appCall('cancelNotification',{room}).catch(()=>{});return}
+    if(this.preferencePending.has(room))throw Error('会话设置正在保存，请稍后');
+    const old=this.preferences.get(room);this.preferenceVersions.set(room,++this.preferenceRevision);this.preferencePending.add(room);this.preferences.set(room,{...old,...value});this.updateRooms();
+    try{const result=await requests.api('/api/conversations/'+path(room)+'/preferences',value);if(this.closed)return;this.preferences.set(room,result);if(isApp&&(result.archived||result.muted))void appCall('cancelNotification',{room}).catch(()=>{});this.updateRooms();if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences]})}
+    catch(e){if(!this.closed){if(old)this.preferences.set(room,old);else this.preferences.delete(room);this.updateRooms()}throw e}
+    finally{this.preferencePending.delete(room);if(!this.closed)this.changed()}
+  }
+  canRedact(event:sdk.MatrixEvent){const info=this.info.get(event.getRoomId()!);if(this.readOnly(event.getRoomId()!)||event.getSender()!==this.session.mxid&&(info?.kind!=='group'||info.owner!==this.session.mxid))return false;const receipt=this.history.receipts.get(event.getId()!);return !receipt?.business&&!event.getContent()['org.yitiao.business']&&!event.getWireContent()['org.yitiao.business']&&!['gift','order'].includes(event.getContent()['org.yitiao.share']?.type)&&Date.now()-(receipt?.received_ms||event.getTs())>=0&&Date.now()-(receipt?.received_ms||event.getTs())<=300000}
   async persist(){if(this.closed)return;await this.vault.saveOutbox(this.outbox);this.changed()}
   async saveBusiness(){if(this.closed)return;await this.businessVault.saveBusiness(this.business);this.changed()}
   async recordCancelledOrder(order:any){
@@ -128,6 +144,7 @@ export class Chat {
     op.state='announced';await this.saveBusiness();
   }
   async send(room:string,content:any,attachments:string[]=[],txn:string=crypto.randomUUID()){
+    if(this.readOnly(room))throw Error('已退出或已解散的群聊仅可查看记录');
     if(codepoints(content.body||'')>2000||codepoints(content['m.new_content']?.body||'')>2000)throw Error('文字最多 2000 个 Unicode 码点');
     if(!this.info.has(room))throw Error('会话类型尚未核实，请稍后重试');
     const info=this.info.get(room)!,r=this.client.getRoom(room);
@@ -214,13 +231,13 @@ export class Chat {
   private sessionCheck?:()=>void;
   private watchSession(){
     let busy=false;
-    const check=async()=>{if(this.closed||busy)return;clearTimeout(this.sessionCheckTimer);if(document.hidden||!navigator.onLine){this.sessionCheckTimer=setTimeout(()=>void check(),30000);return}busy=true;try{await requests.single('session-check',()=>requests.api('/api/session'))}catch{/* 401 locks via the shared request handler; offline retries remain quiet. */}finally{busy=false;if(!this.closed)this.sessionCheckTimer=setTimeout(()=>void check(),30000)}};
+    const check=async()=>{if(this.closed||busy)return;clearTimeout(this.sessionCheckTimer);if(document.hidden||!navigator.onLine){this.sessionCheckTimer=setTimeout(()=>void check(),30000);return}busy=true;try{await requests.single('session-check',()=>requests.api('/api/session'));await this.refresh()}catch{/* 401 locks via the shared request handler; offline retries remain quiet. */}finally{busy=false;if(!this.closed)this.sessionCheckTimer=setTimeout(()=>void check(),30000)}};
     this.sessionCheck=()=>{void check()};this.sessionCheckTimer=setTimeout(this.sessionCheck,30000);
     window.addEventListener('focus',this.sessionCheck);window.addEventListener('online',this.sessionCheck);document.addEventListener('visibilitychange',this.sessionCheck);
   }
   async logout(){this.client?.stopClient();if(isApp){const revoke=appCall('logout');this.lock('login');const result=await revoke;if(result?.pending){this.error='本地数据已锁定，服务器退出将在联网后重试。';this.changed()}return}try{await requests.api('/api/logout',{})}catch(e:any){this.error='退出请求未确认，请到主站账户退出以撤销全部关联会话：'+e.message}finally{if(!this.closed)this.channel?.postMessage('logout');this.lock('login')}}
   takeOver(){const c=new BroadcastChannel('yc:lifecycle');c.postMessage('release');c.close();setTimeout(()=>location.reload(),700)}
-  lock(phase:string){if(this.closed)return;this.closed=true;clearTimeout(this.sessionCheckTimer);if(this.sessionCheck){window.removeEventListener('focus',this.sessionCheck);window.removeEventListener('online',this.sessionCheck);document.removeEventListener('visibilitychange',this.sessionCheck)}this.phase=phase;this.client?.stopClient();this.history.stop();requests.close();this.recovery?.fill(0);for(const key of this.keys.values())key.fill(0);this.keys.clear();this.encryptionReady.clear();this.outbox=[];this.business=[];this.rooms=[];this.info.clear();this.profiles.clear();this.profileTimes.clear();this.session=undefined;this.channel?.close();clearTimeout(this.refreshTimer);clearTimeout(this.saveTimer);const finalize=()=>{this.client?.stopClient();this.vault.close();this.businessVault.close();this.release?.()};if(this.cryptoInit)void this.cryptoInit.then(finalize,finalize);else finalize();this.changed();window.dispatchEvent(new Event('yc:locked'))}
+  lock(phase:string){if(this.closed)return;this.closed=true;clearTimeout(this.sessionCheckTimer);if(this.sessionCheck){window.removeEventListener('focus',this.sessionCheck);window.removeEventListener('online',this.sessionCheck);document.removeEventListener('visibilitychange',this.sessionCheck)}this.phase=phase;this.client?.stopClient();this.history.stop();requests.close();this.recovery?.fill(0);for(const key of this.keys.values())key.fill(0);this.keys.clear();this.encryptionReady.clear();this.outbox=[];this.business=[];this.rooms=[];this.info.clear();this.preferences.clear();this.preferencePending.clear();this.preferenceVersions.clear();this.activeRoom='';this.profiles.clear();this.profileTimes.clear();this.session=undefined;this.channel?.close();clearTimeout(this.refreshTimer);clearTimeout(this.saveTimer);const finalize=()=>{this.client?.stopClient();this.vault.close();this.businessVault.close();this.release?.()};if(this.cryptoInit)void this.cryptoInit.then(finalize,finalize);else finalize();this.changed();window.dispatchEvent(new Event('yc:locked'))}
 }
 export const chat=new Chat();
 export {sdk};

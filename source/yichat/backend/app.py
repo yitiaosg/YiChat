@@ -13,7 +13,7 @@ from .matrix import Matrix
 from .funds import Funds
 from . import previews
 from .limits import BodyLimitMiddleware
-from . import policy, archive, direct, group_avatars
+from . import policy, archive, direct, group_avatars,lifecycle,conversations
 from .security import request_limit
 
 log=logging.getLogger('yichat')
@@ -209,13 +209,16 @@ def create_app(settings=None):
     async def users(request:Request,q:str=''):
         session(request)
         if not 1<=len(q)<=50:return []
-        with connect(s.site/'account.db') as c:rows=c.execute('SELECT username,nickname FROM users WHERE username LIKE ? ESCAPE ? LIMIT 20',(q.replace('!','!!').replace('%','!%').replace('_','!_')+'%','!')).fetchall()
-        return [dict(r)|{'mxid':policy.mxid(s,r['username'])} for r in rows]
+        with connect(s.site/'account.db') as c:rows=c.execute('SELECT * FROM users WHERE username LIKE ? ESCAPE ? LIMIT 20',(q.replace('!','!!').replace('%','!%').replace('_','!_')+'%','!')).fetchall()
+        return [{'username':r['username'],'nickname':r['nickname'],'mxid':policy.mxid(s,r['username'])} for r in rows if not dict(r).get('purged_at')]
 
     def public_profile(username):
         with connect(s.site/'account.db') as c:
             row=c.execute('SELECT * FROM users WHERE username=?',(username,)).fetchone()
-        if not row or dict(row).get('purged_at'):fail(404,'用户不存在')
+        if not row:fail(404,'用户不存在')
+        if dict(row).get('purged_at'):
+            with connect(s.db) as c:old=c.execute('SELECT mxid FROM identities WHERE username=?',(username,)).fetchone()
+            return {'username':username,'nickname':username,'mxid':old['mxid'] if old else '', 'biography':'','avatar_url':None,'profile_url':None,'deleted':True}
         row=dict(row)
         avatar=(s.site/'static/avatar'/f'{username}.jpg').resolve()
         has_avatar=avatar.is_relative_to((s.site/'static/avatar').resolve()) and avatar.is_file()
@@ -231,9 +234,9 @@ def create_app(settings=None):
         result=[]
         with connect(s.db) as c:
             for mxid in dict.fromkeys(ids):
-                row=c.execute('SELECT subject FROM identities WHERE mxid=?',(mxid,)).fetchone()
+                row=c.execute('SELECT subject,username FROM identities WHERE mxid=?',(mxid,)).fetchone()
                 if row:
-                    try:result.append(public_profile(policy.username(s,row['subject'])))
+                    try:result.append(public_profile(row['username']))
                     except HTTPException as e:
                         if e.status_code!=404:raise
         for name in dict.fromkeys(names):
@@ -266,10 +269,12 @@ def create_app(settings=None):
         who=session(request)
         joined=await app.state.matrix.call('GET','/_matrix/client/v3/joined_rooms',app.state.matrix.token(who))
         result=[]
-        for rid in joined.get('joined_rooms',[]):
+        with connect(s.ledger) as ledger:past=ledger.execute("SELECT room,membership FROM yichat_memberships WHERE mxid=? AND event_id IS NOT NULL",(who['mxid'],)).fetchall()
+        memberships={r['room']:r['membership'] for r in past}
+        for rid in dict.fromkeys([*joined.get('joined_rooms',[]),*[r['room'] for r in past if r['membership']=='leave']]):
             try:
                 info=room_info(rid)
-                if direct.visible(s,info,who['mxid']):result.append(info)
+                if direct.visible(s,info,who['mxid']):result.append(dict(info,membership=memberships.get(rid,'join'),peer_deleted=info['kind']=='direct' and lifecycle.purged(s,info['peer'] if info['owner']==who['mxid'] else info['owner']),dissolved_at=lifecycle.status(s,rid)))
             except HTTPException as exc:
                 if exc.status_code not in (403,404):raise
         return result
@@ -331,6 +336,7 @@ def create_app(settings=None):
     async def invite_user(request:Request,room:str):
         who,info=await room_access(request,room)
         if info['kind']!='group':fail(403,'只能在群聊邀请成员')
+        with connect(s.ledger) as ledger:lifecycle.require_active(ledger,room)
         data=await request.json();name=str(data.get('username',''))
         with connect(s.site/'account.db') as c:exists=c.execute('SELECT 1 FROM users WHERE username=?',(name,)).fetchone()
         if not exists:fail(404,'站内用户不存在')
@@ -473,7 +479,16 @@ def create_app(settings=None):
     async def order_access(request,oid):
         with connect(s.ledger) as c:o=c.execute('SELECT * FROM yichat_orders WHERE id=?',(oid,)).fetchone()
         if not o:fail(404,'订单不存在')
-        who,_=await room_access(request,o['room']);return who,o
+        who=session(request);conversations.accessible(s,who,o['room'])
+        with connect(s.ledger) as ledger:member=ledger.execute("SELECT 1 FROM yichat_memberships WHERE room=? AND mxid=? AND membership='join' AND pending_event IS NULL",(o['room'],who['mxid'])).fetchone()
+        if not member:
+            fence=await app.state.matrix.fence()
+            with archive.connect(s.archive_reader) as pg:
+                checkpoint=pg.execute("SELECT sequence,healthy FROM checkpoints WHERE source='synapse'").fetchone()
+                if not checkpoint or not checkpoint['healthy'] or checkpoint['sequence']<fence:fail(503,'历史权限存证正在同步，请稍后重试')
+                at=int(o['created']*1000)
+                if not archive.allowed(pg,o['room'],who['mxid'],at,at+1):fail(403,'没有此订单创建时的历史访问权限')
+        return who,o
 
     @app.get('/api/orders/{oid}')
     async def order_get(request:Request,oid:str):
@@ -507,7 +522,8 @@ def create_app(settings=None):
         who=session(request);data=await request.json();url=data.get('url','')
         if not isinstance(url,str) or len(url)>2048:fail(400,'仅提交必要的预览 URL')
         if data.get('room'):
-            _,info=await room_access(request,data['room']);require_send(who,info)
+            policy.room(s,data['room'])
+            conversations.accessible(s,who,data['room'])
         parsed=previews.parse(url)
         if parsed and parsed[0]=='order':
             _,o=await order_access(request,parsed[1][0])
@@ -543,6 +559,11 @@ def create_app(settings=None):
         # Deny by default: no native media, registration, login, federation or admin.
         allowed=r'client/(?:v3|r0|unstable)/(?:sync|versions|capabilities|account/whoami|keys/(?:upload|query|claim|changes|signatures/upload|device_signing/upload)|room_keys(?:/.*)?|sendToDevice/.*|devices(?:/[^/]+)?|user/[^/]+/(?:account_data/.*|filter(?:/[^/]+)?)|profile/[^/]+(?:/displayname)?|rooms/[^/]+/.*|join/[^/]+|pushrules/.*)'
         if not re.fullmatch(allowed,path) and path!='client/versions':fail(403,'此 Matrix 入口未开放')
+        profile_match=re.fullmatch(r'client/(?:v3|r0)/profile/([^/]+)(?:/(displayname|avatar_url))?',path)
+        if profile_match and request.method=='GET' and lifecycle.purged(s,profile_match[1]):
+            with connect(s.db) as db:retired=db.execute('SELECT username FROM identities WHERE mxid=?',(profile_match[1],)).fetchone()
+            profile={'displayname':retired['username'],'avatar_url':''}
+            return {profile_match[2]:profile[profile_match[2]]} if profile_match[2] else profile
         body=await request.body()
         if len(body)>262144:fail(413,'请求体过大')
         to_device=re.fullmatch(r'client/(?:v3|r0|unstable)/sendToDevice/([^/]+)/[^/]+',path)
@@ -551,6 +572,9 @@ def create_app(settings=None):
         if room_match:
             room,action=room_match.groups();info=room_info(room)
             if request.method!='GET':
+                if info['kind']=='group' and action not in ('receipt/m.read','read_markers'):
+                    with connect(s.ledger) as ledger:lifecycle.require_active(ledger,room)
+                if info['kind']=='direct' and action=='leave':fail(403,'私聊不支持离开会话，请使用归档')
                 data=json.loads(body) if body else {}
                 if action.startswith('send/'):
                     parts=action.split('/')
@@ -604,6 +628,7 @@ def create_app(settings=None):
     from .groups import install as install_groups
     install_groups(app,s,session,room_access)
     direct.install(app,s,session)
+    conversations.install(app,s,session)
     group_avatars.install(app,s,session)
     from .record_audit import install as install_record_audit
     install_record_audit(app,s,session)

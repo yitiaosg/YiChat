@@ -83,6 +83,68 @@ def test_hold_android_fixture(synapse):
         token=secrets.token_urlsafe(48)
         with connect(s.db) as db:db.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0,0)',(digest(token),who['subject'],name,who['sid'],who['mxid'],a['device_id'],server_app.state.cipher.encrypt(a['access_token'].encode()).decode(),time.time()+3600))
         return {'uid':who['subject'],'user':name,'mxid':who['mxid'],'device':a['device_id'],'token':token}
+    @server_app.get('/__fixture/ready')
+    async def fixture_ready(request:Request):
+        assert request.client.host in ('127.0.0.1','::1')
+        return {'direct':direct.json()['room_id'],'group':group.json()['room_id']}
+    @server_app.post('/__fixture/transactions')
+    async def fixture_transactions(request:Request):
+        assert request.client.host in ('127.0.0.1','::1')
+        from backend import policy
+        funds=server_app.state.funds
+        for kind,rid,amount in [('direct',direct.json()['room_id'],'1.01'),('group',group.json()['room_id'],'0.01')]:
+            order=funds.create(users['alice'],policy.room(s,rid),{'key':'fixture-'+kind+'-transaction','amount':amount,'count':1},'bob' if kind=='direct' else None)
+            with connect(s.ledger) as ledger:ledger.execute("UPDATE yidt_intents SET state='approved' WHERE id=(SELECT intent FROM yichat_orders WHERE id=?)",(order['id'],))
+            funds.fund(users['alice'],order['id'])
+            if kind=='direct':funds.receive(users['bob'],order['id'],rid)
+            else:funds.claim(users['bob'],order['id'],rid)
+            funds.tick()
+        return {'ok':True}
+    @server_app.post('/__fixture/admins')
+    async def fixture_admins(request:Request):
+        assert request.client.host in ('127.0.0.1','::1')
+        from backend import policy
+        from urllib.parse import quote
+        m=server_app.state.matrix;owner=users['alice'];key='fixture-admins-group-0001'
+        ticket=policy.issue_ticket(s,owner['mxid'],'group')
+        from backend.security import authenticate
+        session=authenticate(s,accounts['alice']['token']);upstream=m.token(session)
+        result=await m.call('POST','/_matrix/client/v3/createRoom',upstream,{'preset':'private_chat','name':'Admin quota fixture','room_version':'11','creation_content':{'m.federate':False,'org.yitiao.ticket':ticket},'initial_state':[{'type':'m.room.history_visibility','state_key':'','content':{'history_visibility':'joined'}}]})
+        rid=result['room_id'];output=[]
+        for index in range(1,10):
+            name='admin'+str(index)
+            with connect(s.accounts) as db:db.execute('INSERT OR IGNORE INTO users(username,role,nickname) VALUES(?,?,?)',(name,'user',name))
+            policy.social.migrate(s.accounts);person=policy.identity(s,name);mxid=policy.mxid(s,name);password=secrets.token_urlsafe(40)
+            with connect(s.db) as db:db.execute('INSERT OR IGNORE INTO identities VALUES(?,?,?,?)',(person['uid'],name,mxid,server_app.state.cipher.encrypt(password.encode()).decode()))
+            with connect(s.db) as db:saved=db.execute('SELECT password FROM identities WHERE mxid=?',(mxid,)).fetchone()
+            password=server_app.state.cipher.decrypt(saved['password'].encode()).decode()
+            await m.provision(mxid,password,name);auth=await m.login(mxid,password);token=secrets.token_urlsafe(40);sid='sid-'+name
+            with connect(s.ledger) as db:db.execute('INSERT OR IGNORE INTO yidt_sessions VALUES(?,?,?,0)',(sid,name,time.time()+3600))
+            with connect(s.db) as db:db.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0,0)',(digest(token),person['uid'],name,sid,mxid,auth['device_id'],server_app.state.cipher.encrypt(auth['access_token'].encode()).decode(),time.time()+3600))
+            await m.call('POST','/_matrix/client/v3/rooms/'+quote(rid,safe='')+'/invite',upstream,{'user_id':mxid})
+            await m.call('POST','/_matrix/client/v3/rooms/'+quote(rid,safe='')+'/join',auth['access_token'],{})
+            output.append(mxid)
+        return {'room':rid,'members':output}
+    @server_app.post('/__fixture/purge-bob')
+    async def fixture_purge(request:Request):
+        assert request.client.host in ('127.0.0.1','::1')
+        import ast,passkeys as pk
+        assert str(s.accounts).startswith('/tmp/') and str(s.ledger).startswith('/tmp/')
+        with connect(s.accounts) as db:
+            columns={r[1] for r in db.execute('PRAGMA table_info(users)')}
+            for field,kind in [('password_hash','TEXT'),('email','TEXT'),('google_sub','TEXT'),('google_email','TEXT'),('totp_secret','TEXT'),('totp_on_login','INTEGER'),('recovery_codes','TEXT'),('biography','TEXT'),('purged_at','INTEGER'),('created_at','TEXT'),('last_login_at','TEXT')]:
+                if field not in columns:db.execute('ALTER TABLE users ADD COLUMN '+field+' '+kind)
+            db.execute("CREATE TABLE IF NOT EXISTS email_codes(username TEXT)")
+            db.execute("CREATE TABLE IF NOT EXISTS trusted_devices(username TEXT)")
+            db.execute("UPDATE users SET nickname='旧昵称',biography='旧自我介绍',last_login_at='2026-10-01' WHERE username='bob'")
+        avatar=s.site/'static'/'avatar'/'bob.jpg';avatar.parent.mkdir(parents=True,exist_ok=True);avatar.write_bytes(b'isolated-avatar')
+        source=Path(__file__).resolve().parents[2]/'website.py';node=next(n for n in ast.parse(source.read_text()).body if isinstance(n,ast.FunctionDef) and n.name=='purge_account')
+        scope={'get_user':person,'_avatar_path':lambda name:s.site/'static'/'avatar'/(name+'.jpg'),'_conn':lambda:connect(s.accounts),'time':time,'main_passkeys':pk.Store(lambda:connect(s.accounts),'localhost','Fixture',['http://127.0.0.1:18019'])}
+        exec(compile(ast.Module(body=[node],type_ignores=[]),str(source),'exec'),scope)
+        scope['purge_account']('bob')
+        with connect(s.accounts) as db:row=dict(db.execute("SELECT * FROM users WHERE username='bob'").fetchone())
+        return {'ok':True,'profile_cleared':row['nickname']=='' and row['biography']=='' and row['last_login_at'] is None and not avatar.exists()}
+
     @server_app.post('/__fixture/audit')
     async def fixture_audit(request:Request):
         # Advance the sealer's test clock only, after all live message checks.

@@ -29,8 +29,8 @@ def authenticate(settings, token):
         row = c.execute('SELECT * FROM sessions WHERE token_hash=? AND revoked=0 AND expires>?', (digest(token), time.time())).fetchone()
     if not row: fail(401, '会话已失效')
     with connect(settings.site/'account.db') as c:
-        person=c.execute('SELECT username FROM account_ids WHERE uid=?',(row['subject'],)).fetchone()
-    if not person or person['username']!=row['username']:fail(401,'账户标识已更新，请重新登录')
+        person=c.execute('SELECT a.username,u.* FROM account_ids a JOIN users u ON a.username=u.username WHERE a.uid=?',(row['subject'],)).fetchone()
+    if not person or dict(person).get('purged_at') or person['username']!=row['username']:fail(401,'账户标识已更新，请重新登录')
     if not valid_sid(settings, row['sid'], row['username']):
         with transaction(settings.db) as c: c.execute('UPDATE sessions SET revoked=1 WHERE sid=?', (row['sid'],))
         fail(401, '主站会话已退出')

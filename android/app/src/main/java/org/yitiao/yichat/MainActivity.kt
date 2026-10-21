@@ -83,6 +83,10 @@ class MainActivity : ComponentActivity() {
             finally { download.file.delete() }
         }
     }
+    private var notificationRoom:String?=null
+    private val notificationPermission=registerForActivityResult(ActivityResultContracts.RequestPermission()){ granted ->
+        if(granted)graph.notifications.resume() else toast("通知权限未开启，可在系统设置中开启")
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         callbackDigest=savedInstanceState?.getString("callback-digest")
@@ -182,7 +186,7 @@ class MainActivity : ComponentActivity() {
         setContentView(root);ViewCompat.requestApplyInsets(root)
     }
     override fun onNewIntent(intent:Intent) { super.onNewIntent(intent);consumeIntent(intent) }
-    private fun consumeIntent(incoming:Intent) { val uri=incoming.data;incoming.data=null;setIntent(incoming);uri?.let(::consumeCallback) }
+    private fun consumeIntent(incoming:Intent) { val uri=incoming.data;incoming.data=null;incoming.getStringExtra("notification_room")?.takeIf{it.startsWith("!") && it.length<=255}?.let{room->notificationRoom=room;if(::web.isInitialized && WebRoutes.chat(web.url.orEmpty()))web.evaluateJavascript("window.dispatchEvent(new CustomEvent('yc:open-room',{detail:"+JsonPrimitive(room).toString()+"}))",null)};incoming.removeExtra("notification_room");setIntent(incoming);uri?.let(::consumeCallback) }
     private fun consumeCallback(uri:Uri) {
         val hash=SecureStore.hash(uri.toString());if(hash==callbackDigest)return;callbackDigest=hash
         lifecycleScope.launch {
@@ -236,13 +240,19 @@ class MainActivity : ComponentActivity() {
                     }
                     "session" -> {
                         val a=withContext(Dispatchers.IO) { graph.restore() }
-                        respond(reply,buildJsonObject { put("online",online());put("version",BuildConfig.VERSION_NAME);put("pendingLogout",graph.vault.get("web.pending-logout")!=null);put("session",a?.let { buildJsonObject {
+                        respond(reply,buildJsonObject { put("online",online());put("version",BuildConfig.VERSION_NAME);put("capabilities",buildJsonObject{put("notifications",true)});put("pendingLogout",graph.vault.get("web.pending-logout")!=null);put("session",a?.let { buildJsonObject {
                             put("uid",it.uid);put("user",it.user);put("mxid",it.mxid);put("device",it.device);put("device_id",it.device);put("token",it.token)
                         } } ?: JsonNull) })
                     }
                     "login" -> { login(!args.b("newDevice"));respond(reply) }
                     "lock" -> { withContext(Dispatchers.IO) { graph.lock() };respond(reply) }
                     "logout" -> { withContext(Dispatchers.IO) { graph.logout() };respond(reply,buildJsonObject { put("pending",graph.vault.get("web.pending-logout")!=null) }) }
+                    "notificationStatus" -> respond(reply,buildJsonObject{put("enabled",graph.notifications.enabled());put("permitted",graph.notifications.permitted())})
+                    "configureNotifications" -> { val enabled=args.b("enabled");graph.notifications.configure(enabled);if(enabled && android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS);respond(reply,buildJsonObject{put("enabled",graph.notifications.enabled());put("permitted",graph.notifications.permitted())}) }
+                    "notificationSettings" -> { startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,packageName));respond(reply) }
+                    "notifyRoom" -> { graph.notifications.show(args.s("room"),args.s("event"),args.s("label"));respond(reply) }
+                    "cancelNotification" -> { graph.notifications.cancel(args.s("room"));respond(reply) }
+                    "pendingNotification" -> { respond(reply,buildJsonObject{put("room",notificationRoom?:"")});notificationRoom=null }
                     "backupStatus" -> respond(reply,backupStatus())
                     "backupNow" -> { withContext(Dispatchers.IO) { graph.backup.saveInternal(true) };respond(reply,backupStatus()) }
                     "exportNow" -> { withContext(Dispatchers.IO) { graph.backup.export() };respond(reply,backupStatus()) }
@@ -282,8 +292,8 @@ class MainActivity : ComponentActivity() {
             catch(e:Exception) { reject(reply,e) }
         }
     }
-    override fun onPause() { if(::web.isInitialized){web.evaluateJavascript("window.dispatchEvent(new Event('yc:background'))",null);web.onPause()};super.onPause() }
-    override fun onResume() { super.onResume();if(::web.isInitialized)web.onResume() }
+    override fun onPause() { graph.notifications.foreground=false; if(::web.isInitialized){web.evaluateJavascript("window.dispatchEvent(new Event('yc:background'))",null);web.onPause()};super.onPause() }
+    override fun onResume() { super.onResume();graph.notifications.foreground=true;if(::web.isInitialized)web.onResume();lifecycleScope.launch { runCatching { withContext(Dispatchers.IO){graph.restore()} }.onSuccess { account -> if(account==null && ::web.isInitialized && WebRoutes.chat(web.url.orEmpty()))web.evaluateJavascript("window.dispatchEvent(new Event('yc:app-session-locked'))",null) } } }
     override fun onDestroy() {
         chooser?.onReceiveValue(null);microphoneRequest?.deny()
         downloads.values.forEach { it.file.delete() };saving?.first?.file?.delete()

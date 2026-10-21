@@ -48,19 +48,20 @@ class Graph(val context: Application) {
     val history = HistoryRepository(store, gateway, vault)
     val backup = BackupRepository(context, store, history, vault)
     val records = RecordAudit(store,vault)
+    val notifications = Notifications(context,this)
     private val startup = Mutex()
     private var restored = false
     suspend fun restore() = startup.withLock {
         if (!restored) {
             WorkManager.getInstance(context).cancelUniqueWork("yichat-backup")
             WorkManager.getInstance(context).cancelUniqueWork("yichat-export")
-            auth.restore()?.let { store.open(it); migrateLegacy(it); backup.activate() }
+            auth.restore()?.let { store.open(it); migrateLegacy(it); backup.activate(); notifications.resume() }
             restored = true
         }
         auth.account
     }
     suspend fun activate(a: Account) {
-        store.open(a); migrateLegacy(a); backup.activate()
+        store.open(a); migrateLegacy(a); backup.activate(); notifications.resume()
         scope.launch { runCatching { history.catchUp(true); backup.saveInternal() } }
     }
     private suspend fun migrateLegacy(a: Account) {
@@ -109,7 +110,7 @@ class Graph(val context: Application) {
     suspend fun lock() {
         WorkManager.getInstance(context).cancelUniqueWork("yichat-web-backup")
         WorkManager.getInstance(context).cancelUniqueWork("yichat-web-export")
-        auth.lock(); store.close()
+        notifications.stop();auth.lock(); store.close()
     }
     suspend fun logout() {
         auth.account?.token?.let { vault.put("web.pending-logout", it.toByteArray()) }
