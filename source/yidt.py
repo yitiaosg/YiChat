@@ -136,20 +136,22 @@ def pin_complete():
 def services(service):
     if service not in y.SERVICES or service=='wallet':abort(404)
     user=session['user']
+    native_return=service=='yichat' and request.args.get('client')=='android'
+    continuation=request.path+('?client=android' if native_return else '')
     with y.connect() as c:
         c.execute('BEGIN IMMEDIATE');b=y.binding(c,user,service)
         if request.method=='POST':
             action=request.form.get('action','bind')
             if action=='unbind':
                 if b and b['locked']:pin_check(c)
-                c.execute('DELETE FROM yidt_bindings WHERE user=? AND service=?',(user,service));return redirect(request.path)
-            if not need_pin(c):session['pin_return']=request.path;return redirect('/pin/')
+                c.execute('DELETE FROM yidt_bindings WHERE user=? AND service=?',(user,service));return redirect(continuation)
+            if not need_pin(c):session['pin_return']=continuation;return redirect('/pin/')
             address=request.form.get('address','');y.member(c,user,address)
             if b and b['locked']:pin_check(c)
             c.execute('INSERT INTO yidt_bindings VALUES(?,?,?,?,?) ON CONFLICT(user,service) DO UPDATE SET address=excluded.address,locked=excluded.locked,created=excluded.created',
               (user,service,address,int(request.form.get('locked')=='on'),y.stamp()))
             from yidt_bridge import RETURN
-            return redirect(RETURN[service])
+            return redirect(RETURN[service].rstrip('/')+'/app/return' if native_return else RETURN[service])
         wallets=list(c.execute('SELECT * FROM yidt_members WHERE user=? ORDER BY created',(user,)))
         balance=y.fmt(y.wallet(c,b['address'])['balance']) if b else None
     return render_template('yidt.html',screen='service',title=y.SERVICES[service]+' · 钱包授权',service=service,binding=b,wallets=wallets,balance=balance)

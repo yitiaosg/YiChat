@@ -55,7 +55,9 @@ def subject(s,matrix_id):
 
 
 def require_send(s,info,sender):
-    if info['kind']!='direct':return
+    if info['kind']!='direct':
+        from .groups import require_send as group_send
+        group_send(s,info.get('room',''),sender);return
     if sender not in (info['owner'],info['peer']):fail(403,'私聊身份不匹配')
     peer=info['peer'] if sender==info['owner'] else info['owner']
     require_uid_send(s,subject(s,sender),subject(s,peer))
@@ -85,6 +87,10 @@ def register_room(s,token,room):
         if not t or (t['room'] and t['room']!=room):fail(403,'会话票据无效或已使用')
         c.execute('INSERT OR IGNORE INTO rooms VALUES(?,?,?,?,30)',(room,t['kind'],t['owner'],t['peer']))
         c.execute('INSERT OR IGNORE INTO room_modes VALUES(?,?,?)',(room,'direct' if t['kind']=='direct' else 'plain',int(time.time()*1000)))
+        if t['kind']=='group':
+            from .groups import register
+            register(c,room)
+        else:c.execute('INSERT OR IGNORE INTO direct_visibility VALUES(?,0)',(room,))
         c.execute('UPDATE room_tickets SET room=? WHERE token=?',(room,token))
 
 
@@ -95,7 +101,7 @@ def room(s,room_id):
     return dict(r)
 
 
-def validate_event(s,info,event_type,content,sender,state_key=None):
+def validate_event(s,info,event_type,content,sender,state_key=None,control=None):
     if event_type=='m.room.member':
         membership=content.get('membership')
         if info['kind']=='direct':
@@ -105,6 +111,9 @@ def validate_event(s,info,event_type,content,sender,state_key=None):
                 if membership=='invite':require_send(s,info,sender)
             elif membership not in ('leave',):fail(403,'私聊成员固定')
             elif sender!=state_key:fail(403,'私聊只能由本人离开')
+        else:
+            from .groups import validate_member
+            validate_member(s,info,sender,state_key,content,control)
         return
     if event_type=='m.room.encryption':
         if info['encryption']=='plain':fail(403,'新群不启用端到端加密')
@@ -117,7 +126,7 @@ def validate_event(s,info,event_type,content,sender,state_key=None):
     if event_type in ('m.room.create','m.room.history_visibility','m.room.join_rules','m.room.power_levels','m.room.name','m.room.topic'):
         return
     if state_key is None:
-        require_send(s,info,sender)
+        if not control:require_send(s,info,sender)
         if info['encryption'] in ('direct','legacy_encrypted') and event_type not in ('m.room.encrypted','m.room.redaction','m.reaction'):
             fail(403,'加密会话禁止明文消息')
         if info['encryption']=='plain' and event_type=='m.room.encrypted':fail(403,'新群只接收服务器可读事件')

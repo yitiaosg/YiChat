@@ -19,8 +19,8 @@ class Matrix:
         if m.get('membership')!='join': fail(403,'你不是此会话的有效成员')
     async def provision(self, mxid, password, username):
         await self.call('PUT','/_synapse/admin/v2/users/'+quote(mxid,safe=''),data={'displayname':username, 'password':password, 'logout_devices':False, 'admin':False})
-    async def login(self, mxid, password, device_id=None):
-        data={'type':'m.login.password','identifier':{'type':'m.id.user','user':mxid},'password':password,'initial_device_display_name':'YiChat Android' if device_id else 'YiChat 浏览器'}
+    async def login(self, mxid, password, device_id=None, device_name="YiChat 浏览器"):
+        data={'type':'m.login.password','identifier':{'type':'m.id.user','user':mxid},'password':password,'initial_device_display_name':device_name}
         if device_id:data['device_id']=device_id
         return await self.call('POST','/_matrix/client/v3/login',data=data)
     async def fence(self):

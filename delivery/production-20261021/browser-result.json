@@ -1,0 +1,42 @@
+{
+  "checks": [
+    "shared mobile frontend and restricted framework selection",
+    "two isolated accounts synchronize and exchange encrypted private message",
+    "Chat omits device verification while standard encrypted key backup remains usable",
+    "refresh preserves JS crypto and cached conversation",
+    "group continues to send plaintext through shared frontend",
+    "attachment download uses chunked App file bridge",
+    "offline reload keeps framework, conversation and decrypted cached messages",
+    "App-only backup panel validates whole days and invokes directory bridge",
+    "reconnection resumes synchronization",
+    "live profile statistics, follow and server privacy failure with stable retry",
+    "owner uploads group avatar; members see it in header, details and list after refresh",
+    "owner group number, administrator, mute limit and transfer controls use live API",
+    "transferred owner can remove avatar; former owner and administrators cannot bypass policy",
+    "withdrawn E2EE event keeps ciphertext proof and requires historical key",
+    "App record audit compares only hashes, enforces five days and restores private keys locally"
+  ],
+  "errors": [],
+  "sends": [
+    {
+      "name": "alice",
+      "type": "encrypted"
+    },
+    {
+      "name": "alice",
+      "type": "plain"
+    },
+    {
+      "name": "alice",
+      "type": "plain"
+    },
+    {
+      "name": "alice",
+      "type": "encrypted"
+    },
+    {
+      "name": "alice",
+      "type": "encrypted"
+    }
+  ]
+}

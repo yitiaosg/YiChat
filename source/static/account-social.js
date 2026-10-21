@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function render(body) {
     if (relation) {
       relation.dataset.following = String(body.following);
-      relation.textContent = body.mutual ? '互相关注' : body.following ? '已关注' : '关注';
+      (relation.querySelector('[data-follow-label]')||relation).textContent = body.mutual ? '互相关注' : body.following ? '已关注' : '关注';
     }
     for (const key of ['following','followers','friends']) {
       const node = document.querySelector(`[data-count="${key}"]`);

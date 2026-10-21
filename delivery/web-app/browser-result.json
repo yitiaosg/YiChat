@@ -1,0 +1,27 @@
+{
+  "checks": [
+    "shared mobile frontend and restricted framework selection",
+    "two isolated accounts synchronize and exchange encrypted private message",
+    "refresh preserves JS crypto and cached conversation",
+    "group continues to send plaintext through shared frontend",
+    "attachment download uses chunked App file bridge",
+    "offline reload keeps framework, conversation and decrypted cached messages",
+    "App-only backup panel validates whole days and invokes directory bridge",
+    "reconnection resumes synchronization"
+  ],
+  "errors": [],
+  "sends": [
+    {
+      "name": "alice",
+      "type": "encrypted"
+    },
+    {
+      "name": "alice",
+      "type": "plain"
+    },
+    {
+      "name": "alice",
+      "type": "plain"
+    }
+  ]
+}

@@ -1,1 +1,9 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"><application android:usesCleartextTraffic="true" tools:replace="android:usesCleartextTraffic"/></manifest>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+ <application android:usesCleartextTraffic="true" tools:replace="android:usesCleartextTraffic">
+  <!-- Loopback-only instrumentation fixture; absent from the release manifest. -->
+  <activity android:name=".MainActivity">
+   <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="http" android:host="127.0.0.1" android:port="18018" android:path="/app/callback"/></intent-filter>
+   <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="http" android:host="127.0.0.1" android:port="18018" android:path="/app/return"/></intent-filter>
+  </activity>
+ </application>
+</manifest>

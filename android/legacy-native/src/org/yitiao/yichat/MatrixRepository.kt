@@ -18,16 +18,17 @@ data class ChatMessage(val key: String, val id: EventOrTransactionId, val sender
     val giftId: String? = null, val receipt: Boolean = false)
 
 class MatrixRepository(private val context: Context, private val vault: SecureStore, private val gateway: Gateway, private val scope: CoroutineScope) {
-    var client: Client? = null; private set
+    @Volatile var client: Client? = null; private set
     var database: YiChatDatabase? = null; private set
     @Volatile var account: Account? = null; private set
     private var lockFile: java.nio.channels.FileLock? = null
     private var lockChannel: java.nio.channels.FileChannel? = null
-    private var syncHandle: TaskHandle? = null
+    private var syncJob: Job? = null
     private var timelineHandle: TaskHandle? = null
     private var delegateHandle: TaskHandle? = null
     private var timeline: Timeline? = null
     private var currentRoom: String? = null
+    @Volatile private var sessionReady = false
     private val sessionMutex = Mutex()
     private val sendMutex = Mutex()
     private val sessionGeneration = java.util.concurrent.atomic.AtomicLong()
@@ -40,9 +41,14 @@ class MatrixRepository(private val context: Context, private val vault: SecureSt
     val verification = MutableStateFlow("")
     var onInvalidSession: (() -> Unit)? = null
 
-    suspend fun open(a: Account) = sessionMutex.withLock {
+    suspend fun open(a: Account, startSync: Boolean = true) = withContext(Dispatchers.IO) { sessionMutex.withLock {
+        if (sessionReady && account?.storage == a.storage && account?.token == a.token) {
+            if (startSync) startSync()
+            return@withLock
+        }
         client?.enableAllSendQueues(false)
         closeInternal()
+        syncStatus.value = "正在初始化聊天与本地加密存储"
         val root = File(context.noBackupFilesDir, "accounts/${a.storage}").apply { mkdirs() }
         lockChannel = java.io.RandomAccessFile(File(root, "writer.lock"), "rw").channel
         lockFile = requireNotNull(lockChannel!!.tryLock()) { "此账号设备库已由其他进程打开" }
@@ -55,6 +61,7 @@ class MatrixRepository(private val context: Context, private val vault: SecureSt
                 .requestConfig(RequestConfig(2uL, 40000uL, 4uL, 60000uL))
                 .userAgent("YiChat-Android/0.1.0").build()
             client = c; account = a
+            syncStatus.value = "正在恢复设备会话"
             val generation=sessionGeneration.get()
             delegateHandle = c.setDelegate(object : ClientDelegate {
                 override fun didReceiveAuthError(isSoftLogout: Boolean) { if(client===c && sessionGeneration.get()==generation) { syncStatus.value = "会话已失效"; onInvalidSession?.invoke() } }
@@ -65,23 +72,44 @@ class MatrixRepository(private val context: Context, private val vault: SecureSt
             restoreMetadata()
             c.enableAllSendQueues(true)
             verification.value = c.encryption().verificationState().name
-            startSync()
+            sessionReady = true
+            refreshRooms() // Display persisted rooms before waiting for the network.
+            if (startSync) startSync()
         } catch (e: Exception) { closeInternal(); throw e }
-    }
-    fun startSync() {
+    } }
+    @Synchronized fun startSync() {
+        if (!sessionReady) return
         val c = client ?: return
-        if (syncHandle != null) return
+        if (syncJob?.isActive == true) return
         syncStatus.value = "正在同步"
         val generation=sessionGeneration.get()
-        syncHandle = c.syncV2(SyncSettingsV2(30000uL, true), object : SyncListenerV2 {
-            override fun onUpdate(response: SyncResponseV2) {
-                if(client!==c || sessionGeneration.get()!=generation) return
+        val previous = syncJob
+        syncJob = scope.launch(Dispatchers.IO) {
+            previous?.join() // Cancelled foreground jobs must finish before a replacement polls.
+            if(client!==c || sessionGeneration.get()!=generation) return@launch
+            syncWithRecovery(sync = { first ->
+                // SDK syncOnceV2 reuses its persisted sync token. Initial/resume
+                // requests return immediately; subsequent calls long-poll.
+                c.syncOnceV2(SyncSettingsV2(if (first) 0uL else 30000uL, false))
+                if(client!==c || sessionGeneration.get()!=generation) throw CancellationException()
                 syncStatus.value = "已同步"
-                scope.launch { runCatching { refreshRooms() }.onFailure { if(client===c) syncStatus.value="会话元数据暂不可用，等待下一次同步" } }
-            }
-        })
+                refreshRooms()
+            }, failed = { error, retryMs ->
+                if(client!==c || sessionGeneration.get()!=generation) false
+                else if (error is ClientException.MatrixApi && error.code in setOf("M_UNKNOWN_TOKEN", "M_MISSING_TOKEN")) {
+                    syncStatus.value = "会话已失效，请重新登录"
+                    onInvalidSession?.invoke()
+                    false
+                } else {
+                    val code = (error as? ClientException.MatrixApi)?.code?.takeIf { it.matches(Regex("M_[A-Z0-9_]{1,40}")) }
+                    val seconds = retryMs / 1000 + if (retryMs % 1000 == 0L) 0 else 1
+                    syncStatus.value = "同步暂未完成${code?.let { "（$it）" }.orEmpty()}，${seconds}秒后重试"
+                    true
+                }
+            })
+        }
     }
-    fun stopSync() { syncHandle?.cancel(); syncHandle?.close(); syncHandle = null }
+    @Synchronized fun stopSync() { syncJob?.cancel() }
     suspend fun refreshRooms() {
         val c = client ?: return
         val rooms=c.rooms().filter { it.membership() in listOf(Membership.JOINED,Membership.INVITED) }.map { room ->
@@ -91,6 +119,10 @@ class MatrixRepository(private val context: Context, private val vault: SecureSt
         if(client===c) conversations.value=rooms
     }
     suspend fun select(room: String) {
+        check(withTimeoutOrNull(35000) {
+            while (client?.getRoom(room)?.let { it.close(); true } != true) delay(250)
+            true
+        } == true) { "该会话已存在，但 App 尚未同步到本地。请等待同步恢复后重新打开，无需再次创建。" }
         val generation=timelineGeneration.incrementAndGet()
         refreshTombstones()
         timelineHandle?.cancel(); timelineHandle?.close(); timelineHandle = null
@@ -250,8 +282,13 @@ class MatrixRepository(private val context: Context, private val vault: SecureSt
         requireNotNull(timeline).edit(message.id, EditedContent.RoomMessage(content))
     }
     suspend fun redact(message: ChatMessage) { requireNotNull(timeline).redactEvent(message.id, null) }
-    suspend fun close() = sessionMutex.withLock { stopSync(); client?.enableAllSendQueues(false); closeInternal() }
+    suspend fun close(expectedToken: String? = null) = sessionMutex.withLock {
+        if (expectedToken == null || account?.token == expectedToken) {
+            stopSync(); client?.enableAllSendQueues(false); closeInternal()
+        }
+    }
     private fun closeInternal() {
+        sessionReady = false
         sessionGeneration.incrementAndGet();timelineGeneration.incrementAndGet()
         val storage = account?.storage
         stopSync(); timelineHandle?.cancel(); timelineHandle?.close(); timelineHandle = null

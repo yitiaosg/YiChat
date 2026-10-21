@@ -1,0 +1,6 @@
+
+org.yitiao.yichat.NativeProcessPersistenceTest:.
+
+Time: 18.207
+
+OK (1 test)

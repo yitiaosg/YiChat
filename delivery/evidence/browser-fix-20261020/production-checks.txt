@@ -1,0 +1,12 @@
+Production integration commit: fee256c
+Backup: /root/yitiao/backups/yichat-v2-20261020T085701Z
+Six services active; gateway health ok.
+Original Web entry/assets/immutable WASM cache unchanged.
+11 original private configuration/key files match backup SHA-256.
+Existing ledger chain and every funded order reconcile.
+Native login: malformed request 400; valid start 307 to existing main OIDC authorize.
+Callback/return: HTTP 200, no-store and no reflected secret.
+Public assetlinks: HTTP 200 application/json, cache 3600, no redirect.
+Actual release certificate matches mobile App Links.
+Google Digital Asset Links remote lookup recognizes both packages with no diagnostic error.
+No real-user login, funds or assets used in testing.

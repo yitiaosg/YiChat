@@ -8,7 +8,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
 import java.security.MessageDigest
 
-class HistoryRepository(private val matrix: MatrixRepository, private val gateway: Gateway, private val vault: SecureStore) {
+class HistoryRepository(private val matrix: PacketStore, private val gateway: Gateway, private val vault: SecureStore) {
     private val mutex = Mutex()
     val status = MutableStateFlow("尚未备份原消息包")
     suspend fun catchUp(relogin: Boolean = false) = mutex.withLock {
@@ -27,11 +27,11 @@ class HistoryRepository(private val matrix: MatrixRepository, private val gatewa
                 for (r in records) {
                     val room = r.s("room"); val eid = r.s("event_id"); val seq = r["sequence"]!!.jsonPrimitive.long
                     val target = r.s("redacts").ifBlank { if (r["tombstone"] is JsonObject) eid else "" }
-                    if (target.isNotEmpty()) { dao.tombstone(Tombstone(room, target, seq)); dao.deletePacket(room, target) }
+                    if (target.isNotEmpty()) { dao.tombstone(Tombstone(room, target, seq)) }
                     dao.receipt(TrustedReceipt(room, eid, r.s("sha256"), seq, vault.encrypt(a.storage, "receipt:$room:$eid", r.toString().toByteArray())))
                 }
             }
-            for (batch in records.filter { it["tombstone"] !is JsonObject && it.s("type") != "m.room.redaction" }.chunked(20)) {
+            for (batch in records.filter { it["tombstone"] !is JsonObject }.chunked(20)) {
                 val result = gateway.call("/api/history/packets", buildJsonObject { put("ids", JsonArray(batch.map { JsonPrimitive(it.s("event_id")) })) }).jsonObject
                 for (p in result.a("packets").map { it.jsonObject }) {
                     val r = batch.first { it.s("event_id") == p.s("event_id") }
@@ -49,7 +49,7 @@ class HistoryRepository(private val matrix: MatrixRepository, private val gatewa
     private suspend fun accept(p: JsonObject, room: String) {
         val a = matrix.account ?: return; val db = matrix.database ?: return; val dao = db.local(); val eid = p.s("event_id")
         if (p["tombstone"] is JsonObject) {
-            db.withTransaction { dao.tombstone(Tombstone(room, eid, 0)); dao.deletePacket(room, eid)
+            db.withTransaction { dao.tombstone(Tombstone(room, eid, 0))
                 dao.operation("missing.${SecureStore.hash(eid)}")?.let { dao.saveOperation(it.copy(state="withdrawn")) }
             }; return
         }
@@ -66,7 +66,7 @@ class HistoryRepository(private val matrix: MatrixRepository, private val gatewa
         val r = json.parseToJsonElement(vault.decrypt(a.storage, "receipt:$room:$eid", receipt.encrypted).decodeToString()).jsonObject
         require(json.parseToJsonElement(raw.decodeToString()).jsonObject.s("type") == r.s("type"))
         db.withTransaction {
-            if (dao.tombstone(room, eid) == null && dao.packet(room, eid) == null)
+            if (dao.packet(room, eid) == null)
                 dao.addPacket(Packet(room, eid, receipt.sequence, receipt.hash, vault.encrypt(a.storage, "packet:$room:$eid", raw)))
             dao.operation("missing.${SecureStore.hash(eid)}")?.let { dao.saveOperation(it.copy(state="restored")) }
         }

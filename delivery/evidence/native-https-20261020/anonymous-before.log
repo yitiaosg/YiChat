@@ -1,0 +1,71 @@
+INSTRUMENTATION_STATUS: class=org.yitiao.yichat.NativeHttpsProbeTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+org.yitiao.yichat.NativeHttpsProbeTest:
+INSTRUMENTATION_STATUS: test=nativeRustAndGatewayReachSamePublicHttpsServer
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=org.yitiao.yichat.NativeHttpsProbeTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=org.matrix.rustcomponents.sdk.InternalException: Expect rustls-platform-verifier to be initialized
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt.uniffiCheckCallStatus(matrix_sdk_ffi.kt:414)
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt.access$uniffiCheckCallStatus(matrix_sdk_ffi.kt:1)
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt.uniffiRustCallAsync(matrix_sdk_ffi.kt:10925)
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt$uniffiRustCallAsync$1.invokeSuspend(Unknown Source:19)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at org.yitiao.yichat.NativeHttpsProbeTest.nativeRustAndGatewayReachSamePublicHttpsServer(NativeHttpsProbeTest.kt:13)
+
+INSTRUMENTATION_STATUS: stream=
+Error in nativeRustAndGatewayReachSamePublicHttpsServer(org.yitiao.yichat.NativeHttpsProbeTest):
+org.matrix.rustcomponents.sdk.InternalException: Expect rustls-platform-verifier to be initialized
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt.uniffiCheckCallStatus(matrix_sdk_ffi.kt:414)
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt.access$uniffiCheckCallStatus(matrix_sdk_ffi.kt:1)
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt.uniffiRustCallAsync(matrix_sdk_ffi.kt:10925)
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt$uniffiRustCallAsync$1.invokeSuspend(Unknown Source:19)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at org.yitiao.yichat.NativeHttpsProbeTest.nativeRustAndGatewayReachSamePublicHttpsServer(NativeHttpsProbeTest.kt:13)
+
+INSTRUMENTATION_STATUS: test=nativeRustAndGatewayReachSamePublicHttpsServer
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 21.499
+There was 1 failure:
+1) nativeRustAndGatewayReachSamePublicHttpsServer(org.yitiao.yichat.NativeHttpsProbeTest)
+org.matrix.rustcomponents.sdk.InternalException: Expect rustls-platform-verifier to be initialized
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt.uniffiCheckCallStatus(matrix_sdk_ffi.kt:414)
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt.access$uniffiCheckCallStatus(matrix_sdk_ffi.kt:1)
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt.uniffiRustCallAsync(matrix_sdk_ffi.kt:10925)
+	at org.matrix.rustcomponents.sdk.Matrix_sdk_ffiKt$uniffiRustCallAsync$1.invokeSuspend(Unknown Source:19)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source:1)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source:1)
+	at org.yitiao.yichat.NativeHttpsProbeTest.nativeRustAndGatewayReachSamePublicHttpsServer(NativeHttpsProbeTest.kt:13)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

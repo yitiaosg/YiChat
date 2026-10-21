@@ -11,7 +11,7 @@ import time
 from urllib.parse import urlencode
 
 from fastapi import Request
-from fastapi.responses import RedirectResponse, HTMLResponse
+from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse, Response
 from .db import transaction
 from .security import digest, fail, valid_sid
 from . import policy
@@ -35,10 +35,15 @@ def finish_authorization(s,native,claims,person):
     return r
 
 def install(app,s):
+    @app.get('/.well-known/assetlinks.json')
+    async def android_links():
+        # Public certificate of the user's candidate.2 APK, never a signing key.
+        return JSONResponse([{'relation': ['delegate_permission/common.handle_all_urls'], 'target': {'namespace': 'android_app', 'package_name': 'org.yitiao.yichat', 'sha256_cert_fingerprints': ['6A:B2:1F:96:1A:37:35:69:C0:67:E0:48:E0:E0:E5:D3:8B:49:0D:07:D9:40:B9:74:A4:A3:29:05:F0:62:85:ED']}}, {'relation': ['delegate_permission/common.handle_all_urls'], 'target': {'namespace': 'android_app', 'package_name': 'org.yitiao.yichat.mobile', 'sha256_cert_fingerprints': ['9E:75:05:F8:4F:84:C2:8A:C9:20:A5:DA:34:70:A4:52:E7:92:3B:76:C5:41:67:CE:1C:94:2A:FC:56:C7:AF:3E']}}])
+
     @app.get('/auth/native/login')
     async def start(request:Request):
         q=request.query_params
-        if set(q)!={'state','nonce','code_challenge','code_challenge_method','redirect_uri'}:fail(400,'原生登录参数不完整')
+        if len(list(q.multi_items()))!=5 or set(q)!={'state','nonce','code_challenge','code_challenge_method','redirect_uri'}:fail(400,'原生登录参数不完整')
         if q['redirect_uri']!=s.origin+'/app/callback' or q['code_challenge_method']!='S256':fail(400,'回跳或 PKCE 方法不匹配')
         if not all(OPAQUE.fullmatch(q[k]) for k in ('state','nonce','code_challenge')) or len(q['code_challenge'])!=43:fail(400,'登录随机参数无效')
         state=secrets.token_urlsafe(32);verifier=secrets.token_urlsafe(48);nonce=secrets.token_urlsafe(32)
@@ -80,7 +85,7 @@ def install(app,s):
         password=cipher.decrypt(identity['password'].encode()).decode()
         m=app.state.matrix
         await m.provision(mxid,password,username)
-        auth=await m.login(mxid,password,device_id=resume['device'] if resume else None)
+        auth=await m.login(mxid,password,device_id=resume['device'] if resume else None,device_name='YiChat Android')
         if resume and auth['device_id']!=resume['device']:fail(503,'服务器未恢复原设备，拒绝打开原密钥库')
         token=secrets.token_urlsafe(48);proof=proof or secrets.token_urlsafe(48)
         expires=time.time()+30*86400
@@ -92,6 +97,39 @@ def install(app,s):
                 'device_proof':proof,'new_device':not bool(resume),'homeserver':s.origin}
 
     @app.get('/app/callback')
+    async def login_fallback():
+        # Static first-party code constructs a package-targeted intent locally.
+        # Never reflect arbitrary query values into HTML or accept a target package.
+        return HTMLResponse('''<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>返回 YiChat</title>
+<style>body{font:17px system-ui,sans-serif;max-width:30rem;margin:12vh auto;padding:24px;color:#17202a}a{display:block;margin:24px 0;padding:16px;border-radius:12px;text-align:center;background:#2563eb;color:white;text-decoration:none}a[hidden]{display:none}p{line-height:1.7}</style>
+<h1>返回 YiChat 修复版</h1><p id="status">正在返回应用。若浏览器未自动跳转，请点击下面的按钮。</p>
+<a id="return-app" hidden>返回 YiChat 修复版，完成登录</a>
+<p>交换码在 60 秒内有效。若已超时，请返回 App 重新发起登录。请使用已安装的“YiChat 修复版”。</p>
+<script src="/app/native-return.js" defer></script></html>''')
+
+    @app.get('/app/native-return.js')
+    async def login_return_script():
+        return Response('''"use strict";
+(() => {
+  const q = new URLSearchParams(location.search);
+  const valid = [...q.keys()].length === 2 && q.getAll("code").length === 1 &&
+    q.getAll("state").length === 1 && [q.get("code"), q.get("state")].every(
+      v => typeof v === "string" && /^[A-Za-z0-9_-]{43,128}$/.test(v));
+  const status = document.getElementById("status");
+  if (!valid || location.protocol !== "https:" || location.host !== "chat.yitiao.org") {
+    status.textContent = "登录回跳无效，请返回 App 重新发起登录。";
+    return;
+  }
+  const button = document.getElementById("return-app");
+  // No tokens, verifier, arbitrary component, package or fallback URL.
+  button.href = "intent://chat.yitiao.org/app/callback?code=" + q.get("code") +
+    "&state=" + q.get("state") +
+    "#Intent;scheme=https;package=org.yitiao.yichat.mobile;end";
+  button.hidden = false;
+  if (/Android/i.test(navigator.userAgent)) location.replace(button.href);
+})();
+''', media_type='application/javascript')
+
     @app.get('/app/return')
     async def fallback():
         # No JS, no rendering of query strings, no third-party resources or secrets.

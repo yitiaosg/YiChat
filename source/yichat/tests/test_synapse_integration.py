@@ -98,7 +98,7 @@ def test_native_matrix_enforces_policy_and_durable_recovery(synapse):
         blocked=h.post(s.synapse+'/_matrix/client/v3/createRoom',headers=raw,json={'is_direct':False});assert blocked.status_code==403,blocked.text
         result=c.post('/api/rooms',json={'kind':'direct','users':['bob']});assert result.status_code==200,result.text
         direct=result.json()['room_id'];room_path='/_matrix/client/v3/rooms/'+quote(direct,safe='')
-        joined=h.post(s.synapse+room_path+'/join',headers={'Authorization':'Bearer '+tokens['bob']['raw']},json={});assert joined.status_code==200,joined.text
+        joined=c.post('/api/rooms/'+quote(direct,safe='')+'/prepare',json={});assert joined.status_code==200,joined.text
         uploaded=c.post('/api/files/'+quote(direct,safe=''),content=b'OPAQUE_ATTACHMENT_BYTES');assert uploaded.status_code==200,uploaded.text
         fid=uploaded.json()['id']
         body={archive.ATTACHMENT_KEY:[fid],'algorithm':'m.megolm.v1.aes-sha2','ciphertext':'OPAQUE_CIPHERTEXT','session_id':'test','sender_key':'test','device_id':tokens['alice']['device']}

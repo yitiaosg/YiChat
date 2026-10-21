@@ -99,3 +99,35 @@ def test_uninstalled_fallback_never_reflects_code(native):
     c,*_=native
     r=c.get('/app/callback?code=secret&state=secret')
     assert r.status_code==200 and 'secret' not in r.text and r.headers['Referrer-Policy']=='no-referrer'
+
+def test_login_return_page_and_script_without_database():
+    from fastapi import FastAPI
+    from types import SimpleNamespace
+    from backend.native_auth import install
+    app=FastAPI()
+    install(app,SimpleNamespace(origin='https://chat.yitiao.org'))
+    with TestClient(app) as client:
+        page=client.get('/app/callback?code=untrusted-code&state=%3Cscript%3E')
+        assert page.status_code==200
+        assert 'untrusted-code' not in page.text and '<script>' not in page.text
+        assert 'id="return-app"' in page.text and '/app/native-return.js' in page.text
+        script=client.get('/app/native-return.js')
+        assert script.status_code==200 and script.headers['content-type'].startswith('application/javascript')
+        assert 'package=org.yitiao.yichat.mobile;end' in script.text
+        assert 'getAll("code").length === 1' in script.text
+
+def test_native_login_rejects_duplicate_query_fields(native):
+    c,app,s,p,v,authorize=native
+    duplicated=list(p.items())+[('state','x'*64)]
+    assert c.get('/auth/native/login',params=duplicated,follow_redirects=False).status_code==400
+
+def test_android_assetlinks_public_fixed_package_and_certificate(native):
+    c,*_=native
+    c.cookies.clear()
+    response=c.get('/.well-known/assetlinks.json',follow_redirects=False)
+    assert response.status_code==200
+    assert response.headers['content-type']=='application/json'
+    assert 'max-age=3600' in response.headers['cache-control']
+    target=response.json()[0]['target']
+    assert target['package_name']=='org.yitiao.yichat'
+    assert target['sha256_cert_fingerprints']==['6A:B2:1F:96:1A:37:35:69:C0:67:E0:48:E0:E0:E5:D3:8B:49:0D:07:D9:40:B9:74:A4:A3:29:05:F0:62:85:ED']

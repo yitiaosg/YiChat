@@ -483,3 +483,35 @@ Web 仅保存最后完成的服务器时间及房间游标；正常撤回检查�
 - 已入金订单取消返回409；不能撤销已入金的转账/红包。取消后的 fund 返回409“订单已取消，不再入金或发送”；如果与入金并发，只有一个事务成功，另一方返回409并查询原订单。403表示不是付款人/当前成员，401表示需要重新登录。
 - Web 确认页及授权返回弹窗提供“取消订单 → 确认取消订单”，另有“保留订单”返回确认前状态。关闭弹窗/返回修改不等于取消服务器订单。取消响应丢失时先 GET 原订单核实，只有服务器 confirmed cancelled 才终结本地业务操作；不发送资金卡片。已取消订单不继续轮询，不再显示授权/入金按钮。
 - App 应复用以上接口；不能把取消订单改成退款、撤回业务消息、仅本地删除或重新创建订单。
+
+## 17. Android 浏览器授权与回到 App（2026-10-20）
+
+- App 使用系统浏览器提供的 Custom Tabs，登录、两步验证和 YIDT 操作均由浏览器处理，不内嵌登录 WebView，也不读取浏览器 cookie。
+- `GET /auth/native/login` 只接受单个 state、nonce、code_challenge、code_challenge_method=S256、redirect_uri；随机值43～128字符，challenge43字符；redirect_uri 固定为聊天域名 `/app/callback`。现有主站 OAuth 回调验证签名、uid、SID 后，303到 `/app/callback?code=...&state=...`。不向 URL 写入长期 token。
+- `POST /auth/native/exchange` JSON 包含 code/state/nonce/code_verifier/固定 redirect_uri；拒绝浏览器 Origin、Sec-Fetch-Mode 和 yc_session。交换码60秒内一次性使用，绑定 PKCE、state、nonce、主站 UID/SID。返回 uid/user/mxid/device_id/token/device_proof/new_device/homeserver。恢复原设备须带同 UID 的 device_proof；不能单凭 device_id 打开旧密钥库。
+- `GET /.well-known/assetlinks.json` 公开发布受信 APK 包名及签名证书 SHA-256，200 application/json，无重定向，缓存1小时；这里只含公钥证书指纹。HTTPS App Links 仅匹配 `/app/callback`、`/app/return`。修复版 `org.yitiao.yichat.mobile` 可与旧候选版并存，保护旧 App 的数据及密钥。
+- `GET /api/wallet` 对原生设备返回 `bind_url=https://yidt.yitiao.org/services/yichat/?client=android`；绑定经过原登录/CSRF/PIN 校验后回固定 `/app/return`，只触发 App 查询绑定状态。网页原地址与返回保持原样。
+- 原生订单使用 `/app/return?order={id}` 返回；YIDT 批准只带原订单引用，App 查询权威状态后仍须用户明确 fund。返回、查看、预览不扣款。取消沿用第16节。
+- `POST/GET /api/native/rooms/{room}/transactions/{txn}` 为原生 SDK txn 登记/查询 attachments、business 引用。必须是本人原生设备及当前房间权限；附件仅本人在该房间有效上传，业务引用依原业务记录校验；不同元数据复用 txn 返回409。网关只添加最小外层引用，不改 SDK 密文，不存解密密钥，不重新执行资产操作。
+- 附加表 native_logins/native_codes/native_devices/native_transactions 由幂等迁移创建；不删除原账号、设备、密钥、归档或资金记录。原生 SDK 与业务请求在网关按 UID 共享约6次/秒准入及429冷却，现有10次/秒最终限制保留。
+
+
+## 18. 2026-10-21 正式版增量
+
+群号/角色与管理、私聊自动加入和首条消息可见性、主站资料社交、撤回原始密文证明，见仓库根目录 PRODUCTION-20261021.md 的接口表及权限说明。红包最低本金按份数×0.01；份数不超过当前群成员数，入金时重查；发送者承担 (份数+1)×每笔 gas。
+
+### 18.1 群头像与登录设备（2026-10-21）
+
+群主在详情页选择/移除头像。`POST /api/groups/{room}/avatar` 接收最多2MB实际图片流，共用上传限速、并发和额度；在读正文前及上传过程中复核群主/成员/SID。PNG/JPEG/WebP 解码为去元数据的 256×256 PNG，返回 id；`POST /api/groups/{room}/manage` 的 `action:avatar,key,image:id|null` 以幂等操作发布原生 m.room.avatar。原生未获内容哈希授权的 avatar 写入均拒绝。`GET /api/groups/{room}/avatar/{id}` 仅当前成员读取当前头像，不提供旧图历史或私聊附件访问旁路。
+
+Chat 不再提供设备 SAS 验证。主站 `/account/` 的登录设备管理通过带 CSRF 的 `POST /account/devices/revoke/` 撤销本人的指定主站 SID 或其他所有 SID。对应 YiChat 每次认证及同步长轮询返回前复核；前台约30秒检查，focus/联网时检查。退出仅撤销令牌/锁定本地数据，不删除 Matrix 设备、历史密钥或归档。
+
+### 18.2 App 连续日记录核验（2026-10-21）
+
+`POST /api/records/verify` 请求精确字段 `{room,start,end,days:[{day,count,sha256,complete}]}`；start/end 为 ISO UTC 连续1至5日。正文、私钥、完整文件及多余字段均拒绝。返回 `{format:"yichat-record-digests-v1",room,days:[{day,state,server_count,sha256,error}]}`，state 为 ok/mismatch/incomplete/not_sealed/forbidden/quarantined/unavailable。全日历史权限、封存状态及缺口规则与每日归档一致。
+
+新原包核验摘要独立于两个不变的 ZIP 规格：排序键紧凑 UTF-8 JSON + LF 的头 `{day,format:"yichat-record-digests-v1",room_id,version:1}`，随后 sequence/event_id 排序的 `{event_id,received_ms,redacts,room_id,sender,sequence,sha256,type}`；sha256 是接受时规范化原事件包（含 E2EE 密文）的可信 SHA。只包含 m.room.message、m.room.encrypted、m.room.redaction，保留撤回前原包及撤回记录。整个字节流 SHA-256，空日仍包含日期头。根摘要由服务端存证生成，绑定 events-manifest ZIP SHA，在清理原实体前保留。旧实体已清理且无此摘要不允许从客户端回填，明确 unavailable。
+
+`POST /api/records/verify-files` 请求 `{room,start,end,days:[{day,spec,bytes,sha256}]}`，spec 为两种既有归档规格，返回 `format:yichat-archive-v1` 与每日 state/sha256/bytes。仅传本地计算的文件摘要，服务端按全日权限与已封存根比对；实体已清理但可信根保留时仍可核验本地 ZIP。
+
+App 在核验通过后独立只读显示对应原消息包；私聊先本地验证用户输入的 Matrix 恢复密钥，再恢复标准加密密钥备份并本地解密，不上传密钥或正文。文件模式支持同一会话连续1至5个统一每日 ZIP（单文件<=100MB，事件文本<=20MB），与内部原包模式分开。`.ycb` 口令快照不是统一每日 ZIP。本页不导入实时会话、不恢复/发送旧消息、不将普通实时消息标记成已校验。失败、缺包、无权限、未封存不展示为可信。退出清空页面中核验数据与明文。

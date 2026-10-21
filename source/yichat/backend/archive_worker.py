@@ -49,6 +49,9 @@ def cleanup_entities(s,room,day,now_ms,crash=None):
         c.execute('SELECT pg_advisory_xact_lock(17919,1)')
         rows=c.execute('SELECT * FROM archive_audit WHERE room=%s AND day=%s AND version=1 FOR UPDATE',(room,day)).fetchall()
         if not rows or not all(r['history_done'] for r in rows):return False
+        from .record_audit import seal_digest
+        bound=c.execute("SELECT sha256 FROM archives WHERE room=%s AND day=%s AND version=1 AND spec='events-manifest'",(room,day)).fetchone()
+        seal_digest(s,c,room,day,bound['sha256'])
         c.execute('UPDATE archive_audit SET cleanup_started_at=coalesce(cleanup_started_at,now()) WHERE room=%s AND day=%s AND version=1',(room,day))
         c.commit()
         c.execute('SELECT pg_advisory_xact_lock(17919,1)')

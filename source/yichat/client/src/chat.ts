@@ -4,6 +4,7 @@ import {sdkLog} from './log';
 import { requests, path, codepoints, shareUrls } from './api';
 import { Vault } from './vault';
 import {History} from './history';
+import {isApp,appCall} from './app';
 export type RoomInfo={room:string;kind:'direct'|'group';owner:string;peer:string|null;encryption:'direct'|'plain'|'legacy_encrypted'};
 export type Outgoing={txn:string;room:string;content:any;attachments:string[];state:'sending'|'failed';error?:string;time:number};
 export type Profile={mxid:string;username:string;nickname:string;biography?:string;avatar_url?:string;profile_url?:string};
@@ -12,14 +13,15 @@ class MessagingClient extends sdk.MatrixClient {protected canSupportVoip=false;}
 export class Chat {
   client!:sdk.MatrixClient; history=new History(this);private historyStarted=false; session:any;vault=new Vault();businessVault=new Vault();phase='loading';error='';sync='正在连接';
   rooms: sdk.Room[]=[];info=new Map<string,RoomInfo>();profiles=new Map<string,Profile>();outbox:Outgoing[]=[];business:any[]=[];
-  verification:any; sas:any;verificationStatus='';backupRemaining:number|null=null;private recovery?:Uint8Array;private keys=new Map<string,Uint8Array>();
+  backupRemaining:number|null=null;private recovery?:Uint8Array;private keys=new Map<string,Uint8Array>();
+  offline=false;private saveTimer?:ReturnType<typeof setTimeout>;
   private listeners=new Set<()=>void>();private release?:()=>void;private closed=false;private cryptoInit?:Promise<void>;private refreshTimer?:ReturnType<typeof setTimeout>;private channel?:BroadcastChannel;
   readonly outer=new Map<string,string[]>();private outerBusiness=new Map<string,any>();private profileTimes=new Map<string,number>();private inflight=new Set<string>();private profileFlight?:Promise<void>;
   private encryptionReady=new Map<string,Promise<void>>();
   subscribe=(fn:()=>void)=>{this.listeners.add(fn);return()=>this.listeners.delete(fn)};
   changed=()=>{for(const fn of this.listeners)fn()};
   async boot(){
-    requests.onUnauthorized=()=>this.lock('login');
+    requests.onUnauthorized=()=>{if(isApp)void appCall('lock').catch(()=>{});this.lock('login')};
     try{
       if(!navigator.locks||!window.indexedDB||!window.isSecureContext)throw Error('此浏览器需要 HTTPS、IndexedDB 和 Web Locks 才能安全保存加密密钥。请使用新版浏览器。');
       const active=await new Promise<boolean>((resolve)=>{
@@ -30,18 +32,31 @@ export class Chat {
       });
       if(!active){this.phase='other-tab';this.changed();return}
       this.channel=new BroadcastChannel('yc:lifecycle');this.channel.onmessage=e=>{if(e.data==='logout')this.lock('login');if(e.data==='release')this.lock('other-tab')};
-      this.session=await requests.api('/api/session');
+      const app=isApp?await appCall('session'):undefined;
+      if(isApp&&!app.session){this.phase='login';this.error=app.pendingLogout?'已锁定本地数据，服务器退出将在联网后完成。':'';this.changed();return}
+      if(app?.session)requests.token=app.session.token;
+      if(app?.session&&(!app.online||!navigator.onLine)){this.session=app.session;this.offline=true}
+      else {
+        const controller=new AbortController(),timer=isApp?setTimeout(()=>controller.abort(),8000):undefined;
+        try{this.session=await requests.api('/api/session',undefined,undefined,controller.signal)}
+        catch(e:any){if(!isApp||!app?.session||e.status===401)throw e;this.session=app.session;this.offline=true}
+        finally{clearTimeout(timer)}
+      }
       if(this.closed)return;requests.scope=this.session.uid||this.session.mxid;requests.token=this.session.token;
       const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode([this.session.uid,this.session.mxid,this.session.device_id].join('|')));
       if(this.closed)return;
       const scope=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
       await this.vault.open(scope);if(this.closed){this.vault.close();return}this.outbox=(await this.vault.outbox()).map((x:Outgoing)=>({...x,state:'failed',error:'上次发送结果未知；重试将沿用原事务 ID'}));if(this.closed)return;await this.businessVault.open('account:'+this.session.uid+':business');if(this.closed){this.businessVault.close();return}this.business=await this.businessVault.business();
       if(this.closed)return;
-      const marker=await this.vault.get('rust-initialized');const existing=await requests.api('/_matrix/client/v3/keys/query',{device_keys:{[this.session.mxid]:[this.session.device_id]}});if(this.closed)return;
+      if(isApp){const cached=await this.businessVault.state('app-ui');if(cached){this.info=new Map(cached.info);this.profiles=new Map(cached.profiles)}}
+      const marker=await this.vault.get('rust-initialized');
+      if(this.offline&&!marker)throw Error('首次加密初始化尚未完成，请联网后继续；已存在的密钥不会删除。');
+      const existing=this.offline?{}:await requests.api('/_matrix/client/v3/keys/query',{device_keys:{[this.session.mxid]:[this.session.device_id]}});if(this.closed)return;
       const databases=typeof indexedDB.databases==='function'?await indexedDB.databases():null;
       if(existing.device_keys?.[this.session.mxid]?.[this.session.device_id]&&(!marker||(databases&&!databases.some(db=>db.name?.startsWith('yc-rust:'+scope)))))throw Error('此设备的本地加密存储缺失。请重新授权登录以创建新设备，再恢复历史密钥；原设备和备份会保留。');
       if(this.closed)return;
-      this.client=new MessagingClient({store:new sdk.MemoryStore(),logger:sdkLog,baseUrl:location.origin,accessToken:this.session.token,userId:this.session.mxid,deviceId:this.session.device_id,
+      const store=isApp?new sdk.IndexedDBStore({indexedDB,localStorage,dbName:'yc-sync:'+scope}):new sdk.MemoryStore();
+      this.client=new MessagingClient({store,logger:sdkLog,baseUrl:location.origin,accessToken:this.session.token,userId:this.session.mxid,deviceId:this.session.device_id,
         fetchFn:async(input,init={})=>{
           const url=String(input),txn=decodeURIComponent(url.split('?')[0].split('/').at(-1)||'');const ids=this.outer.get(txn),business=this.outerBusiness.get(txn);
           if((ids?.length||business)&&/\/send\//.test(url)&&typeof init.body==='string')init={...init,body:JSON.stringify({...JSON.parse(init.body),...(ids?.length?{'org.yitiao.attachments':ids}:{}),...(business?{'org.yitiao.business':business}:{})})};
@@ -50,25 +65,30 @@ export class Chat {
         cryptoCallbacks:{
           getSecretStorageKey:async({keys})=>{for(const id of Object.keys(keys)){const k=this.keys.get(id)||this.recovery;if(k)return [id,k]}throw Error('请在安全设置中输入恢复密钥以解锁备份')},
           cacheSecretStorageKey:(id,_info,key)=>{this.keys.set(id,key)}
-        },verificationMethods:['m.sas.v1']});
+        },verificationMethods:[]});
+      if(isApp)await store.startup();
       this.cryptoInit=this.client.initRustCrypto({useIndexedDB:true,cryptoDatabasePrefix:'yc-rust:'+scope,storageKey:this.vault.storageKey});await this.cryptoInit;this.cryptoInit=undefined;if(this.closed){this.client.stopClient();return}await this.vault.set('rust-initialized',true);if(this.closed){this.client.stopClient();return}
       this.client.on(sdk.ClientEvent.Sync,(state,_prev,data)=>{
-        this.sync=state==='PREPARED'||state==='SYNCING'?'已连接':state==='ERROR'?'连接中断，正在重试':'正在同步';
-        if(state==='PREPARED'){this.phase='ready';void this.refresh().then(()=>{if(!this.historyStarted&&!this.closed){this.historyStarted=true;return this.history.start()}}).catch(e=>this.fail(e))}if(data?.error&&(data.error as any).httpStatus===401)this.lock('login');this.updateRooms();
+        const reconnect=isApp&&this.offline&&state==='SYNCING';if(reconnect)this.offline=false;
+        this.sync=this.offline?'离线 · 本机缓存':state==='PREPARED'||state==='SYNCING'?'已连接':state==='ERROR'?'连接中断，正在重试':'正在同步';
+        if(state==='PREPARED'||reconnect){this.phase='ready';if(!this.offline)void this.refresh().then(()=>{if(!this.historyStarted&&!this.closed){this.historyStarted=true;return this.history.start()}}).catch(e=>this.fail(e))}if(data?.error&&(data.error as any).httpStatus===401)this.lock('login');this.updateRooms();
+        if(isApp&&['PREPARED','SYNCING'].includes(state)){clearTimeout(this.saveTimer);this.saveTimer=setTimeout(()=>void store.save(true).catch(()=>{}),1200)}
       });
       const update=()=>{this.updateRooms()};
-      this.client.on(sdk.RoomEvent.Timeline,update);this.client.on(sdk.RoomEvent.Name,update);this.client.on(sdk.RoomEvent.Receipt,update);this.client.on(sdk.RoomEvent.Redaction,update);
+      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update()});this.client.on(sdk.RoomEvent.Timeline,update);this.client.on(sdk.RoomEvent.Name,update);this.client.on(sdk.RoomEvent.Receipt,update);this.client.on(sdk.RoomEvent.Redaction,update);
       this.client.on(sdk.MatrixEventEvent.Decrypted,update);this.client.on(sdk.RoomEvent.MyMembership,()=>{this.scheduleRefresh();update()});this.client.on(sdk.ClientEvent.Room,()=>{this.scheduleRefresh();update()});
       this.client.on('crypto.keyBackupSessionsRemaining' as any,(count:number)=>{this.backupRemaining=count;this.changed()});
-      this.client.on('crypto.verificationRequestReceived' as any,(request:any)=>this.watchVerification(request));
+
       await this.client.startClient({initialSyncLimit:40,lazyLoadMembers:true,pendingEventOrdering:sdk.PendingEventOrdering.Detached});
+      if(isApp){window.addEventListener('yc:background',()=>void store.save(true).catch(()=>{}));if(this.offline){this.phase='ready';this.sync='离线 · 本机缓存';this.history.status='离线 · 撤回更新待联网核对';this.changed()}}
+      this.watchSession();
       window.addEventListener('pagehide',()=>this.lock('loading'),{once:true});
     }catch(e:any){if(!this.closed){this.phase='error';this.error=e.message;this.changed()}}
   }
   fail(e:any){if(e?.name!=='AbortError'){this.error=e.message||String(e);this.changed()}}
   updateRooms(){if(!this.client||this.closed)return;this.rooms=this.client.getRooms().filter(r=>['join','invite'].includes(r.getMyMembership())).sort((a,b)=>b.getLastActiveTimestamp()-a.getLastActiveTimestamp());this.changed()}
-  scheduleRefresh(){clearTimeout(this.refreshTimer);this.refreshTimer=setTimeout(()=>void this.refresh().catch(e=>this.fail(e)),800)}
-  async refresh(){const rows:RoomInfo[]=await requests.single('rooms',()=>requests.api('/api/rooms'));if(this.closed)return;this.info=new Map(rows.map(r=>[r.room,r]));this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))])}
+  scheduleRefresh(){if(this.offline||this.closed)return;clearTimeout(this.refreshTimer);this.refreshTimer=setTimeout(()=>void this.refresh().catch(e=>this.fail(e)),800)}
+  async refresh(){const rows:RoomInfo[]=await requests.single('rooms',()=>requests.api('/api/rooms'));if(this.closed)return;this.info=new Map(rows.map(r=>[r.room,r]));this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles]})}
   async loadProfiles(mxids:string[],usernames:string[]=[]):Promise<void>{
     const missing=[...new Set(mxids)].filter(id=>!this.profiles.has(id)||(this.profileTimes.get(id)||0)<Date.now()-300000).slice(0,100);if(!missing.length)return;
     if(this.profileFlight){await this.profileFlight;return this.loadProfiles(mxids,usernames)}
@@ -131,6 +151,7 @@ export class Chat {
   private async prepareEncryption(id:string){
     let ready=this.encryptionReady.get(id);
     if(!ready){ready=(async()=>{
+      if(this.info.get(id)?.kind==='direct')await requests.api('/api/rooms/'+path(id)+'/prepare',{});
       const room=this.client.getRoom(id);if(!room)throw Error('加密会话尚未同步');
       // MemoryStore has no roster after a page return. Read current accepted
       // membership events (without the earlier sync token) before key sharing.
@@ -182,22 +203,24 @@ export class Chat {
     await api.checkKeyBackupAndEnable();this.changed();
   }
   async restoreBackup(encoded:string){
-    this.recovery=decodeRecoveryKey(encoded);const api=this.client.getCrypto()!;
+    const decoded=decodeRecoveryKey(encoded),entry=await this.client.secretStorage.getKey();
+    if(!entry||entry[1].algorithm!=='m.secret_storage.v1.aes-hmac-sha2'||!await this.client.secretStorage.checkKey(decoded,entry[1] as any)){decoded.fill(0);throw Error('恢复密钥不匹配此账户的密钥备份')}
+    this.recovery?.fill(0);this.recovery=decoded;this.keys.set(entry[0],decoded.slice());const api=this.client.getCrypto()!;
     await api.bootstrapCrossSigning({authUploadDeviceSigningKeys:async request=>{await request({})}});
     await api.loadSessionBackupPrivateKeyFromSecretStorage();await api.checkKeyBackupAndEnable();const result=await api.restoreKeyBackup();await this.history.retryDecrypt();
     this.changed();return result;
   }
-  watchVerification(request:any){this.verification=request;this.verificationStatus='请在两台设备上核对验证数字';this.sas=undefined;
-    request.on('change',()=>{if(request.verifier)this.watchVerifier(request.verifier);if(request.phase===6)this.verificationStatus='设备验证成功';if(request.phase===5)this.verificationStatus='验证已取消';this.changed()});if(request.verifier)this.watchVerifier(request.verifier);this.changed();
+  private sessionCheckTimer?:ReturnType<typeof setTimeout>;
+  private sessionCheck?:()=>void;
+  private watchSession(){
+    let busy=false;
+    const check=async()=>{if(this.closed||busy)return;clearTimeout(this.sessionCheckTimer);if(document.hidden||!navigator.onLine){this.sessionCheckTimer=setTimeout(()=>void check(),30000);return}busy=true;try{await requests.single('session-check',()=>requests.api('/api/session'))}catch{/* 401 locks via the shared request handler; offline retries remain quiet. */}finally{busy=false;if(!this.closed)this.sessionCheckTimer=setTimeout(()=>void check(),30000)}};
+    this.sessionCheck=()=>{void check()};this.sessionCheckTimer=setTimeout(this.sessionCheck,30000);
+    window.addEventListener('focus',this.sessionCheck);window.addEventListener('online',this.sessionCheck);document.addEventListener('visibilitychange',this.sessionCheck);
   }
-  private watched=new WeakSet<object>();
-  watchVerifier(verifier:any){if(this.watched.has(verifier))return;this.watched.add(verifier);verifier.on('show_sas',(sas:any)=>{this.sas=sas;this.changed()});void verifier.verify().then(()=>{this.verificationStatus='设备验证成功';this.sas=undefined;this.changed()}).catch((e:any)=>{this.verificationStatus=e.message;this.sas=undefined;this.changed()})}
-  async beginVerification(user:string,device:string){this.watchVerification(await this.client.getCrypto()!.requestDeviceVerification(user,device))}
-  async acceptVerification(){await this.verification.accept();this.changed()}
-  async startVerification(){this.watchVerifier(await this.verification.startVerification('m.sas.v1'))}
-  async logout(){this.client?.stopClient();try{await requests.api('/api/logout',{})}catch(e:any){this.error='退出请求未确认，请到主站账户退出以撤销全部关联会话：'+e.message}finally{if(!this.closed)this.channel?.postMessage('logout');this.lock('login')}}
+  async logout(){this.client?.stopClient();if(isApp){const revoke=appCall('logout');this.lock('login');const result=await revoke;if(result?.pending){this.error='本地数据已锁定，服务器退出将在联网后重试。';this.changed()}return}try{await requests.api('/api/logout',{})}catch(e:any){this.error='退出请求未确认，请到主站账户退出以撤销全部关联会话：'+e.message}finally{if(!this.closed)this.channel?.postMessage('logout');this.lock('login')}}
   takeOver(){const c=new BroadcastChannel('yc:lifecycle');c.postMessage('release');c.close();setTimeout(()=>location.reload(),700)}
-  lock(phase:string){if(this.closed)return;this.closed=true;this.phase=phase;this.client?.stopClient();this.history.stop();requests.close();this.recovery?.fill(0);for(const key of this.keys.values())key.fill(0);this.keys.clear();this.encryptionReady.clear();this.outbox=[];this.business=[];this.rooms=[];this.info.clear();this.profiles.clear();this.profileTimes.clear();this.session=undefined;this.channel?.close();clearTimeout(this.refreshTimer);const finalize=()=>{this.client?.stopClient();this.vault.close();this.businessVault.close();this.release?.()};if(this.cryptoInit)void this.cryptoInit.then(finalize,finalize);else finalize();this.changed();window.dispatchEvent(new Event('yc:locked'))}
+  lock(phase:string){if(this.closed)return;this.closed=true;clearTimeout(this.sessionCheckTimer);if(this.sessionCheck){window.removeEventListener('focus',this.sessionCheck);window.removeEventListener('online',this.sessionCheck);document.removeEventListener('visibilitychange',this.sessionCheck)}this.phase=phase;this.client?.stopClient();this.history.stop();requests.close();this.recovery?.fill(0);for(const key of this.keys.values())key.fill(0);this.keys.clear();this.encryptionReady.clear();this.outbox=[];this.business=[];this.rooms=[];this.info.clear();this.profiles.clear();this.profileTimes.clear();this.session=undefined;this.channel?.close();clearTimeout(this.refreshTimer);clearTimeout(this.saveTimer);const finalize=()=>{this.client?.stopClient();this.vault.close();this.businessVault.close();this.release?.()};if(this.cryptoInit)void this.cryptoInit.then(finalize,finalize);else finalize();this.changed();window.dispatchEvent(new Event('yc:locked'))}
 }
 export const chat=new Chat();
 export {sdk};

@@ -1,0 +1,3 @@
+First long-running Android fixture reached its configured 3600-second hold limit during emulator troubleshooting and failed teardown. This is not counted as an acceptance pass.
+Original runtime log retained privately at /tmp/yichat-android-fixture.log; it is excluded from public source to avoid publishing runtime fixture configuration.
+The second fixture uses a bounded 7200-second hold and fresh isolated databases.

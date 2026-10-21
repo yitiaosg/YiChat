@@ -1,3 +1,7 @@
+> 历史原生候选版资料。0.2.0 已改为独立 WebView，共用聊天网页；当前架构、部署、安全边界和实际测试请先看根目录 WEB-APP-REFACTOR.md / ARCHITECTURE.md。
+
+> 2026-10-20 接力修复：当前版本为 0.1.1 / code 3、可并存包 `org.yitiao.yichat.mobile`。当前部署、下载及验证以根目录 [BROWSER-LOGIN-FIX.md](../../BROWSER-LOGIN-FIX.md) 为准。以下候选版记录保留为历史，原 APK 链接不是本次修复包。
+
 # 原生适配部署与回滚
 
 本交付没有生产主机权限、环境文件、主站/网关凭据，也没有执行生产部署。不要把本地签名 APK 或隔离 OAuth 测试描述成生产原生登录已开通。

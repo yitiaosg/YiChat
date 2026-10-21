@@ -1,0 +1,30 @@
+[
+  {
+    "name": "org.yitiao.yichat.PacketBackupTest",
+    "tests": "1",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "org.yitiao.yichat.WebRoutesTest",
+    "tests": "2",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "org.yitiao.yichat.GatewayRecoveryTest",
+    "tests": "3",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "org.yitiao.yichat.BrowserUrlsTest",
+    "tests": "1",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  }
+]

@@ -1,0 +1,9 @@
+CHECK shared mobile frontend and restricted framework selection
+CHECK two isolated accounts synchronize and exchange encrypted private message
+CHECK refresh preserves JS crypto and cached conversation
+CHECK group continues to send plaintext through shared frontend
+CHECK attachment download uses chunked App file bridge
+CHECK offline reload keeps framework, conversation and decrypted cached messages
+CHECK App-only backup panel validates whole days and invokes directory bridge
+CHECK reconnection resumes synchronization
+PASS 8

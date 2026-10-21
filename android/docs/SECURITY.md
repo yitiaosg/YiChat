@@ -1,3 +1,5 @@
+> 历史原生候选版资料。0.2.0 已改为独立 WebView，共用聊天网页；当前架构、部署、安全边界和实际测试请先看根目录 WEB-APP-REFACTOR.md / ARCHITECTURE.md。
+
 # 本地数据与边界
 
 - UID、用户名、MXID、device_id分别存储；SID只由网关验证，不把设备ID当SID。网关 Bearer及设备证明使用 Android Keystore AES-GCM包装；不读取浏览器cookie、不接收用户粘贴token。

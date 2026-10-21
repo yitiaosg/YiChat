@@ -255,6 +255,8 @@ def seal_day(s,room,day,spec,now_ms=None,crash=None):
             result=c.execute('INSERT INTO archives(room,day,version,spec,sha256,bytes,event_count,first_sequence,last_sequence,attachment_sha256,state,permission_spec,fence_sequence) VALUES(%s,%s,1,%s,%s,%s,%s,%s,%s,%s,\'sealed\',%s,%s) RETURNING *',
                 (room,day,spec,digest,size,count,first,last,manifest_hash,PERMISSION_SPEC,fence['sequence'])).fetchone()
             c.execute('INSERT INTO archive_audit(room,day,version,spec,checked_at) VALUES(%s,%s,1,%s,now())',(room,day,spec))
+            from .record_audit import seal_digest
+            if spec=='events-manifest':seal_digest(s,c,room,day,result['sha256'])
             return result
         finally:
             Path(tmp).unlink(missing_ok=True)
