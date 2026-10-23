@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'preact/hooks';
-import {ExternalLink,RefreshCw,Gift,ArrowUpRight,ArrowLeftRight,CheckCircle2} from 'lucide-preact';
+import {ExternalLink,RefreshCw,Gift,ArrowUpRight,ArrowLeftRight,CheckCircle2,ChevronRight} from 'lucide-preact';
 import {requests,decimal,path} from './api';
 import {chat} from './chat';
 import {useVisible,rendererScript,ErrorText,Modal} from './shared';
@@ -85,8 +85,16 @@ export function ShareCard({url,room,receiptSender}:{url:string;room:string;recei
  {data?.type!=='order'&&<a class="share-original" href={url} target="_blank" rel="noopener noreferrer">打开原链接 <ArrowUpRight size={14}/></a>}</div>
 }
 export function GiftCard({id,room}:{id:string;room:string}){
- const {ref,visible}=useVisible(),[gift,setGift]=useState<any>(),[error,setError]=useState('');
- async function load(){setError('');try{setGift(await requests.single('gift:'+room+':'+id,()=>requests.api('/api/cards/gifts/'+path(id)+'?room='+path(room))))}catch(e:any){setError(e.message)}}
- useEffect(()=>{if(visible&&!gift&&!error)void load()},[visible]);
- return <div ref={ref} class="share-card gift-card">{gift?<>{visible&&<CardArt data={gift.card}/>}<div class="share-content"><div class="share-eyebrow">YCARD · 赠送已完成</div><h3>{gift.card.name}</h3><p>{gift.sender} → {gift.recipient}</p><p class="small">{new Date(gift.created*1000).toLocaleString()} · {gift.snapshot?'赠送时卡面快照':'当前可读取卡面'}</p><p class="small">{gift.card.cid}</p></div></>:<div class="share-content"><p>{error||'正在获取赠卡实物预览…'}</p>{error&&<button type="button" onClick={load}>重试赠卡预览</button>}</div>}</div>
+ const {ref,visible}=useVisible(),[gift,setGift]=useState<any>(),[error,setError]=useState(''),[open,setOpen]=useState(false),[destroyed,setDestroyed]=useState(false);
+ async function load(){setError('');try{const value=await requests.single('gift:'+room+':'+id,()=>requests.api('/api/cards/gifts/'+path(id)+'?room='+path(room)));if(value.id!==id||value.room!==room||value.state!=='transferred')throw Error('赠卡记录与当前会话不匹配');setDestroyed(false);setGift(value)}catch(e:any){setGift(undefined);setOpen(false);setDestroyed(e.status===410);setError(e.message)}}
+ useEffect(()=>{if(!visible)return;const refresh=()=>{if(!document.hidden)void load()};refresh();const timer=setInterval(refresh,20000);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);return()=>{clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh)}},[visible,id,room]);
+ return <div ref={ref} class="gift-message" data-gift-id={id}>
+  <div class="gift-bubble">
+   <div class="gift-heading"><span class="gift-icon"><Gift size={21}/></span><strong>赠送卡片</strong><span class="gift-state">{gift?'已赠送':destroyed?'已销毁':error?'暂不可用':'核实中'}</span></div>
+   <div class="gift-art">{gift&&visible?<CardArt data={gift.card}/>:<div class="card-art gift-placeholder"><Gift size={32}/><span>{destroyed?'卡片已销毁':error?'卡片预览暂不可用':gift?'YCard 卡片预览':'正在获取卡片…'}</span></div>}</div>
+   <div class="gift-summary">{gift?<><h3>{gift.card.name}</h3><p>{gift.sender} → {gift.recipient}</p></>:<p class="muted">{error||'正在核实赠送记录…'}</p>}{error&&!destroyed&&<button type="button" class="text-button" onClick={load}>重试赠卡预览</button>}</div>
+   <button type="button" class="gift-footer" disabled={!gift} aria-label="查看赠卡详情" onClick={()=>setOpen(true)}><span>YCard · {gift?'赠送已完成':'赠卡消息'}</span><span>查看详情 <ChevronRight size={14}/></span></button>
+  </div>
+  {open&&gift&&<Modal title="赠卡详情" close={()=>setOpen(false)}><CardArt data={gift.card}/><h3 class="gift-detail-title">{gift.card.name}</h3><p>{gift.sender} → {gift.recipient}</p><p class="small muted">{new Date(gift.created*1000).toLocaleString()} · 当前卡片</p><p class="small gift-cid">{gift.card.cid}</p></Modal>}
+ </div>
 }

@@ -4,6 +4,7 @@ import {sdkLog} from './log';
 import { requests, path, codepoints, shareUrls } from './api';
 import { Vault } from './vault';
 import {History} from './history';
+import {giftId} from './gifts';
 import {isApp,appCall} from './app';
 export type RoomInfo={room:string;kind:'direct'|'group';owner:string;peer:string|null;encryption:'direct'|'plain'|'legacy_encrypted';membership?:string;peer_deleted?:boolean;revision?:number;has_messages?:boolean;dissolved_at?:number|null};
 export type Outgoing={txn:string;room:string;content:any;attachments:string[];state:'sending'|'failed';error?:string;time:number};
@@ -75,6 +76,7 @@ export class Chat {
         const reconnect=isApp&&this.offline&&state==='SYNCING';if(reconnect)this.offline=false;
         this.sync=this.offline?'离线 · 本机缓存':state==='PREPARED'||state==='SYNCING'?'已连接':state==='ERROR'?'连接中断，正在重试':'正在同步';
         if(state==='PREPARED'||reconnect){this.phase='ready';if(!this.offline)void this.refresh().then(()=>{if(!this.historyStarted&&!this.closed){this.historyStarted=true;return this.history.start()}}).catch(e=>this.fail(e))}if(data?.error&&(data.error as any).httpStatus===401)this.lock('login');this.updateRooms();
+        if(isApp&&state==='SYNCING'&&!data?.catchingUp)void this.history.retryDecrypt();
         if(isApp&&['PREPARED','SYNCING'].includes(state)){clearTimeout(this.saveTimer);this.saveTimer=setTimeout(()=>void store.save(true).catch(()=>{}),1200)}
       });
       const update=()=>{this.updateRooms()};
@@ -153,6 +155,7 @@ export class Chat {
     const encrypted=!!r?.hasEncryptionStateEvent();
     if(info.encryption!=='plain'&&!encrypted)throw Error('端到端加密尚未就绪，已阻止明文发送');
     if(info.encryption==='plain'&&encrypted)throw Error('服务端会话策略与加密状态不一致，请重新同步');
+    const gift=giftId(content);if(gift&&!content['org.yitiao.business'])content={...content,'org.yitiao.business':{kind:'gift',id:gift}};
     if(!content['org.yitiao.business'])for(const url of shareUrls(content.body||'')){const match=url.match(/^https:\/\/chat\.yitiao\.org\/orders\/([A-Za-z0-9_-]{32})$/);if(match)try{const order=await requests.api('/api/orders/'+path(match[1]));if(order.room===room){content['org.yitiao.business']={kind:'order',id:order.id};break}}catch{}}
     let row=this.outbox.find(x=>x.txn===txn);if(!row){row={txn,room,content,attachments,state:'sending',time:Date.now()};this.outbox.push(row)}
     row.state='sending';row.error=undefined;await this.persist();return this.dispatch(row);
@@ -228,15 +231,15 @@ export class Chat {
     const decoded=decodeRecoveryKey(encoded),entry=await this.client.secretStorage.getKey();
     if(!entry||entry[1].algorithm!=='m.secret_storage.v1.aes-hmac-sha2'||!await this.client.secretStorage.checkKey(decoded,entry[1] as any)){decoded.fill(0);throw Error('恢复密钥不匹配此账户的密钥备份')}
     this.recovery?.fill(0);this.recovery=decoded;this.keys.set(entry[0],decoded.slice());const api=this.client.getCrypto()!;
-    await api.bootstrapCrossSigning({authUploadDeviceSigningKeys:async request=>{await request({})}});
-    await api.loadSessionBackupPrivateKeyFromSecretStorage();await api.checkKeyBackupAndEnable();const result=await api.restoreKeyBackup();await this.history.retryDecrypt();
-    this.changed();return result;
+    // Restoring Megolm backup must not reset or depend on cross-signing setup.
+    await api.loadSessionBackupPrivateKeyFromSecretStorage();await api.checkKeyBackupAndEnable();const result=await api.restoreKeyBackup();const decryption=await this.history.retryDecrypt();
+    this.changed();return {...result,decryption};
   }
   private sessionCheckTimer?:ReturnType<typeof setTimeout>;
   private sessionCheck?:()=>void;
   private watchSession(){
     let busy=false;
-    const check=async()=>{if(this.closed||busy)return;clearTimeout(this.sessionCheckTimer);if(document.hidden||!navigator.onLine){this.sessionCheckTimer=setTimeout(()=>void check(),30000);return}busy=true;try{await requests.single('session-check',()=>requests.api('/api/session'));await this.refresh()}catch{/* 401 locks via the shared request handler; offline retries remain quiet. */}finally{busy=false;if(!this.closed)this.sessionCheckTimer=setTimeout(()=>void check(),30000)}};
+    const check=async()=>{if(this.closed||busy)return;clearTimeout(this.sessionCheckTimer);if(document.hidden||!navigator.onLine){this.sessionCheckTimer=setTimeout(()=>void check(),30000);return}busy=true;this.client?.retryImmediately();try{await requests.single('session-check',()=>requests.api('/api/session'));await this.refresh()}catch{/* 401 locks via the shared request handler; offline retries remain quiet. */}finally{busy=false;if(!this.closed)this.sessionCheckTimer=setTimeout(()=>void check(),30000)}};
     this.sessionCheck=()=>{void check()};this.sessionCheckTimer=setTimeout(this.sessionCheck,30000);
     window.addEventListener('focus',this.sessionCheck);window.addEventListener('online',this.sessionCheck);document.addEventListener('visibilitychange',this.sessionCheck);
   }

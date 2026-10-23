@@ -671,6 +671,11 @@ def create_app(settings=None):
     @app.get('/sw.js')
     async def retire_worker():
         return FileResponse(Path(__file__).parent.parent/'web'/'sw-retire.js',media_type='application/javascript',headers={'Service-Worker-Allowed':'/'})
+    @app.get('/gifts/{gid}')
+    async def gift_link(gid:str):
+        if not re.fullmatch('[a-f0-9]{32}',gid):fail(404,'赠卡链接不存在')
+        return RedirectResponse('/?gift='+gid)
+
     @app.get('/orders/{oid}')
     async def order_page(oid:str):
         if not re.fullmatch('[A-Za-z0-9_-]{32}',oid):fail(404,'订单不存在')

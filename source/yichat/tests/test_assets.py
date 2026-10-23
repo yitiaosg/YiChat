@@ -50,7 +50,7 @@ def test_gift_unknown_result_can_be_read_by_original_sender(cards,gateway):
     assert c.get('/api/cards/gifts/by-key/'+key).status_code==404
 
 
-def test_gift_card_snapshot_survives_subsequent_transfer_and_excludes_cost(cards,gateway):
+def test_gift_url_survives_transfer_and_destroyed_card_has_no_preview(cards,gateway):
     s,f,u,iid=cards;c,app,settings=gateway
     from backend import policy
     with connect(s.ledger) as db:
@@ -60,6 +60,28 @@ def test_gift_card_snapshot_survives_subsequent_transfer_and_excludes_cost(cards
     with connect(s.ledger) as db:db.execute("UPDATE yc_instances SET owner='carol' WHERE id=?",(iid,))
     response=c.get('/api/cards/gifts/'+result['id'],params={'room':'!direct'})
     assert response.status_code==200,response.text
-    snapshot=response.json();assert snapshot['snapshot'] is True
+    snapshot=response.json();assert snapshot['snapshot'] is False
+    assert snapshot['url']==s.origin+'/gifts/'+result['id']
+    from backend.history import business_reference
+    reference={'body':'https://chat.yitiao.org/gifts/'+result['id']}
+    assert business_reference(s,'!direct',u['alice']['mxid'],reference)=='gift:'+result['id']
+    assert business_reference(s,'!group',u['alice']['mxid'],reference) is None
+    assert c.get('/api/cards/gifts/'+result['id']).json()['card']['id']==iid
+    with connect(s.ledger) as db:assert db.execute('SELECT count(*) FROM yichat_gift_renderings').fetchone()[0]==0
     assert snapshot['card']['design']['name']=='赠送时卡面' and 'cost' not in snapshot['card']['design']
     assert c.get('/api/cards/gifts/'+result['id'],params={'room':'!group'}).status_code==404
+    with connect(s.ledger) as db:db.execute('INSERT INTO yc_destroyed VALUES(?,?,?)',(iid,'carol',1))
+    destroyed=c.get('/api/cards/gifts/'+result['id'],params={'room':'!direct'})
+    assert destroyed.status_code==410
+    assert destroyed.json()['code']=='YICHAT_GIFT_CARD_DESTROYED'
+    assert 'card' not in destroyed.json()
+    assert c.get('/gifts/'+result['id'],follow_redirects=False).headers['location']=='/?gift='+result['id']
+
+
+def test_yichat_no_longer_serves_android_apks(gateway):
+    c,app,s=gateway
+    directory=s.root/'downloads';directory.mkdir(parents=True)
+    (directory/'YiChat-latest.apk').write_bytes(b'isolated fixture apk')
+    response=c.get('/app/download',follow_redirects=False)
+    assert response.status_code==404
+    assert response.content!=b'isolated fixture apk'

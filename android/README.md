@@ -1,6 +1,6 @@
 # YiChat Android 网页容器
 
-当前 0.2.0 / code 7 / `org.yitiao.yichat.mobile`。单 APK 不分 ABI，Matrix 使用网页 WASM。最低 Android 8（API26），需要 Android System WebView / Chrome 内核 100+，并支持 WebMessageListener、Web Locks、IndexedDB；过旧内核会提示更新。
+当前 0.3.2 / code 10 / `org.yitiao.yichat.mobile`。单 APK 不分 ABI，Matrix 使用网页 WASM。最低 Android 8（API26），需要 Android System WebView / Chrome 内核 100+，并支持 WebMessageListener、Web Locks、IndexedDB；过旧内核会提示更新。
 
 JDK21、Android SDK36/build-tools36、Node22+。Gradle8.13、AGP8.11.1、Kotlin2.1.21，AndroidX WebKit / Browser、Room、WorkManager、OkHttp。无 Compose/Matrix FFI。先在仓库根目录运行 `npm --prefix source/yichat/client ci`，再：
 
@@ -23,3 +23,5 @@ adb shell am instrument -w -e class org.yitiao.yichat.WebShellTest org.yitiao.yi
 只准确聊天源主框架能调用桥；网页外链统一系统浏览器。退出锁定数据并排队撤销服务器会话，保留归档与私钥。旧原生源和测试已归档于 `legacy-native`；不要恢复旧 JNI 初始化或将旧设备证明注入新 JS 加密库。
 
 签名配置必须位于源码外，不入库；现有安装升级必须同证书、更高 versionCode。回滚 APK 也必须提高 versionCode，不要使用卸载或降级清数据。
+
+安装包统一从 [GitHub Releases](https://github.com/yitiaosg/YiChat/releases/latest) 下载。后台通知及密钥恢复说明见 [0.3.2 更新](../PRODUCTION-0.3.2.md)。
