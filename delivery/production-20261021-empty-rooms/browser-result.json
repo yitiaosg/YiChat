@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "empty group swipe deletes personal entry rather than archiving and stays deleted after refresh",
+    "empty private entry deletes; adding same username opens its original room without a second create",
+    "recipient can explicitly open the same empty private room before any first message",
+    "nonempty private chats archive normally and survive repeated username lookup",
+    "overlapping server creation keys reuse one new pair and lost responses reconcile it"
+  ],
+  "errors": []
+}

@@ -1,18 +1,33 @@
-当前版本 **0.3.1 / code 9**；新增群解散/只读历史、8名管理员上限、个人归档/置顶、App通知、交易记录及账户最终注销联动。见 [PRODUCTION-0.3.1.md](PRODUCTION-0.3.1.md)。
+# YiChat
 
-# YiChat Android 0.3.0
+当前版本 **Android 0.3.2 / versionCode 10**，包名 `org.yitiao.yichat.mobile`。
 
-App 使用独立 Android WebView 运行 **chat.yitiao.org 的同一套 Preact / TypeScript 前端**，不再维护 Compose 聊天界面。Matrix JS SDK + Rust WASM 负责原有 E2EE；Kotlin 只负责系统浏览器授权、离线框架缓存、内部加密原包备份、按天外部导出和系统文件选择。
+[下载最新版本](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.2 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261023-v0.3.2/YiChat-0.3.2-10.apk) · [更新日志](CHANGELOG.md)
 
-当前包名 `org.yitiao.yichat.mobile`，versionCode **8**，通用 APK；复用 0.1.1～0.1.4 的私有签名，支持保留数据覆盖升级。不要卸载或清除存储。下载制品及本次验证以 [PRODUCTION-20261021.md](PRODUCTION-20261021.md) 为准；仓库中的早期候选版报告均为历史记录。
+YiChat 的 Android App 和 [网页版](https://chat.yitiao.org) 共用 Preact / TypeScript 界面，由 Matrix JS SDK 与 Rust WASM 处理端到端加密私聊。Kotlin 容器负责系统浏览器授权、后台通知、离线框架缓存、原消息包备份和系统文件操作；不维护第二套聊天或加密协议。
 
-- 聊天留在 App；主站、登录、YIDT 和其他页面由系统浏览器打开。登录继续采用 Auth Tab / Custom Tabs + PKCE，回 App 后交换会话，钱包返回只查询，不自动入金。
-- APK 内置完整网页框架与加密 WASM；在线刷新可信同源静态资源，离线仍可打开。已成功同步的最近消息和加密密钥保存在 App 自己的 IndexedDB；离线可读缓存，首次初始化、发送、业务操作和未缓存资源需要联网。
-- 框架按钮、导航等文字不可长按选择；消息正文、恢复密钥和输入框仍可复制。
-- App 设置有内部快照、按整数天数定期外部导出、立即导出及停用。原包备份与 Matrix 解密密钥备份分别管理。
-- 旧原生数据库及私钥原地保留；新网页设备不会误用旧 Rust 设备身份。旧原生私钥不能自动转换为网页私钥，历史解密需要原 Matrix 密钥备份/恢复。
+## 0.3.2 更新
 
-构建需要 Node 22+、JDK 21、Android SDK 36 / build-tools 36.0.0，以及源码外私有签名配置：
+- 开启通知后，后台连接在聊天界面关闭、移除最近任务后继续检查新消息，并显示常驻连接通知。通知不含聊天正文或密钥；保留系统调度作为后备，不额外启动 Matrix `/sync`。应用设置提供后台运行设置入口，系统省电限制仍可能影响连接。
+- 修复导入正确恢复密钥后仍无法解密的问题：消息密钥恢复不再被交叉签名初始化失败阻断，已失败的 Matrix 消息会走真实重试解密流程。
+- 赠卡成功后自动发送聊天气泡。消息正文只保存不含用户名的固定赠卡 URL，按需显示当前卡片；转手不使 URL 失效，销毁后不再显示卡面。预览仍检查会话权限，不把卡片全部数据放进消息。
+- 返回 YIDT 绑定页面后自动刷新钱包状态；区分付款方与收款方未绑定，避免让已绑定用户重复绑定。
+- 关闭后重新打开转账、红包或赠卡窗口会开始新操作，不再被之前失败的操作锁定。
+- 下载统一使用 **GitHub Releases**；YiChat 服务端不再提供 `/app/download` 安装包下载接口。
+
+完整变更、验证和部署边界见 [PRODUCTION-0.3.2.md](PRODUCTION-0.3.2.md)。较早版本说明保留为历史记录。
+
+## 安装与使用
+
+使用原签名覆盖安装 0.3.1，**不要卸载或清除应用数据**，以保留设备密钥和本地记录。新装或升级后，在 App 的“消息通知”中确认通知已开启并授予系统权限。后台连接开启时出现常驻通知属于正常行为。
+
+此前仍无法解密的消息，升级后可重新输入原 Matrix 恢复密钥执行恢复。原消息包备份与加密密钥备份分别管理；原包导出不包含私钥，不能替代密钥备份。
+
+APK 包含完整网页框架与加密 WASM；联网时更新可信同源静态资源，离线时可读取已同步的最近消息。首次初始化、发送、业务操作和未缓存资源需要联网。主站登录及 YIDT 授权使用系统浏览器，返回 App 本身不会自动付款。
+
+## 从源码构建
+
+需要 Node 22+、JDK 21、Android SDK 36 / build-tools 36.0.0，以及源码外的私有签名配置：
 
 ```bash
 npm --prefix source/yichat/client ci
@@ -23,14 +38,15 @@ export YICHAT_SIGNING_CONFIG=/private/path/signing-private.json
 ./scripts/build.sh
 ```
 
-输出 `android/app/build/outputs/apk/release/app-release.apk`。Gradle 自动构建并嵌入同一网页源码；依赖锁与严格 SHA256 校验随源码交付。签名密钥、生产配置、令牌和聊天数据不入库。
+产物为 `android/app/build/outputs/apk/release/app-release.apk`。Gradle 自动构建并嵌入同一份网页代码。已有安装必须沿用原签名；私钥、密码、生产配置、令牌及用户数据不进入源码或 Release。
 
 | 目录 | 用途 |
 | --- | --- |
-| `source/yichat/client` | 唯一聊天前端，App 与 Web 共用 |
-| `android/app` | WebView 容器、受限消息桥、PKCE、备份和文件接口 |
-| `android/legacy-native` | 停止编译的旧原生聊天源码和历史测试，仅供追溯 |
-| `source/yichat/backend` | 现有网关源码参考，本次未重写聊天或资金内核 |
-| `source/yichat/tests/browser/web-app.mjs` | 隔离真实 Synapse 的网页容器基础验证 |
+| `source/yichat/client` | App 与 Web 共用的聊天前端 |
+| `android/app` | WebView、受限消息桥、后台通知、PKCE 与备份 |
+| `source/yichat/backend` | 网关、Matrix 策略与资产接口源码参考 |
+| `source/yichat/tests` | 使用隔离账本及专用测试数据库的回归测试 |
+| `delivery/offline-fix-20261023` | 本版离线解密与 Android 后台通知验证结果 |
+| `android/legacy-native` | 不参与编译的旧原生实现，仅供追溯 |
 
-[架构](ARCHITECTURE.md) · [本次说明、验证与回滚](WEB-APP-REFACTOR.md) · [下次接力提示词](NEXT-SESSION-PROMPT.md) · [Android 构建](android/README.md)
+[Android 构建说明](android/README.md) · [架构](ARCHITECTURE.md) · [接口文档](source/yichat/docs/CHAT-KERNEL-API.md)

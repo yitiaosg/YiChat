@@ -64,5 +64,5 @@ export function units(value:string){if(!/^\d+(\.\d{1,16})?$/.test(value)||value.
 export function decimal(value:string|bigint){const n=BigInt(value),sign=n<0n?'-':'',v=n<0n?-n:n;return sign+(v/UNIT).toString()+((v%UNIT)?'.'+(v%UNIT).toString().padStart(16,'0').replace(/0+$/,''):'')}
 export function shareUrls(body:string){
   const links=(body.match(/https:\/\/[^\s<>"\u3000]+/g)||[]).map(url=>url.replace(/[，。！？、；：）】》」』.,!?;:)]+$/u,''));
-  return [...new Set(links.filter(url=>/^(https:\/\/yidt\.yitiao\.org\/explorer\/tx\/[a-f0-9]{64}|https:\/\/yitiao\.org\/ycards\/card\/[a-f0-9]{32}\/[A-Za-z0-9_-]{1,100}\/|https:\/\/yitiao\.org\/games\/parachute\/share\/[A-Za-z0-9_-]{32}\/|https:\/\/chat\.yitiao\.org\/orders\/[A-Za-z0-9_-]{32})$/.test(url)))].slice(0,4);
+  return [...new Set(links.filter(url=>/^(https:\/\/yidt\.yitiao\.org\/explorer\/tx\/[a-f0-9]{64}|https:\/\/yitiao\.org\/ycards\/card\/[a-f0-9]{32}\/[A-Za-z0-9_-]{1,100}\/|https:\/\/yitiao\.org\/games\/parachute\/share\/[A-Za-z0-9_-]{32}\/|https:\/\/chat\.yitiao\.org\/(?:orders|gifts)\/[A-Za-z0-9_-]{32})$/.test(url)))].slice(0,4);
 }

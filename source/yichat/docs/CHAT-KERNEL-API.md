@@ -141,13 +141,13 @@ YiChat OIDC `sub=uid`；YIDT原有登录标识不变。不要根据用户名重�
 
 kind为`direct`或`group`；users输入1～50个当前用户名，服务器去重并排除本人，私聊最终必须恰好一位对方。群可提供多个用户。返回原生 `{"room_id":"!...:chat.yitiao.org"}`。name截到100码点，不决定权限。
 
-服务端分配短期创建票据，Synapse模块在实际create事件上登记kind、owner、peer及加密模式；直接原生createRoom没有有效票据被拒绝。未传 key 的旧请求仍没有幂等保证。Web 新增可选 `key`（16～100位 A-Za-z0-9_-），按 uid+key 和固定 payload 绑定原创建票据；相同请求返回原 room_id，不同 payload 409，原请求处理中返回 409/YICHAT_ROOM_CREATE_PENDING。不能换新键盲目重建。`GET /api/room-creations/{key}` 仅本人可查，返回 state=`created/pending/not_created`、room_id、retry_after_ms；not_created 只在票据过期且没有实际登记房间时返回。
+服务端分配短期创建票据，Synapse模块在实际create事件上登记kind、owner、peer及加密模式；直接原生createRoom没有有效票据被拒绝。私聊按双方固定MXID的无序二元组持久化唯一登记及创建票据；同方向、反方向、不同设备和不同创建键均复用同一room，包括已从本人列表删除的空会话。原生create事件也校验该唯一登记。群聊未传key仍没有幂等保证。Web 新增可选 `key`（16～100位 A-Za-z0-9_-），按 uid+key 和固定 payload 绑定原创建票据；相同请求返回原 room_id，不同 payload 409，原请求处理中返回 409/YICHAT_ROOM_CREATE_PENDING。不能换新键盲目重建。`GET /api/room-creations/{key}` 仅本人可查，返回 state=`created/pending/not_created`、room_id、retry_after_ms；not_created 只在票据过期且没有实际登记房间时返回。
 
 - `GET /api/rooms`：返回本人的当前已加入、由服务器登记的会话元数据数组；由原生 joined_rooms 核实当前成员，邀请仍来自 sync。
 - `GET /api/rooms/{room}`：当前成员认证，返回`room/kind/owner/peer/days/encryption`；owner/peer为MXID，群peer为null，days固定30，encryption为`direct/plain/legacy_encrypted`。
 - `POST /api/rooms/{room}/invite`：`{"username":"carol"}`；仅群聊，实际邀请权由Synapse power levels检查，成功通常`{}`。不能邀请第三方标识或外部用户。
 - 接受邀请/加入使用原生Matrix join，最终状态以服务器sync/member事件为准。
-- 私聊参与者固定，不允许第三人、代踢另一方或改变加密策略；允许本人离开。
+- 私聊参与者固定，不允许第三人、代踢另一方、离开或改变加密策略。本人主动输入对方用户名打开已有私聊时，服务端仅允许该本人加入固定二人房间；此动作不发送消息，不替对方加入，不放宽消息或附件的实时隐私检查。
 
 ### 5.2 消息和加密
 
@@ -531,3 +531,11 @@ GET /api/transactions?before=id 按本人稳定UID查询实际账本交易（发
 主站过冷静期完成purge后，SID即时撤销，Chat登录/发送/邀请拒绝，资料查询只返回用户名与删除标记。Synapse通过官方模块API有界退场，群主优先交给有效管理员，否则按MXID选择成员；若人数降到1则解散。UID/MXID及历史存证、必要账本记录保留，用户名不复用。退出/解散/注销不改变归档格式或绕过30日清理规则。
 
 App原生session响应增加capabilities.notifications=true。网页只在明确支持时展示/调用原生通知能力；旧App桥接仍可使用聊天与备份，不显示不支持的通知按钮。
+
+### 空会话删除与唯一私聊（2026-10-21）
+
+`GET /api/rooms` 新增 `has_messages`。空会话向 `POST /api/conversations/{room}/preferences` 提交 `{"archived":true}` 时，服务器通过已接受流号及存证检查确认无消息，返回 `deleted:true, archived:0`，直接移除本人的会话条目，不进入归档分组；有消息则保持归档。存证暂未追平时短暂等待，仍不齐返回503，禁止按客户端已加载时间线推断空会话。删除不退出群、解散群、删除对方记录或删除密钥。后来实际接受的新消息会使已删除条目重新出现。
+
+`GET /api/conversations/preferences` 返回每个相关条目的 `deleted`；同账号其他设备和刷新也据此移除条目。再次输入用户名调用原 `POST /api/rooms` 恢复本人条目并返回原私聊room_id，保留免打扰/置顶设置并取消归档。SDK同步中尚未加载到的私聊也必须向服务器查重，不能自行创建第二个房间。
+
+管理员按本次明确授权实际移除既有测试空房间后，仅保留最小撤销标记和历史资金/权限/摘要证据。旧创建键返回410；查询旧键的state为deleted、room_id为null，客户端清除待确认创建请求，不把原房间重新创建。普通用户删除本人空条目与管理员清除测试房间是两种不同操作。

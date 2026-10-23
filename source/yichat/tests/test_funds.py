@@ -197,6 +197,38 @@ def test_disabled_missing_official_and_no_fallback(env):
     with pytest.raises((ValueError,HTTPException)):create(env,1,'1000')
     with connect(s.ledger) as c:assert c.execute('SELECT COUNT(*) FROM yichat_orders').fetchone()[0]==0
 
+def test_bound_sender_is_not_told_to_rebind_when_recipient_is_unbound(env):
+    s,f,u=env
+    with connect(s.ledger) as c:
+        sender=dict(f.y.binding(c,'alice','yichat'))
+        before=c.execute('SELECT count(*) FROM yidt_transactions').fetchone()[0]
+        c.execute("DELETE FROM yidt_bindings WHERE user='bob' AND service='yichat'")
+    key=secrets.token_urlsafe(24)
+    with pytest.raises(HTTPException) as error:create(env,kind='direct',key=key)
+    assert error.value.status_code==409
+    assert error.value.detail['code']=='YICHAT_RECIPIENT_WALLET_UNBOUND'
+    assert error.value.detail['binding_party']=='recipient'
+    assert '收款方' in error.value.detail['error']
+    assert 'bind_url' not in error.value.detail
+    with connect(s.ledger) as c:
+        assert dict(f.y.binding(c,'alice','yichat'))==sender
+        assert c.execute('SELECT count(*) FROM yichat_orders').fetchone()[0]==0
+        assert c.execute('SELECT count(*) FROM yidt_intents').fetchone()[0]==0
+        assert c.execute('SELECT count(*) FROM yidt_transactions').fetchone()[0]==before
+        address=c.execute("SELECT address FROM yidt_members WHERE user='bob'").fetchone()[0]
+        c.execute('INSERT INTO yidt_bindings VALUES(?,?,?,0,?)',('bob','yichat',address,f.y.stamp()))
+    order=create(env,kind='direct',key=key)
+    assert order['state']=='awaiting_deposit'
+    assert order['source']==sender['address']
+
+def test_missing_own_binding_has_own_recovery_link(env):
+    s,f,u=env
+    with connect(s.ledger) as c:c.execute("DELETE FROM yidt_bindings WHERE user='alice' AND service='yichat'")
+    with pytest.raises(HTTPException) as error:create(env)
+    assert error.value.detail['code']=='YICHAT_WALLET_UNBOUND'
+    assert error.value.detail['binding_party']=='self'
+    assert error.value.detail['bind_url']==f.y.ORIGIN+'/services/yichat/'
+
 def test_all_claimed_conservation(env):
     s,f,u=env;o=fund(env,create(env,4,'1.1234567890123456'))
     for name in ('bob','carol','dave','eve'):f.claim(u[name],o['id'],o['room'])

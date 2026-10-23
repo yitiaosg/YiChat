@@ -21,10 +21,12 @@ BUSINESS='org.yitiao.business'
 def business_reference(s,room,sender,content):
     ref=content.get(BUSINESS)
     if ref is None:
-        match=re.search(r'https://chat\.yitiao\.org/orders/([A-Za-z0-9_-]{32})(?![A-Za-z0-9_-])',str(content.get('body','')))
+        match=re.search(r'https://chat\.yitiao\.org/(orders|gifts)/([A-Za-z0-9_-]{32})(?![A-Za-z0-9_-])',str(content.get('body','')))
         if not match:return None
-        with connect(s.ledger) as c:row=c.execute('SELECT id FROM yichat_orders WHERE id=? AND room=?',(match[1],room)).fetchone()
-        return 'order:'+match[1] if row else None
+        kind='gift' if match[1]=='gifts' else 'order'
+        table='yichat_card_gifts' if kind=='gift' else 'yichat_orders'
+        with connect(s.ledger) as c:row=c.execute('SELECT id FROM '+table+' WHERE id=? AND room=?',(match[2],room)).fetchone()
+        return kind+':'+match[2] if row else None
     if not isinstance(ref,dict) or set(ref)!={'kind','id'} or ref.get('kind') not in ('order','gift') or not isinstance(ref.get('id'),str):fail(400,'无效业务消息关联')
     with connect(s.ledger) as c:
         if ref['kind']=='order':

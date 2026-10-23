@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "initial real encrypted exchange",
+    "new Megolm session sent while receiver UI closed",
+    "same App device reopens and decrypts queued offline room key",
+    "correct recovery key imports real backup and retries failed timeline events"
+  ],
+  "restored": {
+    "total": 2,
+    "imported": 2,
+    "decryption": {
+      "retried": 0,
+      "recovered": 0,
+      "failed": 0
+    }
+  },
+  "errors": []
+}

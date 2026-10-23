@@ -1,10 +1,28 @@
 """Per-account preferences and aggregate, ciphertext-free notification hints."""
-import time,re
+import asyncio,time,re
 from fastapi import Request
 from .db import connect,transaction
 from .security import fail
 from . import policy,lifecycle
-SCHEMA='''CREATE TABLE IF NOT EXISTS conversation_preferences(subject TEXT NOT NULL,room TEXT NOT NULL,pinned INTEGER NOT NULL DEFAULT 0,archived INTEGER NOT NULL DEFAULT 0,muted INTEGER NOT NULL DEFAULT 0,read_sequence INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(subject,room));'''
+SCHEMA='''CREATE TABLE IF NOT EXISTS conversation_preferences(subject TEXT NOT NULL,room TEXT NOT NULL,pinned INTEGER NOT NULL DEFAULT 0,archived INTEGER NOT NULL DEFAULT 0,muted INTEGER NOT NULL DEFAULT 0,read_sequence INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(subject,room));
+CREATE TABLE IF NOT EXISTS conversation_entries(subject TEXT NOT NULL,room TEXT NOT NULL,opened INTEGER NOT NULL DEFAULT 0,deleted INTEGER NOT NULL DEFAULT 0,hidden_sequence INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(subject,room));
+CREATE TABLE IF NOT EXISTS retired_rooms(room TEXT PRIMARY KEY,retired_ms INTEGER NOT NULL);'''
+
+def deleted(c,subject,room):
+    return bool(c.execute("SELECT 1 FROM conversation_entries e WHERE subject=? AND room=? AND deleted=1 AND NOT EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=e.room AND h.sequence>e.hidden_sequence AND h.type IN ('m.room.message','m.room.encrypted'))",(subject,room)).fetchone())
+
+def entry_preference(c,subject,room):
+    row=c.execute('SELECT room,pinned,archived,muted FROM conversation_preferences WHERE subject=? AND room=?',(subject,room)).fetchone()
+    return (dict(row) if row else {'room':room,'pinned':0,'archived':0,'muted':0})|{'deleted':deleted(c,subject,room)}
+
+async def accepted_fence(app,s):
+    sequence=await app.state.matrix.fence()
+    from . import archive
+    for attempt in range(8):
+        with archive.connect(s.archive_reader) as pg:checkpoint=pg.execute("SELECT healthy,sequence FROM checkpoints WHERE source='synapse'").fetchone()
+        if checkpoint and checkpoint['healthy'] and checkpoint['sequence']>=sequence:return sequence
+        if attempt<7:await asyncio.sleep(.25)
+    fail(503,'消息存证正在同步，请稍后重试；尚未删除会话')
 
 def accessible(s,who,room):
     info=policy.room(s,room)
@@ -16,13 +34,21 @@ def install(app,s,session):
     @app.get('/api/conversations/preferences')
     async def preferences(request:Request):
         who=session(request)
-        with connect(s.db) as c:return [dict(r) for r in c.execute('SELECT room,pinned,archived,muted FROM conversation_preferences WHERE subject=?',(who['subject'],))]
+        with connect(s.db) as c:
+            rooms=[r[0] for r in c.execute('SELECT room FROM conversation_preferences WHERE subject=? UNION SELECT room FROM conversation_entries WHERE subject=?',(who['subject'],who['subject']))]
+            return [entry_preference(c,who['subject'],room) for room in rooms]
     @app.post('/api/conversations/{room}/preferences')
     async def preference(request:Request,room:str):
         who=session(request);accessible(s,who,room);data=await request.json()
         if not isinstance(data,dict) or not data or not set(data)<= {'pinned','archived','muted','read','event'} or any(type(v)!=bool for k,v in data.items() if k!='event') or ('event' in data and (not isinstance(data['event'],str) or len(data['event'])>255 or not data.get('read'))):fail(400,'需要有效的会话设置')
+        fence=await accepted_fence(app,s) if data.get('archived') is True else None
         with transaction(s.db) as c:
             c.execute('INSERT OR IGNORE INTO conversation_preferences(subject,room) VALUES(?,?)',(who['subject'],room))
+            if fence is not None:
+                empty=not c.execute("SELECT 1 FROM history_receipts WHERE room=? AND type IN ('m.room.message','m.room.encrypted','m.room.redaction') LIMIT 1",(room,)).fetchone()
+                c.execute('INSERT INTO conversation_entries(subject,room,deleted,hidden_sequence) VALUES(?,?,?,?) ON CONFLICT(subject,room) DO UPDATE SET deleted=excluded.deleted,hidden_sequence=excluded.hidden_sequence',(who['subject'],room,int(empty),fence))
+                if empty:data['archived']=False
+            elif data.get('archived') is False:c.execute('UPDATE conversation_entries SET deleted=0 WHERE subject=? AND room=?',(who['subject'],room))
             for key,value in data.items():
                 if key=='event':continue
                 if key=='read':
@@ -31,7 +57,7 @@ def install(app,s,session):
                         if not receipt:fail(503,'已读事件的接受存证正在同步，请稍后重试')
                         c.execute('UPDATE conversation_preferences SET read_sequence=max(read_sequence,?) WHERE subject=? AND room=?',(receipt['sequence'],who['subject'],room))
                 else:c.execute('UPDATE conversation_preferences SET '+key+'=? WHERE subject=? AND room=?',(int(value),who['subject'],room))
-            return dict(c.execute('SELECT room,pinned,archived,muted FROM conversation_preferences WHERE subject=? AND room=?',(who['subject'],room)).fetchone())
+            return entry_preference(c,who['subject'],room)
     @app.get('/api/notifications')
     async def notifications(request:Request,after:int|None=None):
         who=session(request)

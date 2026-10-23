@@ -55,9 +55,17 @@ class Funds:
                 c.execute('INSERT INTO yichat_order_participants VALUES(?,?,?,?)',(o['id'],policy.historical_uid(self.s,o['user']),policy.historical_uid(self.s,o['recipient']) if o['recipient'] else None,o['request_key']))
             for p in c.execute('SELECT * FROM yichat_payouts WHERE id NOT IN (SELECT payout_id FROM yichat_payout_identities)').fetchall():
                 c.execute('INSERT INTO yichat_payout_identities VALUES(?,?,?,?)',(p['id'],p['order_id'],policy.historical_uid(self.s,p['user']),p['kind']))
-    def binding(self,c,user):
+    def binding(self,c,user,party='self'):
         b=self.y.binding(c,user,'yichat')
-        if not b: fail(409,'请先在 YIDT 绑定 YiChat 钱包')
+        if not b:
+            recipient=party=='recipient'
+            fail(409,{
+                'errcode':'M_UNKNOWN',
+                'code':'YICHAT_RECIPIENT_WALLET_UNBOUND' if recipient else 'YICHAT_WALLET_UNBOUND',
+                'error':'收款方尚未绑定 YiChat 的 YIDT 钱包，请对方完成绑定后再转账' if recipient else '当前账户尚未在 YIDT 授权绑定 YiChat 钱包，请刷新绑定状态或前往绑定',
+                'binding_party':'recipient' if recipient else 'self',
+                **({} if recipient else {'bind_url':self.y.ORIGIN+'/services/yichat/'}),
+            })
         return b
     def create(self,s,room,data,recipient=None,native_return=False):
         self.require(); y=self.y
@@ -86,7 +94,7 @@ class Funds:
                 members=c.execute("SELECT count(*) FROM yichat_memberships WHERE room=? AND membership='join' AND pending_event IS NULL",(room['room'],)).fetchone()[0]
                 if count>members:fail(400,'红包份数不得超过群内当前人数')
             source=self.binding(c,s['username'])
-            dest=self.binding(c,recipient)['address'] if recipient else None
+            dest=self.binding(c,recipient,'recipient')['address'] if recipient else None
             if dest==source['address'] or source['address']==self.s.official: fail(400,'发送和接收钱包不能相同')
             fees=count*y.GAS; gross=principal+fees
             # Unlike legacy quote's all-in fallback, never reduce principal for fees.

@@ -41,13 +41,10 @@ def gift(s,who,info,data):
         for table,sql in checks:
             if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():fail(503,'YCards 数据结构不完整，赠送已禁用')
             if c.execute(sql,(iid,)).fetchone():fail(409,'卡片已销毁、挂售或拍卖，当前不可转让')
-        from .card_reads import store
-        rendering=store(s).preview(iid,who['username'],connection=c)
         gid=secrets.token_hex(16);now=time.time()
         n=c.execute('UPDATE yc_instances SET owner=?,acquired=? WHERE id=? AND owner=?',(recipient['username'],now,iid,who['username'])).rowcount
         if n!=1:fail(409,'卡片所有权已变化')
         c.execute('INSERT INTO yichat_card_gifts VALUES(?,?,?,?,?,?,?,?,?,?)',(gid,who['subject'],recipient['uid'],who['username'],recipient['username'],info['room'],iid,key,payload,now))
-        c.execute('INSERT INTO yichat_gift_renderings VALUES(?,?)',(gid,json.dumps(rendering,ensure_ascii=False,separators=(',',':'))))
         return {'id':gid,'instance':iid,'recipient_uid':recipient['uid'],'state':'transferred'}
 
 
@@ -65,7 +62,12 @@ def install(app,s,session,room_access,require_send):
         return dict(row)|{'state':'transferred'}
 
     @app.get('/api/cards/gifts/{gid}')
-    async def gift_preview(request:Request,gid:str,room:str):
+    async def gift_preview(request:Request,gid:str,room:str|None=None):
+        session(request)
+        if room is None:
+            with connect(s.ledger) as c:found=c.execute('SELECT room FROM yichat_card_gifts WHERE id=?',(gid,)).fetchone()
+            if not found:fail(404,'赠卡记录不存在')
+            room=found['room']
         who,info=await room_access(request,room)
         with connect(s.ledger) as c:
             row=c.execute('SELECT id,room,instance,sender,recipient,created FROM yichat_card_gifts WHERE id=? AND room=?',(gid,room)).fetchone()
@@ -75,14 +77,14 @@ def install(app,s,session,room_access,require_send):
                 at=int(row['created']*1000)
                 with archive.connect(s.archive_reader) as pg:
                     if not archive.allowed(pg,room,who['mxid'],at,at+1):fail(403,'没有赠卡发生时的会话历史权限')
-            snapshot=c.execute('SELECT payload FROM yichat_gift_renderings WHERE id=?',(gid,)).fetchone()
-            if snapshot:render=json.loads(snapshot['payload'])
-            else:
-                from .card_reads import store
-                # Older gifts can only use data still visible to the recipient.
-                try:render=store(s).preview(row['instance'],row['recipient'],connection=c)
-                except Exception:fail(404,'历史赠卡缺少可验证的卡面资源')
-        return dict(row)|{'state':'transferred','card':render,'snapshot':bool(snapshot)}
+            # Resolve the current instance independently of its owner. A gift URL
+            # grants no ownership; room/history permissions were checked above.
+            current=c.execute('SELECT i.owner,EXISTS(SELECT 1 FROM yc_destroyed d WHERE d.instance=i.id) destroyed FROM yc_instances i WHERE i.id=?',(row['instance'],)).fetchone()
+            if not current or current['destroyed']:fail(410,{'code':'YICHAT_GIFT_CARD_DESTROYED','error':'卡片已销毁，卡面不再显示'})
+            from .card_reads import store
+            render=store(s).preview(row['instance'],current['owner'],connection=c)
+        return dict(row)|{'state':'transferred','card':render,'snapshot':False,'url':s.origin+'/gifts/'+gid}
+
 
     @app.post('/api/cards/gifts')
     async def create_gift(request:Request):

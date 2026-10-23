@@ -274,7 +274,10 @@ def create_app(settings=None):
         for rid in dict.fromkeys([*joined.get('joined_rooms',[]),*[r['room'] for r in past if r['membership']=='leave']]):
             try:
                 info=room_info(rid)
-                if direct.visible(s,info,who['mxid']):result.append(dict(info,membership=memberships.get(rid,'join'),peer_deleted=info['kind']=='direct' and lifecycle.purged(s,info['peer'] if info['owner']==who['mxid'] else info['owner']),dissolved_at=lifecycle.status(s,rid)))
+                with connect(s.db) as db:
+                    hidden=conversations.deleted(db,who['subject'],rid)
+                    has_messages=bool(db.execute("SELECT 1 FROM history_receipts WHERE room=? AND type IN ('m.room.message','m.room.encrypted','m.room.redaction') LIMIT 1",(rid,)).fetchone())
+                if not hidden and direct.visible(s,info,who['mxid']):result.append(dict(info,has_messages=has_messages,membership=memberships.get(rid,'join'),peer_deleted=info['kind']=='direct' and lifecycle.purged(s,info['peer'] if info['owner']==who['mxid'] else info['owner']),dissolved_at=lifecycle.status(s,rid)))
             except HTTPException as exc:
                 if exc.status_code not in (403,404):raise
         return result
@@ -287,13 +290,22 @@ def create_app(settings=None):
         if not isinstance(names,list) or not 1<=len(names)<=50 or any(not isinstance(n,str) for n in names):fail(400,'请选择 1～50 位用户')
         names=list(dict.fromkeys(n for n in names if n!=who['username']))
         if kind=='direct' and len(names)!=1:fail(400,'私聊必须有且只有一位接收方')
+        key=data.get('key')
+        payload=json.dumps([kind,sorted(names),str(data.get('name') or (names[0] if kind=='direct' else '新群聊'))[:100]],ensure_ascii=False,separators=(',',':'))
+        if key is not None and (not isinstance(key,str) or not re.fullmatch('[A-Za-z0-9_-]{16,100}',key)):fail(400,'无效创建请求键')
+        if key:
+            with connect(s.db) as db:old=db.execute('SELECT r.payload,t.room FROM room_requests r JOIN room_tickets t ON t.token=r.ticket WHERE r.subject=? AND r.request_key=?',(who['subject'],key)).fetchone()
+            if old:
+                if old['payload']!=payload:fail(409,'创建请求键已用于不同会话')
+                if old['room']:
+                    with connect(s.db) as db:retired=db.execute('SELECT 1 FROM retired_rooms WHERE room=?',(old['room'],)).fetchone()
+                    if retired:fail(410,'此创建请求对应的测试会话已删除，请重新选择用户')
+                    return await direct.open_existing(app,s,who,old['room']) if kind=='direct' else {'room_id':old['room']}
         if kind=='direct':
-            target=policy.mxid(s,names[0])
-            with connect(s.db) as c:reusable=c.execute("SELECT room FROM rooms WHERE kind='direct' AND ((owner=? AND peer=?) OR (owner=? AND peer=?)) ORDER BY rowid",(who['mxid'],target,target,who['mxid'])).fetchall()
-            from .groups import joined
-            for row in reusable:
-                if who['mxid'] in joined(s,row['room']):return {'room_id':row['room']}
-        invite=[]
+            target=policy.mxid(s,names[0]);first,second=direct.pair(who['mxid'],target)
+            with connect(s.db) as db:existing=db.execute('SELECT room FROM direct_pairs WHERE first=? AND second=?',(first,second)).fetchone()
+            if existing and existing['room']:return await direct.open_existing(app,s,who,existing['room'])
+        invite=[];provisions=[]
         for name in names:
             with connect(s.site/'account.db') as c:exists=c.execute('SELECT 1 FROM users WHERE username=?',(name,)).fetchone()
             if not exists:fail(404,'站内用户不存在')
@@ -301,22 +313,17 @@ def create_app(settings=None):
             with transaction(s.db) as c:
                 c.execute('INSERT OR IGNORE INTO identities VALUES(?,?,?,?)',(person['uid'],name,mxid,app.state.cipher.encrypt(secrets.token_urlsafe(48).encode()).decode()))
                 identity=c.execute('SELECT * FROM identities WHERE subject=?',(person['uid'],)).fetchone()
-            await app.state.matrix.provision(mxid,app.state.cipher.decrypt(identity['password'].encode()).decode(),name)
+            provisions.append((mxid,app.state.cipher.decrypt(identity['password'].encode()).decode(),name))
             invite.append(mxid)
-        key=data.get('key')
-        payload=json.dumps([kind,sorted(names),str(data.get('name') or (names[0] if kind=='direct' else '新群聊'))[:100]],ensure_ascii=False,separators=(',',':'))
-        if key is not None and (not isinstance(key,str) or not re.fullmatch('[A-Za-z0-9_-]{16,100}',key)):fail(400,'无效创建请求键')
-        if key:
-            with transaction(s.db) as db:
-                old=db.execute('SELECT r.*,t.room,t.expires FROM room_requests r JOIN room_tickets t ON t.token=r.ticket WHERE r.subject=? AND r.request_key=?',(who['subject'],key)).fetchone()
-                if old:
-                    if old['payload']!=payload:fail(409,'创建请求键已用于不同会话')
-                    if old['room']:return {'room_id':old['room']}
-                    fail(409,{'code':'YICHAT_ROOM_CREATE_PENDING','error':'原创建结果待确认，请查询原请求，勿重新创建'})
-                ticket=secrets.token_urlsafe(32)
-                db.execute('INSERT INTO room_tickets VALUES(?,?,?,?,?,NULL)',(ticket,who['mxid'],kind,invite[0] if kind=='direct' else None,time.time()+120))
-                db.execute('INSERT INTO room_requests VALUES(?,?,?,?,?)',(who['subject'],key,payload,ticket,time.time()))
-        else:ticket=policy.issue_ticket(s,who['mxid'],kind,invite[0] if kind=='direct' else None)
+        ticket,reused=direct.reserve_creation(s,who,kind,invite,key,payload)
+        if reused:return await direct.open_existing(app,s,who,reused) if kind=='direct' else {'room_id':reused}
+        try:
+            for mxid,password,name in provisions:await app.state.matrix.provision(mxid,password,name)
+        except Exception:
+            # No room create has started. Retire this unused reservation so a
+            # known provisioning failure cannot strand the pair for two minutes.
+            with transaction(s.db) as db:db.execute('UPDATE room_tickets SET expires=? WHERE token=? AND room IS NULL',(time.time()-1,ticket))
+            raise
         initial=[{'type':'m.room.history_visibility','state_key':'','content':{'history_visibility':'joined'}}]
         if kind=='direct':initial.insert(0,{'type':'m.room.encryption','state_key':'','content':{'algorithm':'m.megolm.v1.aes-sha2'}})
         body={'preset':'private_chat','name':str(data.get('name') or (names[0] if kind=='direct' else '新群聊'))[:100],'is_direct':kind=='direct','invite':invite if kind=='group' else [],'room_version':'11','creation_content':{'m.federate':False,'org.yitiao.ticket':ticket},'initial_state':initial}
@@ -330,7 +337,8 @@ def create_app(settings=None):
         with connect(s.db) as db:
             row=db.execute('SELECT t.room,t.expires FROM room_requests r JOIN room_tickets t ON t.token=r.ticket WHERE r.subject=? AND r.request_key=?',(who['subject'],key)).fetchone()
         if not row:fail(404,'创建请求不存在')
-        return {'state':'created' if row['room'] else 'not_created' if row['expires']<time.time() else 'pending','room_id':row['room'],'retry_after_ms':max(0,int((row['expires']-time.time())*1000))}
+        with connect(s.db) as db:retired=bool(row['room'] and db.execute('SELECT 1 FROM retired_rooms WHERE room=?',(row['room'],)).fetchone())
+        return {'state':'deleted' if retired else 'created' if row['room'] else 'not_created' if row['expires']<time.time() else 'pending','room_id':None if retired else row['room'],'retry_after_ms':max(0,int((row['expires']-time.time())*1000))}
 
     @app.post('/api/rooms/{room}/invite')
     async def invite_user(request:Request,room:str):
@@ -663,6 +671,11 @@ def create_app(settings=None):
     @app.get('/sw.js')
     async def retire_worker():
         return FileResponse(Path(__file__).parent.parent/'web'/'sw-retire.js',media_type='application/javascript',headers={'Service-Worker-Allowed':'/'})
+    @app.get('/gifts/{gid}')
+    async def gift_link(gid:str):
+        if not re.fullmatch('[a-f0-9]{32}',gid):fail(404,'赠卡链接不存在')
+        return RedirectResponse('/?gift='+gid)
+
     @app.get('/orders/{oid}')
     async def order_page(oid:str):
         if not re.fullmatch('[A-Za-z0-9_-]{32}',oid):fail(404,'订单不存在')

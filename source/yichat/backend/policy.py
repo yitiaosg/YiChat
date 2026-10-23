@@ -87,6 +87,12 @@ def register_room(s,token,room):
     with transaction(s.db) as c:
         t=c.execute('SELECT * FROM room_tickets WHERE token=? AND expires>?',(token,time.time())).fetchone()
         if not t or (t['room'] and t['room']!=room):fail(403,'会话票据无效或已使用')
+        if t['kind']=='direct':
+            from .direct import pair
+            first,second=pair(t['owner'],t['peer'])
+            existing=c.execute('SELECT room,ticket FROM direct_pairs WHERE first=? AND second=?',(first,second)).fetchone()
+            if existing and ((existing['room'] and existing['room']!=room) or (existing['ticket'] and existing['ticket']!=token)):fail(409,'双方已有私聊或私聊正在创建，请复用原会话')
+            c.execute('INSERT INTO direct_pairs VALUES(?,?,?,?) ON CONFLICT(first,second) DO UPDATE SET room=excluded.room,ticket=excluded.ticket',(first,second,room,token))
         c.execute('INSERT OR IGNORE INTO rooms VALUES(?,?,?,?,30)',(room,t['kind'],t['owner'],t['peer']))
         c.execute('INSERT OR IGNORE INTO room_modes VALUES(?,?,?)',(room,'direct' if t['kind']=='direct' else 'plain',int(time.time()*1000)))
         if t['kind']=='group':
@@ -113,7 +119,7 @@ def validate_event(s,info,event_type,content,sender,state_key=None,control=None)
             if state_key not in (info['owner'],info['peer']):fail(403,'私聊参与者固定')
             if membership in ('invite','join'):
                 # Joining does not send content, but an invite is a sender action.
-                if membership=='invite':require_send(s,info,sender)
+                if membership=='invite' and not (control and control['action']=='direct_open'):require_send(s,info,sender)
             elif membership not in ('leave',):fail(403,'私聊成员固定')
             elif sender!=state_key or not lifecycle.purged(s,sender):fail(403,'私聊不支持离开会话，请使用归档')
         else:
