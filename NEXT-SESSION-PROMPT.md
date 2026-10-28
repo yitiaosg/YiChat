@@ -1,3 +1,11 @@
+# 当前交付：YiChat Android 0.3.3
+
+推送重构已合入本版，包名 org.yitiao.yichat.mobile，versionCode 11。构建需要仓库外的 YICHAT_FIREBASE_CONFIG 与 YICHAT_SIGNING_CONFIG；不得上传服务账号 JSON、签名私钥或生产环境文件。使用原签名覆盖安装，保留 IndexedDB / Rust 加密存储。
+
+当前设计与真机验证见 source/yichat/docs/PUSH-NOTIFICATIONS.md，发布范围见 PRODUCTION-0.3.3.md。FCM 真实投递尚需安装新版取得真实设备 token；不得将无 GMS 模拟器测试或 validate_only 的无效 token 响应描述为端到端投递成功。
+
+以下保留旧版交接背景：
+
 当前正式版本为 **0.3.2 / code 10**。先读 README.md、CHANGELOG.md、PRODUCTION-0.3.2.md、ARCHITECTURE.md 和 android/README.md；检查 Git 状态并保护未提交修改及既有数据。
 
 - App 与 Web 共用 source/yichat/client；保持 Matrix JS SDK + Rust WASM，不引入第二套设备身份或同步循环。

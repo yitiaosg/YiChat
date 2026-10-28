@@ -19,9 +19,12 @@ import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.TimeUnit
 import kotlinx.serialization.json.jsonObject
 
-/** Notifications contain no decrypted message or key material. No second Matrix sync. */
+/** Legacy metadata polling feeds the shared placeholder/content notification pipeline. */
 class Notifications(private val context:Context,private val graph:Graph) {
-    @Volatile var foreground=false
+    private val push get()=(context.applicationContext as YiChatApplication).push
+    var foreground:Boolean
+        get()=push.foreground
+        set(value){push.foreground=value}
     private val polling=Mutex()
     private val manager get()=context.getSystemService(NotificationManager::class.java)
     private fun enabledKey()=graph.auth.account?.let{"${it.storage}.notifications"}
@@ -30,8 +33,10 @@ class Notifications(private val context:Context,private val graph:Graph) {
     fun configure(value:Boolean) {
         val key=requireNotNull(enabledKey()){"请先登录"}
         graph.vault.put(key,(if(value)"1" else "0").toByteArray())
+        push.configure(value,graph.auth.account?.storage.orEmpty())
+        PushRegistrationWorker.enqueue(context)
         if(value && permitted()) {
-            manager.createNotificationChannel(NotificationChannel("messages","聊天消息",NotificationManager.IMPORTANCE_DEFAULT).apply{description="不显示聊天正文；归档及免打扰会话不通知"})
+            push.channels()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork("yichat-notifications",ExistingPeriodicWorkPolicy.KEEP,
                 PeriodicWorkRequestBuilder<NotificationWorker>(15,TimeUnit.MINUTES).setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
             // Start while an Activity is visible. A background worker must not
@@ -40,30 +45,28 @@ class Notifications(private val context:Context,private val graph:Graph) {
         } else stop()
     }
     fun resume(){if(enabled())configure(true)}
-    fun startListener(){if(enabled()&&permitted())runCatching{context.startForegroundService(Intent(context,BackgroundNotificationService::class.java))}}
-    fun stop(){context.stopService(Intent(context,BackgroundNotificationService::class.java));WorkManager.getInstance(context).cancelUniqueWork("yichat-notifications");manager.cancelAll()}
-    fun cancel(room:String){manager.cancel(room,1)}
-    fun show(room:String,event:String,label:String="YiChat") {
-        if(!enabled() || !permitted())return
-        require(room.startsWith("!") && room.length<=255 && event.length<=255)
+    fun startListener(){if(enabled()&&permitted()&&!registered())runCatching{context.startForegroundService(Intent(context,BackgroundNotificationService::class.java))}}
+    private fun registered()=graph.auth.account?.let{graph.vault.get("${it.storage}.push-registered")?.decodeToString()=="1"}==true
+    fun stop(){push.configure(false,graph.auth.account?.storage.orEmpty());context.stopService(Intent(context,BackgroundNotificationService::class.java));WorkManager.getInstance(context).cancelUniqueWork("yichat-notifications");manager.cancelAll()}
+    fun cancel(room:String){push.cancel(room);manager.cancel(room,1)}
+    fun show(room:String,event:String,label:String="Yichat",kind:String="private") {
+        if(!enabled()||!permitted())return
+        val hint=PushHint.parse(mapOf("conversation_id" to room,"conversation_type" to kind,"message_id" to event))?:return
         val a=graph.auth.account?:return
         val key="${a.storage}.notified.${SecureStore.hash(room)}"
         if(graph.vault.get(key)?.decodeToString()==event)return
-        val intent=Intent(context,MainActivity::class.java).putExtra("notification_room",room).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        val pending=PendingIntent.getActivity(context,room.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification=Notification.Builder(context,"messages").setSmallIcon(R.drawable.ic_notification).setContentTitle(label.take(80)).setContentText("收到新的聊天消息").setContentIntent(pending).setOnlyAlertOnce(true).setAutoCancel(true).setVisibility(Notification.VISIBILITY_PRIVATE).setCategory(Notification.CATEGORY_MESSAGE).build()
-        manager.notify(room,1,notification);graph.vault.put(key,event.toByteArray())
+        push.receive(hint);graph.vault.put(key,event.toByteArray())
     }
     suspend fun poll() = polling.withLock {
-        if(!enabled() || !permitted() || foreground)return@withLock
+        if(!enabled() || !permitted())return@withLock
         val a=graph.auth.account?:return@withLock
         val key="${a.storage}.notification-cursor"
         repeat(2) {
-            if(foreground || graph.auth.account?.token!=a.token)return@withLock
+            if(graph.auth.account?.token!=a.token)return@withLock
             val cursor=graph.vault.get(key)?.decodeToString()?.takeIf{it.matches(Regex("[0-9]{1,19}"))}
             val result=graph.gateway.call("/api/notifications?after="+(cursor?:"0")).jsonObject
-            if(graph.auth.account?.token!=a.token || foreground)return@withLock
-            for(row in result.a("rooms")){val item=row.jsonObject;show(item.s("room"),item.s("event"))}
+            if(graph.auth.account?.token!=a.token)return@withLock
+            for(row in result.a("rooms")){val item=row.jsonObject;show(item.s("room"),item.s("event"),kind=if(item.s("kind")=="group")"group" else "private")}
             graph.vault.put(key,result.s("cursor").toByteArray())
             if(!result.b("has_more"))return@withLock
         }

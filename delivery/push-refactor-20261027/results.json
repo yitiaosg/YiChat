@@ -1,0 +1,12 @@
+{
+  "android_unit_tests": 14,
+  "android_failures": 0,
+  "web_unit_tests": 15,
+  "backend_tests": 55,
+  "android_notification_instrumentation": 1,
+  "android_api": 28,
+  "lint_errors": 0,
+  "lint_warnings": 56,
+  "fcm_delivery_verified": false,
+  "firebase_configuration_supplied": false
+}

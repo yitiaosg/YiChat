@@ -157,6 +157,13 @@ class MainActivity : ComponentActivity() {
                 web.evaluateJavascript("(()=>{const close=document.querySelector('.modal header button[aria-label=关闭]');if(close){close.click();return true}const back=document.querySelector('.conversation .mobile-back');if(back){back.click();return true}return false})()") { handled -> if(handled!="true") finish() }
             }
         })
+        (application as YiChatApplication).push.refreshVisible={web.post {
+            web.evaluateJavascript("window.dispatchEvent(new Event('yc:notification-sync'))",null)
+        }}
+        graph.notificationContent.attach { id,hint ->
+            val request=buildJsonObject{put("id",id);put("room",hint.room);put("kind",hint.kind);put("event",hint.event)}
+            web.evaluateJavascript("window.dispatchEvent(new CustomEvent('yc:notification-fetch',{detail:"+request.toString()+"}))",null)
+        }
         web.loadUrl(WebRoutes.ORIGIN+"/")
         consumeIntent(intent)
         lifecycleScope.launch {
@@ -251,7 +258,10 @@ class MainActivity : ComponentActivity() {
                     "configureNotifications" -> { val enabled=args.b("enabled");graph.notifications.configure(enabled);if(enabled && android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS);respond(reply,buildJsonObject{put("enabled",graph.notifications.enabled());put("permitted",graph.notifications.permitted());put("background_supported",true)}) }
                     "backgroundSettings" -> { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+packageName)));respond(reply) }
                     "notificationSettings" -> { startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,packageName));respond(reply) }
-                    "notifyRoom" -> { graph.notifications.show(args.s("room"),args.s("event"),args.s("label"));respond(reply) }
+                    "notificationActiveRoom" -> { val room=args.s("room");require(room.isEmpty()||(room.startsWith("!")&&room.length<=255));(application as YiChatApplication).push.activeRoom=room;respond(reply) }
+                    "notificationNames" -> { (application as YiChatApplication).push.cacheNames(args.a("rooms").take(500).map{val row=it.jsonObject;row.s("room") to row.s("label")});respond(reply) }
+                    "notificationResult" -> { graph.notificationContent.complete(args.s("id"),args);respond(reply) }
+                    "notifyRoom" -> { graph.notifications.show(args.s("room"),args.s("event"),args.s("label"),args.s("kind").ifBlank{"private"});respond(reply) }
                     "cancelNotification" -> { graph.notifications.cancel(args.s("room"));respond(reply) }
                     "pendingNotification" -> { respond(reply,buildJsonObject{put("room",notificationRoom?:"")});notificationRoom=null }
                     "backupStatus" -> respond(reply,backupStatus())
@@ -298,6 +308,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         chooser?.onReceiveValue(null);microphoneRequest?.deny()
         downloads.values.forEach { it.file.delete() };saving?.first?.file?.delete()
+        graph.notificationContent.detach();(application as YiChatApplication).push.activeRoom="";(application as YiChatApplication).push.refreshVisible=null
         if(::web.isInitialized) { WebViewCompat.removeWebMessageListener(web,"YiChatApp");web.destroy() }
         super.onDestroy()
     }

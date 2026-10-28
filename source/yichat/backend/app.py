@@ -32,8 +32,13 @@ def create_app(settings=None):
         app.state.funds.migrate()
         from .assets import migrate as migrate_assets
         migrate_assets(s)
+        from .push import FCMSender
+        app.state.push=FCMSender(s,app.state.http)
+        push_job=asyncio.create_task(app.state.push.run())
         job=asyncio.create_task(maintenance(app))
         yield
+        push_job.cancel()
+        with contextlib.suppress(asyncio.CancelledError): await push_job
         job.cancel()
         with contextlib.suppress(asyncio.CancelledError): await job
         await app.state.http.aclose()
@@ -637,6 +642,8 @@ def create_app(settings=None):
     install_groups(app,s,session,room_access)
     direct.install(app,s,session)
     conversations.install(app,s,session)
+    from . import push
+    push.install(app,s,session)
     group_avatars.install(app,s,session)
     from .record_audit import install as install_record_audit
     install_record_audit(app,s,session)

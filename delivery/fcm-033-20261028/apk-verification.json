@@ -1,0 +1,11 @@
+{
+  "version": "0.3.3",
+  "version_code": 11,
+  "package": "org.yitiao.yichat.mobile",
+  "same_signing_certificate_as_032": true,
+  "firebase_resource_values_match": true,
+  "test_hooks_absent": true,
+  "github_apk_download_link": "https://github.com/yitiaosg/YiChat/releases/download/android-20261028-v0.3.3/YiChat-0.3.3-11.apk",
+  "apk_bytes": 9757962,
+  "apk_sha256": "1566da33f02c5db0b5be0141bc2358594ea2890b94da895233de6bed529aac44"
+}

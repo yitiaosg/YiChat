@@ -46,8 +46,8 @@ class BackgroundNotificationsTest {
    val body="{\"msgtype\":\"m.text\",\"body\":\"isolated background notification test\"}".toRequestBody("application/json".toMediaType())
    http.newCall(Request.Builder().url(BuildConfig.GATEWAY+"/_matrix/client/v3/rooms/$encoded/send/m.room.message/background-"+System.nanoTime()).header("Authorization","Bearer "+bob.s("token")).put(body).build()).execute().use{assertTrue(it.isSuccessful)}
    val deadline=System.currentTimeMillis()+60_000
-   while(System.currentTimeMillis()<deadline&&!manager.activeNotifications.any{it.tag==room})Thread.sleep(300)
-   assertTrue("a new accepted message is notified with the chat screen closed",manager.activeNotifications.any{it.tag==room})
+   while(System.currentTimeMillis()<deadline&&!manager.activeNotifications.any{it.tag=="conversation:$room"})Thread.sleep(300)
+   assertTrue("a new accepted message is notified with the chat screen closed",manager.activeNotifications.any{it.tag=="conversation:$room"})
   } finally {graph.notifications.configure(false);graph.lock();instrumentation.runOnMainSync{activity.finish()};http.dispatcher.executorService.shutdown()}
  }
 }

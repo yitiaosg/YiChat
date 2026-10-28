@@ -1,0 +1,6 @@
+Starting synthetic client alice
+Synthetic client ready alice
+Starting synthetic client bob
+Synthetic client ready bob
+Initial synthetic E2EE verified
+{"passed":["initial E2EE","headless same-device offline new Megolm session decrypts","UI reopens with intact keys and sync cache"]}

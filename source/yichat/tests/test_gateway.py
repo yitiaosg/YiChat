@@ -27,6 +27,11 @@ def gateway(env):
         for i,(room,name) in enumerate([('!direct','alice'),('!direct','bob'),('!group','alice')],1):
             rows.append(('$join'+str(i),room,i,now-86400000,json.dumps({'type':'m.room.member','state_key':u[name]['mxid'],'sender':u[name]['mxid'],'content':{'membership':'join'}})))
         archive.ingest_batch(s.archive_ingest,rows,3,now)
+        # Current membership is a separate permission barrier from archive history.
+        # The mocked Matrix adapter must seed both, as real Synapse ingestion does.
+        with connect(s.ledger) as ledger:
+            for event,room,_,_,raw in rows:
+                ledger.execute("INSERT INTO yichat_memberships(room,mxid,membership,event_id) VALUES(?,?,'join',?)",(room,json.loads(raw)['state_key'],event))
         app.state.matrix.membership=AsyncMock();app.state.matrix.member=AsyncMock();app.state.matrix.fence=AsyncMock(return_value=3)
         client.cookies.set('yc_session','session-token');client.headers['Origin']=s.origin
         yield client,app,s
