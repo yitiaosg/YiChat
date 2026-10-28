@@ -1,0 +1,21 @@
+{
+  "backend_tests": 55,
+  "web_tests": 15,
+  "android_release_unit_tests": 14,
+  "android_unit_failures": 0,
+  "android_api": 28,
+  "instrumentation_tests": 2,
+  "firebase_runtime_initialization_passed": true,
+  "google_oauth_status": 200,
+  "fcm_validate_only_status": 400,
+  "fcm_validate_only_reason": "synthetic registration token INVALID_ARGUMENT",
+  "real_push_messages_sent": 0,
+  "physical_device_fcm_delivery_verified": false,
+  "lint_errors": 0,
+  "lint_warnings": 58,
+  "matrix_readiness_status": 200,
+  "archive_gap_count": 0,
+  "archive_checkpoint_healthy": true,
+  "health_status_before_and_after": 503,
+  "historical_failed_archive_jobs": 1
+}

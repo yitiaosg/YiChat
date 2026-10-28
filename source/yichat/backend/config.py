@@ -13,6 +13,8 @@ class Settings:
     idp_internal: str = os.getenv('YICHAT_IDP_INTERNAL', 'http://127.0.0.1:5001')
     admin_token: str = os.getenv('YICHAT_SYNAPSE_ADMIN_TOKEN', '')
     session_key: str = os.getenv('YICHAT_SESSION_KEY', '')
+    fcm_project: str = os.getenv('YICHAT_FCM_PROJECT', '')
+    fcm_credentials: str = os.getenv('YICHAT_FCM_CREDENTIALS', '')
     official: str = os.getenv('YICHAT_OFFICIAL_WALLET', '')
     funds_enabled: bool = os.getenv('YICHAT_FUNDS_ENABLED', 'false') == 'true'
     upload_rate: int = int(os.getenv('YICHAT_UPLOAD_RATE', '500000'))

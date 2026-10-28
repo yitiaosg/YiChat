@@ -10,3 +10,4 @@ __pycache__/
 tests/.fixture-path
 *.key
 *.pem
+client/test-results/

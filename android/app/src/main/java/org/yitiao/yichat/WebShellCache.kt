@@ -41,7 +41,7 @@ class WebShellCache(private val context: Context, private val online: () -> Bool
     fun intercept(uri: Uri): WebResourceResponse? {
         if (!WebRoutes.trusted(uri.toString())) return null
         val path = uri.path ?: return null
-        if (path != "/" && !WebRoutes.publicAsset(path)) return null
+        if (path != "/" && path!="/notification.html" && !WebRoutes.publicAsset(path)) return null
         var bytes: ByteArray? = if (bundledOnly) bundled(path) else null
         val cached = file(path)
         // Hashed assets are immutable. Index is refreshed online; APK resources

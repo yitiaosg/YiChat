@@ -35,3 +35,6 @@ signing-private.json
 *.aab
 *.zip
 *.tar.gz
+
+google-services.json
+*service-account*.json

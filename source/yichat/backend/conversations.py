@@ -61,25 +61,11 @@ def install(app,s,session):
     @app.get('/api/notifications')
     async def notifications(request:Request,after:int|None=None):
         who=session(request)
-        with connect(s.db) as c:
-            high=c.execute('SELECT coalesce(max(sequence),0) FROM history_receipts').fetchone()[0]
-            if after is None:return {'cursor':str(high),'rooms':[]}
-            if not 0<=after<=9223372036854775807:fail(400,'无效通知游标')
-            if after>high:fail(503,'通知存证游标尚未追平，请稍后重试')
-            records=c.execute("SELECT h.room,h.event_id event,h.sequence FROM history_receipts h LEFT JOIN conversation_preferences p ON p.room=h.room AND p.subject=? WHERE h.sequence>? AND h.sender<>? AND h.type IN ('m.room.message','m.room.encrypted') AND h.received_ms>? AND coalesce(p.archived,0)=0 AND coalesce(p.muted,0)=0 AND h.sequence>coalesce(p.read_sequence,0) AND h.redacts IS NULL AND NOT EXISTS(SELECT 1 FROM history_receipts r WHERE r.room=h.room AND r.redacts=h.event_id) ORDER BY h.sequence LIMIT 200",(who['subject'],after,who['mxid'],int((time.time()-86400)*1000))).fetchall()
-        with connect(s.ledger) as c:
-            live={r['room'] for r in c.execute("SELECT room FROM yichat_memberships WHERE mxid=? AND membership='join' AND pending_event IS NULL",(who['mxid'],))}
-            ended={r['room'] for r in c.execute('SELECT room FROM yichat_group_lifecycle WHERE dissolved_ms IS NOT NULL')}
-        rooms={};cursor=after;stopped=False
-        for row in records:
-            rid=row['room']
-            if rid in live and rid not in ended:
-                if rid not in rooms and len(rooms)>=20:stopped=True;break
-                old=rooms.get(rid)
-                rooms[rid]={'room':rid,'sequence':str(row['sequence']),'event':row['event'],'count':(old['count'] if old else 0)+1}
-            cursor=row['sequence']
-        more=stopped or len(records)==200
-        return {'cursor':str(cursor if more else high),'rooms':list(rooms.values()),'has_more':more}
+        return notification_hints(s,who,after)
+    @app.get('/api/notifications/{room}/events')
+    async def notification_events(request:Request,room:str,through:str):
+        who=session(request)
+        return {'events':unread_notification_events(s,who,room,through)}
     @app.get('/api/transactions')
     async def transactions(request:Request,before:int=9223372036854775807):
         who=session(request)
@@ -92,3 +78,43 @@ def install(app,s,session):
         for row in rows[:30]:
             r=dict(row);items.append({'id':r['id'],'hash':r['hash'],'created':r['created'],'source':r['source'],'destination':r['destination'],'amount':app.state.funds.y.fmt(r['credit']),'gas':app.state.funds.y.fmt(r['gas']),'action':('发送转账' if r['order_kind']=='direct' else '发送红包') if r['action']=='send' else '退款到账' if r['action']=='refund' else '确认收款' if r['order_kind']=='direct' else '领取红包','url':'https://yidt.yitiao.org/explorer/tx/'+r['hash']})
         return {'items':items,'next_before':items[-1]['id'] if len(rows)>30 else None}
+
+def notification_hints(s,who,after):
+    with connect(s.db) as c:
+        high=c.execute('SELECT coalesce(max(sequence),0) FROM history_receipts').fetchone()[0]
+        if after is None:return {'cursor':str(high),'rooms':[]}
+        if not 0<=after<=9223372036854775807:fail(400,'无效通知游标')
+        if after>high:fail(503,'通知存证游标尚未追平，请稍后重试')
+        records=c.execute("SELECT h.room,h.event_id event,h.sequence,r.kind FROM history_receipts h JOIN rooms r ON r.room=h.room LEFT JOIN conversation_preferences p ON p.room=h.room AND p.subject=? WHERE h.sequence>? AND h.sender<>? AND h.type IN ('m.room.message','m.room.encrypted') AND h.received_ms>? AND coalesce(p.archived,0)=0 AND coalesce(p.muted,0)=0 AND h.sequence>coalesce(p.read_sequence,0) AND h.redacts IS NULL AND NOT EXISTS(SELECT 1 FROM history_receipts r WHERE r.room=h.room AND r.redacts=h.event_id) ORDER BY h.sequence LIMIT 200",(who['subject'],after,who['mxid'],int((time.time()-86400)*1000))).fetchall()
+    with connect(s.ledger) as c:
+        live={r['room'] for r in c.execute("SELECT room FROM yichat_memberships WHERE mxid=? AND membership='join' AND pending_event IS NULL",(who['mxid'],))}
+        ended={r['room'] for r in c.execute('SELECT room FROM yichat_group_lifecycle WHERE dissolved_ms IS NOT NULL')}
+    rooms={};cursor=after;stopped=False
+    for row in records:
+        rid=row['room']
+        if rid in live and rid not in ended:
+            if rid not in rooms and len(rooms)>=20:stopped=True;break
+            old=rooms.get(rid)
+            rooms[rid]={'room':rid,'sequence':str(row['sequence']),'event':row['event'],'count':(old['count'] if old else 0)+1,'kind':row['kind']}
+        cursor=row['sequence']
+    more=stopped or len(records)==200
+    return {'cursor':str(cursor if more else high),'rooms':list(rooms.values()),'has_more':more}
+
+def unread_notification_events(s,who,room,through):
+    """Unread event IDs only; ciphertext is fetched via the existing Matrix API."""
+    with connect(s.ledger) as c:
+        member=c.execute("SELECT 1 FROM yichat_memberships WHERE room=? AND mxid=? AND membership='join' AND pending_event IS NULL",(room,who['mxid'])).fetchone()
+        ended=c.execute('SELECT 1 FROM yichat_group_lifecycle WHERE room=? AND dissolved_ms IS NOT NULL',(room,)).fetchone()
+    if not member or ended:fail(403,'会话已不可用')
+    with connect(s.db) as c:
+        target=c.execute('SELECT sequence FROM history_receipts WHERE room=? AND event_id=?',(room,through)).fetchone()
+        if not target:fail(404,'通知事件尚不可用')
+        rows=c.execute("""SELECT h.event_id FROM history_receipts h
+            LEFT JOIN conversation_preferences p ON p.subject=? AND p.room=h.room
+            WHERE h.room=? AND h.sequence<=? AND h.sequence>coalesce(p.read_sequence,0)
+            AND coalesce(p.muted,0)=0 AND coalesce(p.archived,0)=0
+            AND h.sender<>? AND h.received_ms>? AND h.type IN ('m.room.message','m.room.encrypted')
+            AND NOT EXISTS(SELECT 1 FROM history_receipts r WHERE r.room=h.room AND r.redacts=h.event_id)
+            ORDER BY h.sequence DESC LIMIT 20""",(who['subject'],room,target['sequence'],who['mxid'],int((time.time()-86400)*1000))).fetchall()
+    ids=[r['event_id'] for r in reversed(rows)]
+    return ids if through in ids else []

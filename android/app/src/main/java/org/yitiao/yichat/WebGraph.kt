@@ -37,7 +37,19 @@ class WebPacketStore(private val context: Context) : PacketStore {
     override suspend fun refreshTombstones() = Unit // The shared Web client applies server recalls itself.
 }
 
-class YiChatApplication : Application() { val graph by lazy { Graph(this) } }
+class YiChatApplication : Application() {
+    val push by lazy { PushNotifications(this) }
+    val graph by lazy { Graph(this) }
+    override fun onCreate(){
+        super.onCreate()
+        // USER_UNLOCKED is a runtime-only broadcast. No CE access before it.
+        if(!push.unlocked){
+            val receiver=NotificationUnlockReceiver()
+            androidx.core.content.ContextCompat.registerReceiver(this,receiver,
+                android.content.IntentFilter(android.content.Intent.ACTION_USER_UNLOCKED),androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
+    }
+}
 class Graph(val context: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val vault = SecureStore(context)
@@ -49,6 +61,7 @@ class Graph(val context: Application) {
     val backup = BackupRepository(context, store, history, vault)
     val records = RecordAudit(store,vault)
     val notifications = Notifications(context,this)
+    val notificationContent = NotificationContent(context,this)
     private val startup = Mutex()
     private var restored = false
     suspend fun restore() = startup.withLock {

@@ -1,0 +1,5 @@
+org.yitiao.yichat.PushNotificationsTest:.
+
+Time: 2.286
+
+OK (1 test)

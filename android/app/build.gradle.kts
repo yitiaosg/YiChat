@@ -13,10 +13,25 @@ android {
   applicationId = "org.yitiao.yichat.mobile"
   minSdk = 26
   targetSdk = 36
-  versionCode = providers.gradleProperty("yichatVersionCode").orElse("10").get().toInt()
-  versionName = "0.3.2"
+  versionCode = providers.gradleProperty("yichatVersionCode").orElse("11").get().toInt()
+  versionName = "0.3.3"
   testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   buildConfigField("String", "GATEWAY", "\"https://chat.yitiao.org\"")
+ }
+ // FirebaseInitProvider reads standard resources from external configuration.
+ val firebasePath = providers.environmentVariable("YICHAT_FIREBASE_CONFIG").orNull
+ if (firebasePath != null) {
+  val firebase = JsonSlurper().parse(file(firebasePath)) as Map<*, *>
+  val project = firebase["project_info"] as Map<*, *>
+  val client = (firebase["client"] as List<*>).map { it as Map<*, *> }.single {
+   ((it["client_info"] as Map<*, *>)["android_client_info"] as Map<*, *>)["package_name"] == "org.yitiao.yichat.mobile"
+  }
+  defaultConfig {
+   resValue("string", "google_app_id", (client["client_info"] as Map<*, *>)["mobilesdk_app_id"] as String)
+   resValue("string", "gcm_defaultSenderId", project["project_number"] as String)
+   resValue("string", "project_id", project["project_id"] as String)
+   resValue("string", "google_api_key", ((client["api_key"] as List<*>).first() as Map<*, *>)["current_key"] as String)
+  }
  }
  buildFeatures { buildConfig = true }
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -46,6 +61,10 @@ ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 dependencies {
  implementation("androidx.activity:activity-ktx:1.10.1")
  implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.1")
+ // Play services pulls an old Fragment transitively; align with Activity Result APIs.
+ implementation("androidx.fragment:fragment:1.8.9")
+ implementation("com.google.firebase:firebase-messaging:25.0.1")
+ implementation("com.google.firebase:firebase-messaging-directboot:25.0.1")
  implementation(libs.room.runtime); implementation(libs.room.ktx); ksp(libs.room.compiler)
  implementation(libs.work); implementation(libs.serialization); implementation(libs.okhttp); implementation(libs.coroutines)
  implementation(libs.bc); implementation(libs.webkit); implementation(libs.browser)

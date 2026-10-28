@@ -1,5 +1,18 @@
 # 更新日志
 
+## 0.3.3 — 2026-10-28
+
+Android versionCode：**11**。原签名覆盖升级；接入真实 Firebase 项目配置。
+
+- 增加 FCM HTTP v1 高优先级纯 data 推送，仅包含会话 ID、类型和消息 ID；token 加密保存，支持轮换、撤销及失效清理。
+- 原生接收入口立即发通用占位通知，再由 expedited WorkManager 按会话串行补拉；配额不足时按普通任务运行。
+- 复用既有 Matrix JS / Rust 加密模块和 WebView 密钥库。成功后以相同通知标识和 MessagingStyle 更新内容，失败保留占位通知，替换不重复响铃。
+- 增加 Direct Boot 显示名缓存、解锁补处理、锁屏隐私、私聊／群聊高重要性通道和当前会话通知抑制。
+- 保留尚未配置 Firebase 的设备的轮询兼容路径；新增单元、系统通知和真实离线加密验证。
+- YiChat 网页下载入口标注 0.3.3，直接链接新版 GitHub APK；站内安装包下载接口保持关闭。
+
+配置要求与测试步骤见 [推送通知说明](source/yichat/docs/PUSH-NOTIFICATIONS.md)。发布配置及验证边界见 [PRODUCTION-0.3.3.md](PRODUCTION-0.3.3.md)。
+
 ## 0.3.2 — 2026-10-23
 
 Android versionCode：**10**。沿用 `org.yitiao.yichat.mobile` 与原签名，支持覆盖升级。
