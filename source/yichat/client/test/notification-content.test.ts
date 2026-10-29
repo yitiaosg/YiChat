@@ -43,6 +43,6 @@ test('network errors and mismatched event identity cannot produce a replacement'
  await assert.rejects(notificationContent(chat,{id:'work',room:'!room',kind:'private',event:'$event'}));
 });
 test('attachments use labels without fetching or decrypting media',()=>{
- assert.equal(notificationText({msgtype:'m.image',body:'image.jpg'}),'[图片]');
- assert.equal(notificationText({msgtype:'m.file',body:'sensitive filename'}),'[文件]');
+ assert.equal(notificationText({msgtype:'m.image',body:'image.jpg'}),'对方发送了一张图片');
+ assert.equal(notificationText({msgtype:'m.file',body:'sensitive filename'}),'对方发送了一个文件');
 });

@@ -1,0 +1,139 @@
+[
+  {
+    "name": "plain",
+    "content": {
+      "msgtype": "m.text",
+      "body": "你好，明天见！"
+    },
+    "private": "你好，明天见！",
+    "group": "你好，明天见！"
+  },
+  {
+    "name": "transfer",
+    "content": {
+      "msgtype": "m.text",
+      "body": "https://chat.yitiao.org/orders/OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO",
+      "org.yitiao.business": {
+        "kind": "order",
+        "id": "OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO"
+      }
+    },
+    "private": "对方向你转了一笔账",
+    "group": "发送了一个红包"
+  },
+  {
+    "name": "receipt",
+    "content": {
+      "msgtype": "m.text",
+      "body": "已收款 · https://chat.yitiao.org/orders/OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO",
+      "org.yitiao.share": {
+        "type": "receipt"
+      },
+      "org.yitiao.business": {
+        "kind": "order",
+        "id": "OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO"
+      }
+    },
+    "private": "对方已确认收款",
+    "group": "已确认收款"
+  },
+  {
+    "name": "gift",
+    "content": {
+      "msgtype": "m.text",
+      "body": "https://chat.yitiao.org/gifts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "private": "对方向你赠送了一张卡片",
+    "group": "赠送了一张卡片"
+  },
+  {
+    "name": "image",
+    "content": {
+      "msgtype": "m.image",
+      "body": "private-filename"
+    },
+    "private": "对方发送了一张图片",
+    "group": "发送了一张图片"
+  },
+  {
+    "name": "audio",
+    "content": {
+      "msgtype": "m.audio",
+      "body": "private-filename"
+    },
+    "private": "对方发送了一条语音",
+    "group": "发送了一条语音"
+  },
+  {
+    "name": "video",
+    "content": {
+      "msgtype": "m.video",
+      "body": "private-filename"
+    },
+    "private": "对方发送了一段视频",
+    "group": "发送了一段视频"
+  },
+  {
+    "name": "file",
+    "content": {
+      "msgtype": "m.file",
+      "body": "private-filename"
+    },
+    "private": "对方发送了一个文件",
+    "group": "发送了一个文件"
+  },
+  {
+    "name": "location",
+    "content": {
+      "msgtype": "m.location",
+      "body": "private-filename"
+    },
+    "private": "对方分享了一个位置",
+    "group": "分享了一个位置"
+  },
+  {
+    "name": "card-share",
+    "content": {
+      "msgtype": "m.text",
+      "body": "https://yitiao.org/ycards/card/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/CID/"
+    },
+    "private": "对方分享了一张卡片",
+    "group": "分享了一张卡片"
+  },
+  {
+    "name": "tx-share",
+    "content": {
+      "msgtype": "m.text",
+      "body": "https://yidt.yitiao.org/explorer/tx/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "private": "对方分享了一笔 YIDT 交易",
+    "group": "分享了一笔 YIDT 交易"
+  },
+  {
+    "name": "game",
+    "content": {
+      "msgtype": "m.text",
+      "body": "https://yitiao.org/games/parachute/share/GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG/"
+    },
+    "private": "对方分享了一条游戏记录",
+    "group": "分享了一条游戏记录"
+  },
+  {
+    "name": "doudizhu",
+    "content": {
+      "msgtype": "m.text",
+      "body": "https://yitiao.org/games/doudizhu/room/12345/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/"
+    },
+    "private": "对方邀请你加入斗地主房间",
+    "group": "分享了斗地主房间"
+  },
+  {
+    "name": "ordinary-url",
+    "content": {
+      "msgtype": "m.text",
+      "body": "https://example.com/"
+    },
+    "private": "https://example.com/",
+    "group": "https://example.com/"
+  }
+]

@@ -77,6 +77,7 @@ def migrate(settings):
         c.executescript(conversations.SCHEMA)
         c.executescript(direct.SCHEMA)
         c.executescript(push.SCHEMA)
+        push.migrate(c)
         c.execute("INSERT OR IGNORE INTO direct_pairs(first,second,room) SELECT min(owner,peer),max(owner,peer),room FROM rooms WHERE kind='direct' ORDER BY rowid")
         for row in c.execute("SELECT room FROM rooms WHERE kind='group'").fetchall():groups.register(c,row['room'],seeded=0)
         c.execute("INSERT OR IGNORE INTO direct_visibility SELECT room,EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=rooms.room AND h.type IN ('m.room.message','m.room.encrypted')) FROM rooms WHERE kind='direct'")

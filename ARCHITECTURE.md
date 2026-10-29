@@ -1,10 +1,10 @@
-# 单一网页前端架构（0.3.4）
+# 单一网页前端架构（0.3.5）
 
 Android MainActivity 通过受限 WebView 加载与 Web 共用的 Preact / TypeScript 前端。Matrix JS SDK 负责普通消息同步；私聊、群聊及附件均停用端到端加密，通过 HTTPS 传输，服务器可以读取消息。不初始化 Rust Crypto，也不要求密钥备份或设备密钥查询。
 
 - 单写 Web Lock 管理 UI 与后台通知 WebView 的同步实例；账号、MXID、设备和消息 epoch 隔离 IndexedDB 同步缓存及本地消息草稿。
 - 业务 API、站内分享和资产授权沿用原架构。转账及红包使用权威 SQLite 账本与原幂等出账流程，赠卡保存固定 URL，预览按需读取当前卡片。
-- 原生 FCM 回调立即显示占位，WorkManager 用同源 SDK 补拉普通消息并合并替换；推送 data 不含明文，失败保留占位，替换使用 OnlyAlertOnce。
+- 原生 FCM 回调立即显示占位，WorkManager 用同源 SDK 补拉普通消息并合并替换；新版注册 preview_version=1 后，推送 data 带最长 1200 UTF-8 字节的文字/类型摘要及账号设备指纹；旧版仍只有路由。首次解锁前隐藏正文，补拉失败保留已显示内容，替换使用 OnlyAlertOnce。
 - Kotlin HistoryRepository 根据认证摘要拉取服务器原包；保留接收时间、事件身份和 SHA-256 校验，也保留证据支持的成员补包逻辑。
 - Room 原包存储仍由 Keystore 保护，内部快照使用 AES-GCM，外部 YCB1 使用 scrypt + AES-GCM。停用 E2EE 不影响本地存储与导出口令加密。
 

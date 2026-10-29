@@ -1,10 +1,17 @@
 # YiChat
 
-当前版本 **Android 0.3.4 / versionCode 12**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.3.5 / versionCode 13**，包名 `org.yitiao.yichat.mobile`。
 
-[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.4 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261029-v0.3.4/YiChat-0.3.4-12.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
+[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.5 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261029-v0.3.5/YiChat-0.3.5-13.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
+
+## 0.3.5 更新
+
+- 站内卡片、游戏、交易等分享只显示预览内容，隐藏重复原 URL；旁边的说明文字和普通外链保留。会话列表、回复摘要、发送中和失败草稿遵循同样显示规则。消息原包与 URL 不修改，哈希校验保持有效。
+- 新版 App 通过 FCM 直接收到文字或消息类型摘要：转账、红包、收款回执、赠卡、图片、语音、视频、文件和站内分享分别显示对应提示。旧版 App 沿用三字段路由，继续补拉内容。
+- 推送预览从接收者仍有权访问的未读消息生成，并校验原包哈希；按 UTF-8 截断到 1200 字节。新增账号/设备指纹，拒绝切换账号后到达的旧账号正文。首次解锁前只显示通用占位，保留锁屏 publicVersion、通知合并和失败保留。
+- 本版沿用已有 message epoch，不再次执行聊天清理，不修改钱包、资金或卡片资产数据。见 [PRODUCTION-0.3.5.md](PRODUCTION-0.3.5.md)。
 
 ## 0.3.4 更新
 
@@ -19,7 +26,7 @@ Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**�
 
 ## 安装与使用
 
-使用原签名覆盖升级，无需卸载或清除应用数据。**本次旧聊天清理为站点所有者明确要求的一次性重置，旧聊天不会通过恢复密钥或旧备份重新导入。** 已自行下载到设备或其他位置的旧导出文件需要自行处理；服务器无法远程删除这些副本。
+使用原签名覆盖升级，无需卸载或清除应用数据。**0.3.4 已执行站点所有者要求的一次性重置；0.3.5 沿用原 epoch，不重复删除新消息。** 尚未升级过的旧客户端首次打开时清理旧缓存，并重新同步服务端的新聊天；旧聊天不会通过恢复密钥或旧备份重新导入。 已自行下载到设备或其他位置的旧导出文件需要自行处理；服务器无法远程删除这些副本。
 
 首次打开后确认“消息通知”已开启并授予系统权限。FCM 注册成功后停止常驻连接；无法注册的设备保留兼容后台连接。真实 FCM 投递仍应在有 Google Play services 的手机上验证。
 

@@ -1,6 +1,6 @@
 # YiChat 推送通知重构
 
-状态：当前 Android 0.3.4 / code 12，已停用聊天 E2EE。FCM 外置配置、通知占位与后台补拉机制沿用 0.3.3，内容任务现在直接读取经过认证的普通消息。实际手机 FCM 投递、Doze 和重启未首次解锁仍需在 Google Play services 设备完成；见根目录 PRODUCTION-0.3.4.md。
+状态：当前 Android 0.3.5 / code 13，已停用聊天 E2EE。FCM 外置配置和后台补拉机制沿用；新版注册预览协议后直接显示限长正文或类型摘要，内容任务继续补拉普通消息并合并。实际手机 FCM 投递、Doze 和重启未首次解锁仍需在 Google Play services 设备完成；见根目录 PRODUCTION-0.3.5.md。
 
 ## 现状与实现选择
 
@@ -10,7 +10,7 @@ App 与 Web 共用 Matrix JS SDK、同源 WebView 存储及单写锁。聊天不
 
 1. `onMessageReceived` 只校验白名单字段、读取 DP 显示名、立即 `notify`；不访问 Graph、网络或解密器。记录优先级和原始优先级，不记录 payload、token、正文或密钥。
 2. 通知标识为 `tag = conversation:<conversation_id>`、`id = conversation_id.hashCode()`。额外 tag 避免不同会话的整数哈希碰撞。PendingIntent action 同样按会话隔离。
-3. 占位标题来自本地显示名缓存，缺失为 `Yichat`，正文为 `你有新的消息`。私聊／群聊分别使用新的 `IMPORTANCE_HIGH` 通道。首次显示可响铃，已有同会话通知及替换使用 `setOnlyAlertOnce(true)`。
+3. 通知标题来自本地显示名缓存，缺失为 `Yichat`，没有推送预览或首次解锁前正文为 `你有新的消息`；新版带有效账号设备指纹时直接显示预览。私聊／群聊分别使用新的 `IMPORTANCE_HIGH` 通道。首次显示可响铃，已有同会话通知及替换使用 `setOnlyAlertOnce(true)`。
 4. 使用 `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`。unique work 名基于会话 ID，策略为 `APPEND_OR_REPLACE`。`KEEP` 会丢弃工作执行期间到达的新请求；追加任务可顺序补拉；开始网络前跳过旧代任务及已经替换成功的重复请求，最新任务一次取最多 20 条未读消息以合并突发推送。失败返回 success 并保留占位，避免反复重试、阻塞会话链。后续推送或重启解锁可再次补处理。旧代任务可为聚合提供已验证结果，但不能覆盖较新的占位通知。
 5. Worker 复用当前 UI WebView 的 SDK；没有 Activity 时创建使用相同 origin、WebView 存储和 `yc:active-client` Web Lock 的后台 WebView。全进程串行运行此桥接，防止不同会话的后台 WebView 竞争一个同步存储。UI 优先，可中止后台实例；普通网页多标签锁不被强制抢占。
 6. 服务器提供最多 20 个该会话的未读事件 ID，再由现有 Matrix API 拉消息。检查当前成员、静音、归档、已读、撤回以及事件身份。直接读取普通消息；旧加密事件拒绝用于通知替换，保留占位。SDK 继续正常同步，没有原生第二套同步器。
@@ -61,7 +61,16 @@ YICHAT_FCM_CREDENTIALS=/etc/yichat/private/fcm-service-account.json
 }
 ```
 
-群聊类型为 `group`。没有顶层或 Android `notification` 字段；data 没有昵称、群名、正文、附件数据或密钥。不要用 Firebase 控制台的 Notification 消息代替此协议。FCM message_id 与 Matrix message_id 是不同概念，此处 data 使用 Matrix 事件 ID。
+群聊类型为 `group`。没有顶层或 Android `notification` 字段；旧版 data 没有正文。新版原生注册 `preview_version: 1` 后，data 增加 `message_preview` 和 `recipient_tag`；没有额外昵称/群名字段、附件数据或密钥。不要用 Firebase 控制台的 Notification 消息代替此协议。FCM message_id 与 Matrix message_id 是不同概念，此处 data 使用 Matrix 事件 ID。
+
+### 0.3.5 正文预览协议
+
+- 新版原生注册请求增加 `preview_version: 1`。服务端以向后兼容的默认值 0 迁移现有设备记录，不改 token、游标或通知偏好。旧版仍收到原三个字段，避免严格解析器拒绝额外字段。
+- 新版追加 `message_preview`（普通文字；转账、红包、收款回执、赠卡、图片等为类型摘要）及 `recipient_tag`。指纹为 SHA-256(`https://chat.yitiao.org|uid|mxid|device`)，与本地 Account.storage 一致；不匹配当前 DP 账号指纹时丢弃，避免账号切换后的延迟正文泄漏。
+- 服务端从认证的未读存证读取消息并核对 SHA-256、房间和事件身份。发送前重新检查静音、已读、有效会话和设备启用状态。缺少源数据或存证校验失败时退回纯路由，不记录正文或异常文本。
+- 预览最多 1200 UTF-8 字节，超长文字按完整码点截断并追加省略号，给 FCM 4096 字节上限留出路由空间。参考 [Firebase 消息类型与限制](https://firebase.google.com/docs/cloud-messaging/customize-messages/set-message-type)。
+- Android 原生回调无需网络便显示预览。正文不写 DP 名称缓存、自定义通知 extras 或 WorkManager 输入；首次解锁前继续使用通用正文，解锁后补拉。锁屏仍使用 VISIBILITY_PRIVATE 和通用 publicVersion，最终可见性遵循系统用户设置。
+- 后台补拉采用与服务端共用测试用例验证的类型文案，按原流程合并 MessagingStyle。补拉失败保留原先已显示的正文或通用占位，不删除通知。
 
 没有配置 FCM 或注册失败的设备继续使用原有前台轮询。成功注册后停止常驻服务，保留周期对账与旧版本兼容。轮询也只拉元数据，并使用同一内容任务；不会产生额外原生 Matrix `/sync`。
 

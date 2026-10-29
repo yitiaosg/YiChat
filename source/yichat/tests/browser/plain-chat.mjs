@@ -35,6 +35,18 @@ try{
   await send(a,'https://yitiao.org/games/parachute/share/'+'G'.repeat(32)+'/');await a.locator('.game-art').waitFor();await b.locator('.game-art').waitFor();
   await send(a,'https://yitiao.org/ycards/card/'+'a'.repeat(32)+'/WEB-CID/');await a.locator('.card-art canvas.yc-canvas').waitFor();await b.locator('.card-art canvas.yc-canvas').waitFor();
  });
+ await check('preview-only shares hide raw URLs on both sides and retain captions',async()=>{
+  for(const page of [a,b]){
+   assert.equal(await page.locator('.timeline .message-body').filter({hasText:'https://yitiao.org/'}).count(),0);
+   assert.equal(await page.locator('.sidebar .room-summary').filter({hasText:'https://yitiao.org/'}).count(),0);
+   assert.equal(await page.locator('.timeline .card-art canvas.yc-canvas').count(),1);
+  }
+  const url='https://yitiao.org/ycards/card/'+'a'.repeat(32)+'/WEB-CID/';
+  await send(a,'看看这张卡片 '+url);
+  await b.locator('.timeline .message-body').getByText('看看这张卡片',{exact:true}).waitFor();
+  assert.equal(await b.locator('.timeline .message-body').filter({hasText:url}).count(),0);
+  assert.ok(wire.some(row=>row.data.body==='看看这张卡片 '+url),'stored message still contains only URL and caption, not card data');
+ });
  await check('client never initializes E2EE or sends ciphertext',async()=>{
   assert.ok(wire.length>=5);assert.ok(wire.every(r=>r.path.includes('/m.room.message/')&&!r.data.ciphertext));
   assert.equal(requests.filter(p=>/\/(keys\/(query|upload|claim)|room_keys\/)/.test(p)).length,0);

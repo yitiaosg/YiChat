@@ -1,0 +1,6 @@
+org.yitiao.yichat.PushNotificationsTest:..
+org.yitiao.yichat.FirebaseConfigurationTest:.
+
+Time: 6.829
+
+OK (3 tests)

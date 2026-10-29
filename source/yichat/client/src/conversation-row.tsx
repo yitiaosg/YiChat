@@ -1,10 +1,11 @@
+import {messageCaption} from './message-display';
 import {useRef,useState} from 'preact/hooks';import {Archive,ArchiveRestore,Pin,PinOff,BellOff,Trash2} from 'lucide-preact';
 import {chat} from './chat';import {RoomAvatar} from './profiles';
 export function ConversationRow({room,active,open}:{room:any;active:boolean;open:()=>void}){
  const pref=chat.preferences.get(room.roomId)||{},start=useRef<{x:number;y:number}>(),swiped=useRef(false),[busy,setBusy]=useState(false),[dx,setDx]=useState(0);
  const empty=chat.info.get(room.roomId)?.has_messages===false;
  const count=room.getUnreadNotificationCount(),invited=room.getMyMembership()==='invite',last=room.getLiveTimeline().getEvents().filter((e:any)=>e.getType()==='m.room.message'||e.getWireType()==='m.room.encrypted').at(-1),content=last?.getContent();
- const summary=invited?'邀请你加入会话':chat.info.get(room.roomId)?.peer_deleted?'对方账户已注销':chat.info.get(room.roomId)?.dissolved_at?'群聊已解散':room.getMyMembership()==='leave'?'已退出群聊':last?.isRedacted()?(last.getWireType()==='m.room.encrypted'?'加密消息 · 打开核实':'消息已撤回'):last?.isDecryptionFailure()?'加密消息 · 等待密钥':content?.body||'还没有消息';
+ const summary=invited?'邀请你加入会话':chat.info.get(room.roomId)?.peer_deleted?'对方账户已注销':chat.info.get(room.roomId)?.dissolved_at?'群聊已解散':room.getMyMembership()==='leave'?'已退出群聊':last?.isRedacted()?(last.getWireType()==='m.room.encrypted'?'加密消息 · 打开核实':'消息已撤回'):last?.isDecryptionFailure()?'加密消息 · 等待密钥':(content?messageCaption(content):'')||'还没有消息';
  async function change(value:any){setBusy(true);try{await chat.setPreference(room.roomId,value)}catch(e){chat.fail(e)}finally{setBusy(false)}}
  return <div class={'conversation-entry '+(pref.pinned?'pinned':'')}>
  <button type="button" class={'room-row '+(active?'active':'')} style={{transform:`translateX(${Math.max(-72,Math.min(72,dx))}px)`,touchAction:'pan-y'}} onPointerDown={e=>{swiped.current=false;if(e.pointerType==='touch')start.current={x:e.clientX,y:e.clientY}}} onPointerMove={e=>{if(start.current&&Math.abs(e.clientY-start.current.y)<35)setDx(e.clientX-start.current.x)}} onPointerCancel={()=>{start.current=undefined;setDx(0)}} onPointerUp={e=>{const at=start.current;start.current=undefined;setDx(0);if(!at||busy||chat.preferenceSaving(room.roomId))return;const x=e.clientX-at.x;if(Math.abs(x)>65&&Math.abs(e.clientY-at.y)<35){swiped.current=true;void change(x<0?{archived:empty||!pref.archived}:{pinned:!pref.pinned,...(!pref.pinned?{archived:false}:{})})}}} onClick={e=>{if(!swiped.current||e.detail===0)open()}}>

@@ -121,3 +121,61 @@ def test_unread_notification_ids_merge_bursts_and_exclude_read_or_muted(fixture)
     assert unread_notification_events(s,who,room,'$first')==[]
     with connect(s.db) as c:c.execute('UPDATE conversation_preferences SET muted=1')
     assert unread_notification_events(s,who,room,'$second')==[]
+
+@pytest.mark.asyncio
+async def test_preview_negotiation_keeps_old_clients_compatible_and_sends_verified_text(fixture,monkeypatch):
+    from test_notification_summary import seed
+    s,who,sender,client=fixture
+    assert register(client).status_code==200
+    seed(s,1,'$preview','对方输入的真实文字')
+    sender.send=AsyncMock(return_value='sent')
+    await sender.drain()
+    assert 'preview' not in sender.send.call_args.args[1]
+    assert client.post('/api/push/device',json={'token':'fixture_FCM_token_01234567890','enabled':True,'preview_version':1}).status_code==200
+    seed(s,2,'$next','第二条真实文字')
+    sender.send.reset_mock();await sender.drain()
+    hint=sender.send.call_args.args[1]
+    assert push.payload('token',hint)['message']['data']['message_preview']=='第二条真实文字'
+    with connect(s.db) as c:assert c.execute('SELECT preview_version FROM push_devices').fetchone()[0]==1
+
+
+@pytest.mark.parametrize('version',[True,2,-1,'1'])
+def test_preview_version_is_validated_without_registering_incompatible_devices(fixture,version):
+    assert fixture[3].post('/api/push/device',json={'token':'fixture_FCM_token_01234567890','enabled':True,'preview_version':version}).status_code==400
+
+
+def test_existing_push_device_migration_preserves_token_and_unread_cursor(tmp_path):
+    old=push.SCHEMA.replace('preview_version INTEGER NOT NULL DEFAULT 0,','')
+    with connect(tmp_path/'old.db') as c:
+        c.executescript(old)
+        c.execute("INSERT INTO push_devices(subject,device,session_hash,token_hash,token,enabled,cursor) VALUES('uid','device','session','hash','encrypted',1,42)")
+        push.migrate(c);push.migrate(c)
+        row=c.execute('SELECT * FROM push_devices').fetchone()
+        assert row['preview_version']==0 and row['cursor']==42 and row['token']=='encrypted'
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode',['disabled','muted'])
+async def test_access_change_while_building_preview_prevents_send(fixture,monkeypatch,mode):
+    from test_notification_summary import seed
+    s,who,sender,client=fixture
+    client.post('/api/push/device',json={'token':'fixture_FCM_token_01234567890','enabled':True,'preview_version':1})
+    seed(s,1,'$private','不应被推送的正文')
+    def changed(*args):
+        with connect(s.db) as c:
+            if mode=='disabled':c.execute('UPDATE push_devices SET enabled=0')
+            else:c.execute('INSERT INTO conversation_preferences(subject,room,muted) VALUES(?,?,1)',(who['subject'],'!test:chat.yitiao.org'))
+        return '不应被推送的正文'
+    monkeypatch.setattr(push,'event_preview',changed)
+    sender.send=AsyncMock(return_value='sent');await sender.drain();sender.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_corrupt_preview_falls_back_to_route_without_logging_body(fixture,caplog):
+    from test_notification_summary import seed
+    s,who,sender,client=fixture
+    client.post('/api/push/device',json={'token':'fixture_FCM_token_01234567890','enabled':True,'preview_version':1})
+    seed(s,1,'$private','私密正文不得进入错误日志')
+    with connect(s.db) as c:c.execute('UPDATE history_receipts SET sha256=?',('0'*64,))
+    sender.send=AsyncMock(return_value='sent');await sender.drain()
+    assert 'preview' not in sender.send.call_args.args[1]
+    assert '私密正文' not in caplog.text

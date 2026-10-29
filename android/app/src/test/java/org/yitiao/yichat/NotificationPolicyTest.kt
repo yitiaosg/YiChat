@@ -14,6 +14,18 @@ class NotificationPolicyTest {
         assertNull(PushHint.parse(data-mapOf("message_id" to "\$event").keys))
         assertNull(PushHint.parse(data+mapOf("conversation_type" to "direct")))
     }
+    @Test fun negotiatedPreviewIsBoundedAndHiddenUntilFirstUnlock() {
+        val data=mapOf("conversation_id" to hint.room,"conversation_type" to "group","message_id" to hint.event,"message_preview" to "测试正文","recipient_tag" to "a".repeat(64))
+        val parsed=requireNotNull(PushHint.parse(data))
+        assertEquals("测试正文",NotificationPolicy.initialText(parsed,true))
+        assertTrue(NotificationPolicy.accepts(parsed,"a".repeat(64)))
+        assertFalse(NotificationPolicy.accepts(parsed,"b".repeat(64)))
+        assertNull(PushHint.parse(data-"recipient_tag"))
+        assertEquals(NotificationPolicy.PLACEHOLDER,NotificationPolicy.initialText(parsed,false))
+        assertEquals(NotificationPolicy.PLACEHOLDER,NotificationPolicy.initialText(hint,true))
+        assertNull(PushHint.parse(data+mapOf("message_preview" to "字".repeat(401))))
+        assertNull(PushHint.parse(data+mapOf("sender" to "untrusted name")))
+    }
     @Test fun stableIdentityIncludesRoomTagToProtectAgainstHashCollisions() {
         assertEquals(hint.notificationId,hint.copy(event="\$second").notificationId)
         assertNotEquals(PushHint("!Aa","private","\$a").tag,PushHint("!BB","private","\$b").tag)
