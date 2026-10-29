@@ -1,0 +1,12 @@
+{
+  "checks": [
+    "private room has no encryption state; both users read normal messages",
+    "refresh and a second device read history without key setup",
+    "attachments upload without E2EE and authenticated download matches bytes",
+    "station URLs still render game and real card previews on both sides",
+    "preview-only shares hide raw URLs on both sides and retain captions",
+    "client never initializes E2EE or sends ciphertext"
+  ],
+  "errors": [],
+  "plainMessages": 6
+}

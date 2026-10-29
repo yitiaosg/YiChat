@@ -4,10 +4,8 @@ import {appCall} from './app';
 import {requests,path,sleep} from './api';
 
 export type NotificationRequest={id:string;room:string;kind:'private'|'group';event:string};
-export function notificationText(content:Record<string,any>):string {
- const media:Record<string,string>={'m.image':'[图片]','m.audio':'[语音]','m.video':'[视频]','m.file':'[文件]'};
- return (media[content.msgtype]||content.body||'').slice(0,2000);
-}
+export {notificationText} from './notification-summary';
+import {notificationText} from './notification-summary';
 // Only a verified MatrixEvent's clear content reaches the native notification.
 // The push is an untrusted hint; membership, preferences and messages are fetched
 // from the authenticated gateway. No crypto primitives or exported session keys.
@@ -30,7 +28,7 @@ export async function notificationContent(chat:Chat,request:NotificationRequest)
  if(event.isRedacted()||event.getSender()===chat.session.mxid)throw Error('Event unavailable');
  if(event.isEncrypted())throw Error('Retired encrypted event');
  if(event.isRedacted()||event.getType()!=='m.room.message')throw Error('Event unavailable');
- const body=notificationText(event.getContent());if(!body)throw Error('Content unavailable');
+ const body=notificationText(event.getContent(),request.kind);if(!body)throw Error('Content unavailable');
  await chat.loadProfiles([event.getSender()!]);
  messages.push({id,sender:chat.name(event.getSender()),body,time:event.getTs()});
  }

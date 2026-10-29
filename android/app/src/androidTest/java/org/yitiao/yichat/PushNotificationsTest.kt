@@ -12,6 +12,25 @@ import org.junit.runner.RunWith
 /** No FCM/project/network dependency. Real NotificationManager rendering rules. */
 @RunWith(AndroidJUnit4::class)
 class PushNotificationsTest {
+    @Test fun fcmPreviewDisplaysImmediatelyAndFailureRetainsIt() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val push=(context.applicationContext as YiChatApplication).push
+        val manager=context.getSystemService(NotificationManager::class.java)
+        val hint=PushHint("!preview:test","private","\$preview","对方向你转了一笔账","a".repeat(64))
+        push.configure(true,"a".repeat(64))
+        try {
+            assertNull(push.placeholder(hint.copy(recipientTag="b".repeat(64))))
+            val generation=requireNotNull(push.placeholder(hint))
+            val deadline=System.currentTimeMillis()+5000
+            while(manager.activeNotifications.none{it.tag==hint.tag}&&System.currentTimeMillis()<deadline)Thread.sleep(50)
+            val notification=manager.activeNotifications.first{it.tag==hint.tag}.notification
+            assertEquals("对方向你转了一笔账",notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+            assertEquals("你有新的消息",notification.publicVersion.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+            assertFalse(notification.extras.containsKey("message_preview"))
+            push.replace(hint,generation,"a".repeat(64),emptyList())
+            assertEquals("对方向你转了一笔账",manager.activeNotifications.first{it.tag==hint.tag}.notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+        } finally {push.cancel(hint.room);push.configure(false,"")}
+    }
     @Test fun placeholderReplacementPrivacyFailureAndDismissal() {
         val instrumentation=InstrumentationRegistry.getInstrumentation();val context=instrumentation.targetContext
         if(Build.VERSION.SDK_INT>=33)instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS").close()

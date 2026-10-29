@@ -54,7 +54,7 @@ class PushNotifications(private val context:Context) {
             .setContentTitle(NotificationPolicy.TITLE).setContentText(NotificationPolicy.PLACEHOLDER).setVisibility(Notification.VISIBILITY_PUBLIC).build()
         return Notification.Builder(context,"messages_${hint.kind}").setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(NotificationPolicy.title(names.getString(SecureStore.hash(hint.room),null)))
-            .setContentText(NotificationPolicy.PLACEHOLDER).setContentIntent(pending(hint)).setAutoCancel(true)
+            .setContentText(NotificationPolicy.initialText(hint,unlocked)).setContentIntent(pending(hint)).setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(public).setCategory(Notification.CATEGORY_MESSAGE)
             .setGroup(hint.tag)
     }
@@ -73,6 +73,7 @@ class PushNotifications(private val context:Context) {
     }
     /** Synchronous disk/cache + notify only. No networking, WorkManager or crypto here. */
     @Synchronized fun placeholder(hint:PushHint):String? {
+        if(!NotificationPolicy.accepts(hint,account()))return null
         if(viewing(hint.room)){refreshVisible?.invoke();return null}
         if(!enabled()||!permitted())return null
         val old=current(hint)?.notification
@@ -81,7 +82,7 @@ class PushNotifications(private val context:Context) {
         cancelled.remove(hint.room)
         val generation=UUID.randomUUID().toString()
         synchronized(history){
-            val previous=history[hint.room];history[hint.room]=NoticeState(hint,generation,previous?.messages.orEmpty())
+            val previous=history[hint.room];history[hint.room]=NoticeState(hint.copy(preview=null),generation,previous?.messages.orEmpty())
             while(history.size>64)history.remove(history.keys.first())
         }
         val extras=android.os.Bundle().apply{putString("yc.room",hint.room);putString("yc.kind",hint.kind);putString("yc.event",hint.event);putString("yc.generation",generation);putString("yc.account",account())}
@@ -153,7 +154,7 @@ class PushRegistrationWorker(context:Context,params:WorkerParameters):CoroutineW
                 FirebaseMessaging.getInstance().token.addOnCompleteListener{task->if(continuation.isActive){if(task.isSuccessful)continuation.resumeWith(kotlin.Result.success(task.result))else continuation.resumeWith(kotlin.Result.failure(IllegalStateException("Token unavailable")))}}
             }}
             val enabled=graph.notifications.enabled()&&app.push.permitted()
-            graph.gateway.call("/api/push/device",buildJsonObject{put("token",token);put("enabled",enabled)})
+            graph.gateway.call("/api/push/device",buildJsonObject{put("token",token);put("enabled",enabled);put("preview_version",1)})
             if(graph.auth.account?.token==a.token){graph.vault.put("${a.storage}.push-registered",(if(enabled)"1" else "0").toByteArray());if(enabled)applicationContext.stopService(Intent(applicationContext,BackgroundNotificationService::class.java))}
             Result.success()
         }catch(e:CancellationException){throw e}

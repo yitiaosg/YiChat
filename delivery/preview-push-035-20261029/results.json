@@ -1,0 +1,17 @@
+{
+  "push_and_summary_tests_passed": 41,
+  "gateway_tests_passed": 17,
+  "browser_scenarios_passed": 6,
+  "web_unit_tests_passed": 17,
+  "android_release_jvm": {
+    "tests": 15,
+    "failures": 0,
+    "errors": 0
+  },
+  "android_instrumentation_passed": 3,
+  "release_lint_errors": 0,
+  "same_signer_as_034": true,
+  "web_matches_apk": true,
+  "message_epoch_unchanged": "plain-20261029-v1",
+  "real_device_fcm_delivery_verified": false
+}

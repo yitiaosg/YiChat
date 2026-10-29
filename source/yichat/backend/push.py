@@ -1,4 +1,4 @@
-"""FCM HTTP v1 wakeups. Neither FCM nor this module receives clear message data."""
+"""FCM HTTP v1 wakeups and negotiated, bounded plaintext notification previews."""
 import asyncio, contextlib, json, logging, re, secrets, time
 from pathlib import Path
 from urllib.parse import quote
@@ -7,20 +7,28 @@ from cryptography.fernet import Fernet
 from fastapi import Request
 from .db import connect, transaction
 from .security import digest, fail, valid_sid
-from .conversations import notification_hints
+from .conversations import notification_hints,unread_notification_events
+from .notification_summary import event_preview,bounded
 
 log=logging.getLogger('yichat.push')
 SCHEMA='''CREATE TABLE IF NOT EXISTS push_devices(
  subject TEXT NOT NULL,device TEXT NOT NULL,session_hash TEXT NOT NULL,
  token_hash TEXT NOT NULL UNIQUE,token TEXT NOT NULL,enabled INTEGER NOT NULL,
  cursor INTEGER NOT NULL,lease TEXT,lease_until REAL NOT NULL DEFAULT 0,
- next_attempt REAL NOT NULL DEFAULT 0,failures INTEGER NOT NULL DEFAULT 0,
+ next_attempt REAL NOT NULL DEFAULT 0,failures INTEGER NOT NULL DEFAULT 0,preview_version INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(subject,device));'''
 
+def migrate(c):
+    # Old APKs reject extra fields: only opt-in devices receive previews.
+    if 'preview_version' not in {r['name'] for r in c.execute('PRAGMA table_info(push_devices)')}:
+        c.execute('ALTER TABLE push_devices ADD COLUMN preview_version INTEGER NOT NULL DEFAULT 0')
+
 def payload(token,room):
-    """The whitelist is deliberate. Never forward an event, profile or room name."""
-    return {'message':{'token':token,'android':{'priority':'high','direct_boot_ok':True,'ttl':'86400s'},
-        'data':{'conversation_id':room['room'],'conversation_type':'group' if room['kind']=='group' else 'private','message_id':room['event']}}}
+    data={'conversation_id':room['room'],'conversation_type':'group' if room['kind']=='group' else 'private','message_id':room['event']}
+    preview=bounded(room.get('preview'))
+    tag=room.get('recipient_tag','')
+    if preview and isinstance(tag,str) and re.fullmatch('[a-f0-9]{64}',tag):data.update(message_preview=preview,recipient_tag=tag)
+    return {'message':{'token':token,'android':{'priority':'high','direct_boot_ok':True,'ttl':'86400s'},'data':data}}
 
 class FCMSender:
     def __init__(self,settings,http):
@@ -76,6 +84,18 @@ class FCMSender:
                     live=c.execute('SELECT 1 FROM sessions WHERE token_hash=? AND revoked=0 AND expires>?',(row['session_hash'],time.time())).fetchone()
                     preference=c.execute('SELECT archived,muted,read_sequence FROM conversation_preferences WHERE subject=? AND room=?',(row['subject'],room['room'])).fetchone()
                 if not live or (preference and (preference['archived'] or preference['muted'] or preference['read_sequence']>=int(room['sequence']))):continue
+                if row['preview_version']==1:
+                    try:
+                        preview=await asyncio.to_thread(event_preview,self.s,dict(session),room)
+                    except Exception:
+                        # Fixed category only: source bodies/errors can be private.
+                        log.warning('FCM preview unavailable; sending route only')
+                        preview=''
+                    if preview:room=room|{'preview':preview,'recipient_tag':digest('|'.join(['https://'+self.s.server_name,session['subject'],session['mxid'],session['device']]))}
+                    if room['event'] not in unread_notification_events(self.s,dict(session),room['room'],room['event']):continue
+                with connect(self.s.db) as c:
+                    active=c.execute('SELECT 1 FROM push_devices p JOIN sessions s ON s.token_hash=p.session_hash WHERE p.lease=? AND p.enabled=1 AND s.revoked=0 AND s.expires>?',(lease,time.time())).fetchone()
+                if not active:continue
                 if await self.send(token,room)=='expired':
                     with transaction(self.s.db) as c:c.execute('DELETE FROM push_devices WHERE lease=?',(lease,))
                     return
@@ -100,12 +120,14 @@ def install(app,s,session):
         with connect(s.db) as c:native=c.execute('SELECT 1 FROM native_devices WHERE subject=? AND device=?',(who['subject'],who['device'])).fetchone()
         if not native:fail(403,'仅限已授权 App 设备')
         data=await request.json()
-        if not isinstance(data,dict) or set(data)!={'token','enabled'} or type(data['enabled'])!=bool or not isinstance(data['token'],str) or not re.fullmatch(r'[A-Za-z0-9:_.-]{20,4096}',data['token']):fail(400,'推送注册格式无效')
+        if not isinstance(data,dict) or not {'token','enabled'}<=set(data)<= {'token','enabled','preview_version'} or type(data['enabled'])!=bool or not isinstance(data['token'],str) or not re.fullmatch(r'[A-Za-z0-9:_.-]{20,4096}',data['token']):fail(400,'推送注册格式无效')
+        version=data.get('preview_version',0)
+        if type(version)!=int or version not in (0,1):fail(400,'推送预览协议版本无效')
         with transaction(s.db) as c:
             high=c.execute('SELECT coalesce(max(sequence),0) FROM history_receipts').fetchone()[0]
             c.execute('DELETE FROM push_devices WHERE token_hash=? AND (subject<>? OR device<>?)',(digest(data['token']),who['subject'],who['device']))
-            c.execute('''INSERT INTO push_devices(subject,device,session_hash,token_hash,token,enabled,cursor) VALUES(?,?,?,?,?,?,?)
+            c.execute('''INSERT INTO push_devices(subject,device,session_hash,token_hash,token,enabled,cursor,preview_version) VALUES(?,?,?,?,?,?,?,?)
                 ON CONFLICT(subject,device) DO UPDATE SET session_hash=excluded.session_hash,token_hash=excluded.token_hash,token=excluded.token,
-                cursor=CASE WHEN push_devices.enabled=0 THEN excluded.cursor ELSE push_devices.cursor END,enabled=excluded.enabled,lease=NULL,lease_until=0,next_attempt=0,failures=0''',
-                (who['subject'],who['device'],who['token_hash'],digest(data['token']),app.state.cipher.encrypt(data['token'].encode()).decode(),int(data['enabled']),high))
+                cursor=CASE WHEN push_devices.enabled=0 THEN excluded.cursor ELSE push_devices.cursor END,enabled=excluded.enabled,lease=NULL,lease_until=0,next_attempt=0,failures=0,preview_version=excluded.preview_version''',
+                (who['subject'],who['device'],who['token_hash'],digest(data['token']),app.state.cipher.encrypt(data['token'].encode()).decode(),int(data['enabled']),high,version))
         return {'registered':True}

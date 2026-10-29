@@ -45,3 +45,5 @@ yichat/client/public/render/*.js
 !yichat/client/public/render/*.svg
 
 !yichat/client/public/brand/*.png
+
+!yichat/tests/fixtures/notification-summary.json
