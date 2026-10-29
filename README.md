@@ -1,10 +1,17 @@
 # YiChat
 
-当前版本 **Android 0.3.5 / versionCode 13**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.3.6 / versionCode 14**，包名 `org.yitiao.yichat.mobile`。
 
-[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.5 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261029-v0.3.5/YiChat-0.3.5-13.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
+[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.6 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261029-v0.3.6/YiChat-0.3.6-14.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
+
+## 0.3.6 更新
+
+- App 与手机 Chrome 共用 128 KiB 分块上传；直接读取 Blob 切片，避免整文件内存拷贝。进度只反映服务器已落盘确认的字节，收齐后显示校验确认状态。
+- 连接中断或回执丢失时自动核对服务器进度再续传；当前页面内点击重试也沿用已确认进度。刷新页面或重新选择文件会建立新的上传任务，未完成草稿 15 分钟无进展后清理。
+- 完成阶段可重试，只有 SHA-256 与归档附件回执成功后才公开附件；保留原权限、带宽、额度和发送确认流程。更新不清理聊天、钱包或资产数据。
+- 见 [上传协议](source/yichat/docs/UPLOADS.md) 与 [发布验证](PRODUCTION-0.3.6.md)。原设备上最初断连的网络原因尚未复现；已验证丢失分块/完成回执时的恢复。
 
 ## 0.3.5 更新
 
@@ -26,7 +33,7 @@ Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**�
 
 ## 安装与使用
 
-使用原签名覆盖升级，无需卸载或清除应用数据。**0.3.4 已执行站点所有者要求的一次性重置；0.3.5 沿用原 epoch，不重复删除新消息。** 尚未升级过的旧客户端首次打开时清理旧缓存，并重新同步服务端的新聊天；旧聊天不会通过恢复密钥或旧备份重新导入。 已自行下载到设备或其他位置的旧导出文件需要自行处理；服务器无法远程删除这些副本。
+使用原签名覆盖升级，无需卸载或清除应用数据。**0.3.4 已执行站点所有者要求的一次性重置；0.3.5 及后续版本沿用原 epoch，不重复删除新消息。** 尚未升级过的旧客户端首次打开时清理旧缓存，并重新同步服务端的新聊天；旧聊天不会通过恢复密钥或旧备份重新导入。 已自行下载到设备或其他位置的旧导出文件需要自行处理；服务器无法远程删除这些副本。
 
 首次打开后确认“消息通知”已开启并授予系统权限。FCM 注册成功后停止常驻连接；无法注册的设备保留兼容后台连接。真实 FCM 投递仍应在有 Google Play services 的手机上验证。
 

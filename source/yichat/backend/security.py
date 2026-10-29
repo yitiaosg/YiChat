@@ -53,12 +53,15 @@ def reserve_rate(settings, subject, bucket, size, rate, now=None, max_wait=30):
     return end-now
 
 async def upload_slot(settings, subject, lease, size):
-    now=time.time(); day=int(now//86400)
-    with transaction(settings.db) as c:
-        c.execute('DELETE FROM upload_leases WHERE expires<?',(now,))
-        if c.execute('SELECT COUNT(*) FROM upload_leases WHERE subject=?',(subject,)).fetchone()[0]>=settings.upload_concurrency: deny_retry(1,'上传连接数已达上限')
-        used=c.execute('SELECT bytes FROM upload_usage WHERE subject=? AND day=?',(subject,day)).fetchone()
-        if (used[0] if used else 0)+size>settings.daily_bytes: deny_retry((day+1)*86400-now,'今日上传额度已用完')
-        # Reserve declared size up front. Failed attempts also consume daily ingress quota.
-        c.execute('INSERT INTO upload_usage VALUES(?,?,?) ON CONFLICT(subject,day) DO UPDATE SET bytes=bytes+excluded.bytes',(subject,day,size))
-        c.execute('INSERT INTO upload_leases VALUES(?,?,?)',(lease,subject,now+60))
+    with transaction(settings.db) as c:reserve_upload_slot(c,settings,subject,lease,size)
+
+
+def reserve_upload_slot(c,settings,subject,lease,size):
+    now=time.time();day=int(now//86400)
+    c.execute('DELETE FROM upload_leases WHERE expires<?',(now,))
+    if c.execute('SELECT COUNT(*) FROM upload_leases WHERE subject=?',(subject,)).fetchone()[0]>=settings.upload_concurrency: deny_retry(1,'上传连接数已达上限')
+    used=c.execute('SELECT bytes FROM upload_usage WHERE subject=? AND day=?',(subject,day)).fetchone()
+    if (used[0] if used else 0)+size>settings.daily_bytes: deny_retry((day+1)*86400-now,'今日上传额度已用完')
+    # Reserve declared size up front. Failed attempts also consume daily ingress quota.
+    c.execute('INSERT INTO upload_usage VALUES(?,?,?) ON CONFLICT(subject,day) DO UPDATE SET bytes=bytes+excluded.bytes',(subject,day,size))
+    c.execute('INSERT INTO upload_leases VALUES(?,?,?)',(lease,subject,now+60))

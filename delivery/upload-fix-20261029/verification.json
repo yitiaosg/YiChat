@@ -1,0 +1,16 @@
+{
+  "android_version": "0.3.6",
+  "version_code": 14,
+  "backend_tests": 30,
+  "web_unit_tests": 24,
+  "browser_scenarios": 7,
+  "android_jvm_tests": 15,
+  "lint_errors": 0,
+  "lint_warnings": 36,
+  "apk_sha256": "4701198be99660a5bb7d7d6dafb6b7cde628d406a96224d1a7391013ab3d8d70",
+  "apk_bytes": 9754418,
+  "apk_web_assets_identical": true,
+  "phone_network_root_cause_reproduced": false,
+  "live_backend_health": 200,
+  "message_epoch": "plain-20261029-v1"
+}

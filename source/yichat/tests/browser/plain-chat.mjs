@@ -31,6 +31,28 @@ try{
   const download=b.waitForEvent('download');await b.getByRole('button',{name:'下载附件',exact:true}).click();assert.equal((await readFile(await (await download).path())).toString(),'authenticated plain attachment');
   const event=wire.find(r=>r.data.body==='plain-note.txt');assert.ok(event?.data.url);assert.equal(event.data.file,undefined);
  });
+ await check('large upload survives lost chunk and final acknowledgments',async()=>{
+  const encoded=await a.evaluate(()=>{
+   const canvas=document.createElement('canvas');canvas.width=320;canvas.height=320;const context=canvas.getContext('2d'),image=context.createImageData(320,320);let seed=1;
+   for(let i=0;i<image.data.length;i+=4){seed=(Math.imul(seed,1664525)+1013904223)|0;image.data[i]=seed&255;image.data[i+1]=(seed>>>8)&255;image.data[i+2]=(seed>>>16)&255;image.data[i+3]=255}
+   context.putImageData(image,0,0);return canvas.toDataURL('image/png').split(',')[1];
+  });
+  const bytes=Buffer.from(encoded,'base64');assert.ok(bytes.length>200000);let chunkLost=false,finishLost=false,putCount=0;
+  await a.route('**/api/uploads/*',async route=>{
+   if(route.request().method()==='PUT'){putCount++;if(!chunkLost){chunkLost=true;await route.fetch();await route.abort('failed');return}}
+   await route.continue();
+  });
+  await a.route('**/api/uploads/*/complete',async route=>{if(!finishLost){finishLost=true;await route.fetch();await route.abort('failed')}else await route.continue()});
+  await a.locator('input[type=file]').setInputFiles({name:'phone-upload.png',mimeType:'image/png',buffer:bytes});
+  await a.getByText('已上传，待发送',{exact:true}).waitFor();
+  assert.ok(chunkLost&&finishLost);assert.equal(putCount,Math.ceil(bytes.length/131072),'no confirmed bytes retransmitted');
+  await a.unroute('**/api/uploads/*');await a.unroute('**/api/uploads/*/complete');
+  await a.getByRole('button',{name:'发送消息',exact:true}).click();await b.getByText('phone-upload.png',{exact:true}).waitFor();
+  const download=b.waitForEvent('download');await b.locator('.media-content').filter({hasText:'phone-upload.png'}).getByRole('button',{name:'下载附件',exact:true}).click();
+  assert.deepEqual(await readFile(await (await download).path()),bytes);
+  await b.locator('.media-content').filter({hasText:'phone-upload.png'}).locator('img').waitFor();
+  assert.ok(await b.locator('.media-content').filter({hasText:'phone-upload.png'}).locator('img').evaluate(image=>image.naturalWidth===320));
+ });
  await check('station URLs still render game and real card previews on both sides',async()=>{
   await send(a,'https://yitiao.org/games/parachute/share/'+'G'.repeat(32)+'/');await a.locator('.game-art').waitFor();await b.locator('.game-art').waitFor();
   await send(a,'https://yitiao.org/ycards/card/'+'a'.repeat(32)+'/WEB-CID/');await a.locator('.card-art canvas.yc-canvas').waitFor();await b.locator('.card-art canvas.yc-canvas').waitFor();

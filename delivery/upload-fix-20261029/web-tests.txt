@@ -1,0 +1,158 @@
+
+> yichat-web@1.0.0 test
+> node --import tsx --test test/*.test.ts
+
+TAP version 13
+# Subtest: YIDT arithmetic keeps all sixteen decimals and large balances exact
+ok 1 - YIDT arithmetic keeps all sixteen decimals and large balances exact
+  ---
+  duration_ms: 2.547132
+  type: 'test'
+  ...
+# Subtest: Unicode messages count code points rather than UTF16 units
+ok 2 - Unicode messages count code points rather than UTF16 units
+  ---
+  duration_ms: 0.380356
+  type: 'test'
+  ...
+# Subtest: only exact preview routes are submitted, never entire private text
+ok 3 - only exact preview routes are submitted, never entire private text
+  ---
+  duration_ms: 2.199276
+  type: 'test'
+  ...
+# Subtest: 429 obeys the longer Retry-After / retry_after_ms and HTTP dates
+ok 4 - 429 obeys the longer Retry-After / retry_after_ms and HTTP dates
+  ---
+  duration_ms: 53.372764
+  type: 'test'
+  ...
+# Subtest: a completed gift stores only an owner-independent URL in the message
+ok 5 - a completed gift stores only an owner-independent URL in the message
+  ---
+  duration_ms: 8.116026
+  type: 'test'
+  ...
+# Subtest: failed, incomplete or mismatched transfers cannot announce a completed gift
+ok 6 - failed, incomplete or mismatched transfers cannot announce a completed gift
+  ---
+  duration_ms: 1.705231
+  type: 'test'
+  ...
+# Subtest: gift bubbles recognize legacy shares and authoritative business references
+ok 7 - gift bubbles recognize legacy shares and authoritative business references
+  ---
+  duration_ms: 0.787039
+  type: 'test'
+  ...
+# Subtest: peer packets require trusted digest and matching room and event identity
+ok 8 - peer packets require trusted digest and matching room and event identity
+  ---
+  duration_ms: 18.702672
+  type: 'test'
+  ...
+# Subtest: recognized previews hide the raw URL while preserving captions and other links
+ok 9 - recognized previews hide the raw URL while preserving captions and other links
+  ---
+  duration_ms: 39.201172
+  type: 'test'
+  ...
+# Subtest: native fetch and server FCM summaries use the same private/group wording
+ok 10 - native fetch and server FCM summaries use the same private/group wording
+  ---
+  duration_ms: 14.524085
+  type: 'test'
+  ...
+# Subtest: chat reset isolates SDK sync and outbox caches by epoch
+ok 11 - chat reset isolates SDK sync and outbox caches by epoch
+  ---
+  duration_ms: 1.317814
+  type: 'test'
+  ...
+# Subtest: legacy cache cleanup preserves wallet/business vault and new chats
+ok 12 - legacy cache cleanup preserves wallet/business vault and new chats
+  ---
+  duration_ms: 5.771519
+  type: 'test'
+  ...
+# Subtest: verified plain private content becomes a notification message
+ok 13 - verified plain private content becomes a notification message
+  ---
+  duration_ms: 13.184062
+  type: 'test'
+  ...
+# Subtest: muted or read-only conversations are not fetched for previews
+ok 14 - muted or read-only conversations are not fetched for previews
+  ---
+  duration_ms: 0.845868
+  type: 'test'
+  ...
+# Subtest: retired ciphertext is rejected without invoking crypto or replacing placeholder
+ok 15 - retired ciphertext is rejected without invoking crypto or replacing placeholder
+  ---
+  duration_ms: 0.748367
+  type: 'test'
+  ...
+# Subtest: network errors and mismatched event identity cannot produce a replacement
+ok 16 - network errors and mismatched event identity cannot produce a replacement
+  ---
+  duration_ms: 0.524913
+  type: 'test'
+  ...
+# Subtest: attachments use labels without fetching or decrypting media
+ok 17 - attachments use labels without fetching or decrypting media
+  ---
+  duration_ms: 0.358965
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers none
+ok 18 - acknowledged upload recovers none
+  ---
+  duration_ms: 18.689676
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers start-ack
+ok 19 - acknowledged upload recovers start-ack
+  ---
+  duration_ms: 10.142672
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers chunk-ack
+ok 20 - acknowledged upload recovers chunk-ack
+  ---
+  duration_ms: 17.318786
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers before-chunk
+ok 21 - acknowledged upload recovers before-chunk
+  ---
+  duration_ms: 8.551344
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers finish-ack
+ok 22 - acknowledged upload recovers finish-ack
+  ---
+  duration_ms: 7.005156
+  type: 'test'
+  ...
+# Subtest: forbidden upload fails without retrying or reporting completion
+ok 23 - forbidden upload fails without retrying or reporting completion
+  ---
+  duration_ms: 2.619115
+  type: 'test'
+  ...
+# Subtest: manual retry resumes acknowledged bytes after network retry budget is exhausted
+ok 24 - manual retry resumes acknowledged bytes after network retry budget is exhausted
+  ---
+  duration_ms: 6.166902
+  type: 'test'
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2195.828159

@@ -1,0 +1,118 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.13/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :app:buildKotlinToolingMetadata
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+
+> Task :app:buildChatWeb
+
+> yichat-web@1.0.0 prebuild
+> node scripts/copy-renderers.mjs
+
+
+> yichat-web@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 1914 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/notification.html                                   0.36 kB │ gzip:     0.24 kB
+dist/index.html                                          0.76 kB │ gzip:     0.46 kB
+dist/assets/matrix_sdk_crypto_wasm_bg-dMeGppz-.wasm  5,513.88 kB │ gzip: 1,831.16 kB
+dist/assets/main-CrbGsEd8.css                           31.64 kB │ gzip:     7.27 kB
+dist/assets/notification-CEuRsToi.js                     0.48 kB │ gzip:     0.31 kB
+dist/assets/main-BgaHp0kG.js                           131.06 kB │ gzip:    46.11 kB
+dist/assets/chat-CUUv8rUp.js                           206.57 kB │ gzip:    56.78 kB
+dist/assets/index-CeTOtgP7.js                          218.66 kB │ gzip:    44.93 kB
+dist/assets/indexeddb-crypto-store-DI6Cfj0A.js         714.65 kB │ gzip:   200.37 kB
+✓ built in 11.15s
+
+> Task :app:bundleChatWeb
+> Task :app:preBuild
+> Task :app:preReleaseBuild
+> Task :app:generateReleaseBuildConfig
+> Task :app:checkReleaseAarMetadata
+> Task :app:generateReleaseResValues
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:mergeReleaseResources
+> Task :app:packageReleaseResources
+> Task :app:parseReleaseLocalResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :app:processReleaseMainManifest
+> Task :app:processReleaseManifest
+> Task :app:processReleaseManifestForPackage
+> Task :app:processReleaseResources
+> Task :app:kspReleaseKotlin
+> Task :app:compileReleaseKotlin
+w: file:///home/claude/yichat-upload-fix/android/app/src/main/java/org/yitiao/yichat/MainActivity.kt:105:59 'var databaseEnabled: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/claude/yichat-upload-fix/android/app/src/main/java/org/yitiao/yichat/MainActivity.kt:208:38 The corresponding parameter in the supertype 'ComponentActivity' is named 'outState'. This may cause problems when calling this function with named arguments.
+w: file:///home/claude/yichat-upload-fix/android/app/src/main/java/org/yitiao/yichat/NotificationContent.kt:44:98 'var databaseEnabled: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/claude/yichat-upload-fix/android/app/src/main/java/org/yitiao/yichat/PushNotifications.kt:113:32 'constructor(p0: CharSequence): Notification.MessagingStyle' is deprecated. Deprecated in Java.
+w: file:///home/claude/yichat-upload-fix/android/app/src/main/java/org/yitiao/yichat/PushNotifications.kt:116:38 'fun addMessage(p0: CharSequence!, p1: Long, p2: CharSequence!): Notification.MessagingStyle!' is deprecated. Deprecated in Java.
+
+> Task :app:javaPreCompileRelease
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:bundleReleaseClassesToRuntimeJar
+> Task :app:bundleReleaseClassesToCompileJar
+> Task :app:kspReleaseUnitTestKotlin
+> Task :app:compileReleaseUnitTestKotlin
+> Task :app:preReleaseUnitTestBuild
+> Task :app:javaPreCompileReleaseUnitTest
+> Task :app:compileReleaseUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processReleaseJavaRes
+> Task :app:processReleaseUnitTestJavaRes
+> Task :app:testReleaseUnitTest
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:mergeReleaseNativeLibs
+
+> Task :app:stripReleaseDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libdatastore_shared_counter.so. Run with --info option to learn more.
+
+> Task :app:extractReleaseNativeSymbolTables
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:dexBuilderRelease
+> Task :app:desugarReleaseFileDependencies
+> Task :app:mergeReleaseStartupProfile
+> Task :app:mergeExtDexRelease
+> Task :app:mergeDexRelease
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseGlobalSynthetics
+> Task :app:compileReleaseArtProfile
+> Task :app:mergeReleaseShaders
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets
+> Task :app:compressReleaseAssets
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:extractProguardFiles
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:lintVitalReportRelease SKIPPED
+> Task :app:lintVitalRelease SKIPPED
+> Task :app:mergeReleaseJavaResource
+> Task :app:optimizeReleaseResources
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+> Task :app:generateReleaseLintReportModel
+> Task :app:generateReleaseUnitTestLintModel
+> Task :app:lintAnalyzeRelease
+> Task :app:lintAnalyzeReleaseUnitTest
+
+> Task :app:lintReportRelease
+Wrote HTML report to file:///home/claude/yichat-upload-fix/android/app/build/reports/lint-results-release.html
+
+> Task :app:lintRelease
+
+BUILD SUCCESSFUL in 4m 58s
+64 actionable tasks: 64 executed

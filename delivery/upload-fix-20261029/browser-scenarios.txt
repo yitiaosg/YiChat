@@ -1,0 +1,8 @@
+CHECK private room has no encryption state; both users read normal messages
+CHECK refresh and a second device read history without key setup
+CHECK attachments upload without E2EE and authenticated download matches bytes
+CHECK large upload survives lost chunk and final acknowledgments
+CHECK station URLs still render game and real card previews on both sides
+CHECK preview-only shares hide raw URLs on both sides and retain captions
+CHECK client never initializes E2EE or sends ciphertext
+{"passed":7}

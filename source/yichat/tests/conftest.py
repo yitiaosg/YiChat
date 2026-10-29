@@ -1,4 +1,4 @@
-import sys,time,sqlite3,shutil,json
+import sys,time,sqlite3,shutil,json,os
 from psycopg.conninfo import conninfo_to_dict
 from pathlib import Path
 import pytest
@@ -11,7 +11,7 @@ from backend import policy,archive
 
 @pytest.fixture
 def postgres():
-    dsns=json.loads((Path.home()/'.cache/yichat-test-dsns.json').read_text())
+    dsns=json.loads(Path(os.environ.get('YICHAT_TEST_DSN_FILE',Path.home()/'.cache/yichat-test-dsns.json')).read_text())
     for kind,dsn in dsns.items():
         info=conninfo_to_dict(dsn)
         if info.get('dbname')!='yichat_archive_test' or info.get('user')!='yc_test_'+kind or info.get('host') not in ('127.0.0.1','localhost','::1'):
