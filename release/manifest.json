@@ -1,58 +1,58 @@
 {
-  "tag": "android-20261029-v0.3.5",
-  "name": "YiChat Android 0.3.5",
-  "source_commit": "bc01f381326f6d44ad4f660ece1af93786dfaac1",
-  "notes": "Android 0.3.5 / versionCode 13 · org.yitiao.yichat.mobile\n\n- 站内分享只显示预览卡片及说明文字，不重复原 URL；会话列表、回复、发送中及失败草稿同步处理。原消息和哈希不变。\n- 新版 App 通过 FCM 直接显示对方文字；转账、红包、收款、赠卡、图片、语音、视频、文件等显示对应摘要。\n- 旧 App 仍使用原三字段协议。新协议验证接收账号及原包哈希，预览有 UTF-8 长度限制；保留锁屏公共版本、首次解锁前通用提示、后台合并及失败保留。\n- 本版不再次清理聊天，不修改资金和资产；网页与 App 下载统一使用 GitHub。\n\n验证：推送/摘要 41 项、网关 17 项、浏览器 6 场景、Web 单元 17 项、Android JVM 15 项及模拟器 3 项通过；Release lint 0 errors。真实 Google FCM 投递仍需实机验证。\n\n覆盖安装后打开一次并保持消息通知开启，使新版推送协议注册生效。无需卸载或清除数据。\n\n源码提交：bc01f381326f6d44ad4f660ece1af93786dfaac1",
+  "tag": "android-20261029-v0.3.6",
+  "name": "YiChat Android 0.3.6",
+  "source_commit": "95d306124034e50aa6b7f5684154a97c8a73a8a2",
+  "notes": "Android 0.3.6 / versionCode 14 · org.yitiao.yichat.mobile\n\n- App 和手机 Chrome 共用 128 KiB 分块上传，避免整文件内存拷贝；进度按服务器已落盘字节显示，收齐后单独显示校验阶段。\n- 连接中断或回执丢失时核对服务器 offset 后继续；当前页面内手动重试保留已确认进度。刷新或重新选择文件建立新任务。\n- 完成阶段可恢复，SHA-256 与归档回执成功后才公开附件；保留权限、带宽、日额度和原发送流程。\n- 原签名覆盖升级，无需卸载或清除数据。网页与 App 下载均使用 GitHub。\n\n验证：后端 30 项、Web 单元 24 项、Chromium 7 场景、Android JVM 15 项通过，Release lint 0 errors；APK 内 14 个网页资源与上线 dist 逐字节一致。浏览器故障注入覆盖分块及完成回执丢失、完整图片和下载字节一致。\n\n原手机网络断连原因未在源站复现；本版验证的是丢失回执后的恢复能力，仍需真机上传回归。\n\n源码提交：95d306124034e50aa6b7f5684154a97c8a73a8a2",
   "files": [
     {
-      "name": "YiChat-0.3.5-13.apk",
-      "bytes": 9753894,
-      "sha256": "384407923c61ed7a846e95287ea325b564c2161d5c0185f61543373d0a02d5de",
+      "name": "YiChat-0.3.6-14.apk",
+      "bytes": 9754418,
+      "sha256": "4701198be99660a5bb7d7d6dafb6b7cde628d406a96224d1a7391013ab3d8d70",
       "parts": [
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-000",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-001",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-002",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-003",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-004",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-005",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-006",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-007",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-008",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-009",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-010",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-011",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-012",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-013",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-014",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-015",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-016",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-017",
-        "release/0.3.5/YiChat-0.3.5-13.apk.part-018"
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-000",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-001",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-002",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-003",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-004",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-005",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-006",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-007",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-008",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-009",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-010",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-011",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-012",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-013",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-014",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-015",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-016",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-017",
+        "release/0.3.6/YiChat-0.3.6-14.apk.part-018"
       ]
     },
     {
-      "name": "YiChat-0.3.5-source.tar.gz",
-      "bytes": 5062975,
-      "sha256": "b17ee2f0bfdac7cfb4950a33932fccbf91e5b50e0f3a7516439c171b37a90438",
+      "name": "YiChat-0.3.6-source.tar.gz",
+      "bytes": 5077930,
+      "sha256": "e650780a06e7ad42171b511e023cc8a8fa16892e71f12d45d3f430da4cb18931",
       "parts": [
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-000",
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-001",
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-002",
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-003",
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-004",
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-005",
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-006",
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-007",
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-008",
-        "release/0.3.5/YiChat-0.3.5-source.tar.gz.part-009"
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-000",
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-001",
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-002",
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-003",
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-004",
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-005",
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-006",
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-007",
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-008",
+        "release/0.3.6/YiChat-0.3.6-source.tar.gz.part-009"
       ]
     },
     {
       "name": "SHA256SUMS",
       "bytes": 179,
-      "sha256": "00b04f52f121f0e85e9944d5dd5227c17607bedfa32f65842681a7a2208734c6",
+      "sha256": "87f05bf4578d2b995d2d7e86ff25975e6d10da3749a3a16260450cee6557e92c",
       "parts": [
-        "release/0.3.5/SHA256SUMS.part-000"
+        "release/0.3.6/SHA256SUMS.part-000"
       ]
     }
   ]

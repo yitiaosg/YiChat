@@ -393,6 +393,9 @@ def create_app(settings=None):
         if not record:fail(404,'未登记此消息事务')
         return {'txn':txn,'event_id':record['event'],'state':'accepted' if record['event'] else 'registered'}
 
+    from .uploads import install as install_uploads
+    install_uploads(app,s,session,room_access,require_send)
+
     @app.post('/api/files/{room}')
     async def upload(request:Request,room:str):
         who,info=await room_access(request,room);require_send(who,info)
@@ -723,6 +726,8 @@ async def maintenance(app):
     while True:
         try:
             await revoke_sessions(app)
+            from .uploads import reconcile as reconcile_uploads
+            await asyncio.to_thread(reconcile_uploads,s)
             # Evidence-first retention runs in the isolated archive worker. The API
             # process cannot update sealed digests and never deletes an expired file.
             if s.archive_ingest:
@@ -732,7 +737,8 @@ async def maintenance(app):
                     await asyncio.to_thread(archive.record_attachment,s.archive_ingest,row['id'],row['room'],row['mxid'],int(row['completed']*1000),row['bytes'],row['sha256'])
             for file in s.objects.glob('*.part'):
                 if time.time()-file.stat().st_mtime>3600:
-                    with connect(s.db) as c:live=c.execute('SELECT 1 FROM upload_leases WHERE id=? AND expires>?',(file.stem,time.time())).fetchone()
+                    with connect(s.db) as c:
+                        live=c.execute("SELECT 1 FROM upload_leases WHERE id=? AND expires>? UNION ALL SELECT 1 FROM file_uploads WHERE id=? AND state IN ('uploading','finalizing')",(file.stem,time.time(),file.stem)).fetchone()
                     if not live:file.unlink(missing_ok=True)
             if app.state.funds.enabled() and time.time()-last_audit>300:
                 await asyncio.to_thread(app.state.funds.reconcile);last_audit=time.time()

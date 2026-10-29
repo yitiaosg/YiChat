@@ -70,7 +70,7 @@ def migrate(settings):
         c.execute("INSERT OR IGNORE INTO room_modes SELECT room,CASE WHEN kind='direct' THEN 'direct' ELSE 'legacy_encrypted' END,0 FROM rooms")
         c.execute('UPDATE rooms SET days=30')
         c.execute('UPDATE files SET expires=max(expires,(CAST(completed/86400 AS INTEGER)+31)*86400)')
-        from . import groups,group_avatars,record_audit,conversations,direct,push
+        from . import groups,group_avatars,record_audit,conversations,direct,push,uploads
         c.executescript(groups.SCHEMA)
         c.executescript(group_avatars.SCHEMA)
         c.executescript(record_audit.SCHEMA)
@@ -78,6 +78,7 @@ def migrate(settings):
         c.executescript(direct.SCHEMA)
         c.executescript(push.SCHEMA)
         push.migrate(c)
+        c.executescript(uploads.SCHEMA)
         c.execute("INSERT OR IGNORE INTO direct_pairs(first,second,room) SELECT min(owner,peer),max(owner,peer),room FROM rooms WHERE kind='direct' ORDER BY rowid")
         for row in c.execute("SELECT room FROM rooms WHERE kind='group'").fetchall():groups.register(c,row['room'],seeded=0)
         c.execute("INSERT OR IGNORE INTO direct_visibility SELECT room,EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=rooms.room AND h.type IN ('m.room.message','m.room.encrypted')) FROM rooms WHERE kind='direct'")
