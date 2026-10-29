@@ -13,8 +13,8 @@ android {
   applicationId = "org.yitiao.yichat.mobile"
   minSdk = 26
   targetSdk = 36
-  versionCode = providers.gradleProperty("yichatVersionCode").orElse("11").get().toInt()
-  versionName = "0.3.3"
+  versionCode = providers.gradleProperty("yichatVersionCode").orElse("12").get().toInt()
+  versionName = "0.3.4"
   testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   buildConfigField("String", "GATEWAY", "\"https://chat.yitiao.org\"")
  }

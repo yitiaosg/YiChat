@@ -1,7 +1,6 @@
 import * as sdk from 'matrix-js-sdk';
 import {requests} from './api';
 import type {Chat} from './chat';
-import {retryFailedDecryptions} from './decryption';
 export type Receipt={event_id:string;room:string;sequence:number;received_ms:number;type?:string;sender?:string;origin_server_ts:number;sha256:string;business?:string;redacts?:string;tombstone?:any};
 export async function verifyPacket(raw:string,receipt:Pick<Receipt,'sha256'|'event_id'|'room'>){
  const bytes=Uint8Array.from(atob(raw),c=>c.charCodeAt(0)),digest=await crypto.subtle.digest('SHA-256',bytes),actual=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
@@ -26,8 +25,6 @@ export class History {
   while(this.receipts.size>10000)this.receipts.delete(this.receipts.keys().next().value!);
   this.status=this.range?'正在检查更多撤回更新…':'撤回更新已核对 · '+new Date(this.cursor).toLocaleString();
  }catch(e:any){if(!this.stopped&&e.name!=='AbortError')this.status='撤回更新暂未完成：'+e.message}finally{this.busy=false;if(!this.stopped)this.owner.changed()}}
- private decrypting?:ReturnType<typeof retryFailedDecryptions>;
- async retryDecrypt(){if(this.decrypting)return this.decrypting;const task=retryFailedDecryptions(this.owner.client);this.decrypting=task;try{return await task}finally{this.decrypting=undefined;this.owner.changed()}}
  timeline(room:sdk.Room){const events=room.getLiveTimeline().getEvents();for(const event of events){const raw=this.redactions.get(event.getId()!);if(raw&&!event.isRedacted())event.makeRedacted(new sdk.MatrixEvent(raw),room)}return events}
  stop(){this.stopped=true;clearInterval(this.timer);window.removeEventListener('online',this.online);document.removeEventListener('visibilitychange',this.visible);this.receipts.clear();this.redactions.clear()}
 }

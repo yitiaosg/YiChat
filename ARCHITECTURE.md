@@ -1,30 +1,15 @@
-# 单一网页前端架构（0.2.0）
+# 单一网页前端架构（0.3.4）
 
-```text
-Android MainActivity / 独立 WebView
-  ├─ https://chat.yitiao.org/ → 同一 Preact/TypeScript 前端
-  │    ├─ matrix-js-sdk + initRustCrypto / WASM / IndexedDB
-  │    ├─ 单写 Web Lock；账号+MXID+设备隔离；原有请求调度器
-  │    └─ 业务 API、站内分享、聊天附件、归档
-  ├─ 静态资源请求 → 同源在线更新 / 内部公开资源缓存 / APK 完整框架
-  ├─ YiChatApp 消息桥 → 仅允许准确聊天源的主框架
-  │    ├─ 会话、系统授权、锁定与撤销
-  │    ├─ 自动内部备份、按天外部导出 / SAF
-  │    └─ 分块 Blob 下载到系统文档选择器
-  └─ 非聊天页面 → 系统 Auth Tab / Custom Tabs / 浏览器
+Android MainActivity 通过受限 WebView 加载与 Web 共用的 Preact / TypeScript 前端。Matrix JS SDK 负责普通消息同步；私聊、群聊及附件均停用端到端加密，通过 HTTPS 传输，服务器可以读取消息。不初始化 Rust Crypto，也不要求密钥备份或设备密钥查询。
 
-Kotlin WorkManager + HistoryRepository
-  ├─ 原网关认证摘要、服务器原包、服务器已清理数据的在线成员补包
-  ├─ Room 保存哈希核验后、Keystore 保护的原消息包
-  └─ 内部 AES-GCM 快照；外部 YCB1（scrypt + AES-GCM）
-```
+- 单写 Web Lock 管理 UI 与后台通知 WebView 的同步实例；账号、MXID、设备和消息 epoch 隔离 IndexedDB 同步缓存及本地消息草稿。
+- 业务 API、站内分享和资产授权沿用原架构。转账及红包使用权威 SQLite 账本与原幂等出账流程，赠卡保存固定 URL，预览按需读取当前卡片。
+- 原生 FCM 回调立即显示占位，WorkManager 用同源 SDK 补拉普通消息并合并替换；推送 data 不含明文，失败保留占位，替换使用 OnlyAlertOnce。
+- Kotlin HistoryRepository 根据认证摘要拉取服务器原包；保留接收时间、事件身份和 SHA-256 校验，也保留证据支持的成员补包逻辑。
+- Room 原包存储仍由 Keystore 保护，内部快照使用 AES-GCM，外部 YCB1 使用 scrypt + AES-GCM。停用 E2EE 不影响本地存储与导出口令加密。
 
-不再链接 Matrix Kotlin/Rust FFI、Compose 聊天、第二套资金 UI 或 YCard 聊天渲染器。旧源码放在 `android/legacy-native`，不进入 APK。新设备证明与会话使用 `web.` 前缀；旧 `session` 和 `accounts/` 密钥库保留，匹配同一 uid/MXID 后只复制并重新包装可信消息原包及导出设置。迁移不覆盖密钥、不上传私钥；失败保留原始数据。
+0.3.4 的一次性明确重置使用官方 Synapse 房间删除 API，清理旧聊天与聊天归档，保留钱包账本、转账订单、赠卡资产凭证和联系人关系。旧房间只保留资金凭证需要的最小元数据并标记 retired；禁止新消息，资金凭证按不可变 UID 只读访问。自动封存、摘要不可变触发器及数据库角色权限保留。App 首次升级清理旧聊天包和旧内部快照，保留钱包业务操作；epoch 标记防止再次清理新消息。旧导出不能替代当前认证摘要，服务器无法远程删除用户自行下载的副本。
 
-WebView 关闭 file 访问、混合内容及第三方 Cookie；content 只用于用户主动选择的系统文件，上层禁止 file/content 导航，准确限制桥的来源与主框架。release 关闭调试，TLS 错误拒绝连接，不允许任意 intent、反射或原生文件路径。系统浏览器持有登录 Cookie，App 通过现有一次性 PKCE 交换取得网关令牌；仅桥接当前网页设备所需 session，不传设备证明。
+WebView 禁止 file 访问、混合内容及第三方 Cookie；桥仅允许准确聊天源的主框架。外链交给系统浏览器，主站授权使用一次性 PKCE 交换，付款仍需在 YIDT 明确确认。release 关闭调试，拒绝 TLS 错误及任意 intent、反射、原生文件路径。
 
-静态缓存只保存公开框架资源，绝不缓存认证 API、私聊媒体或头像。会话同步快照在独立 IndexedDB，应用展示资料通过现有本地加密 Vault 保存。离线重新打开可恢复已缓存的最近时间线和持久化 Rust 加密库；未缓存历史、头像、附件和订单仍需网络。第一次登录初始化必须联网。
-
-自动备份保存原始消息包，私聊为原生 Matrix 密文；它不等于 Matrix 私钥备份。外部文件不包含会话令牌、设备证明、私钥。导出间隔为 1～3650 个整天，由 WorkManager 在系统条件允许时执行。卸载/清除数据会破坏内部存储，因此用户仍需独立保存恢复密钥及外部导出。
-
-旧原生密钥仍留在原路径，但没有跨 SDK 转换器；新网页设备依赖标准 Matrix 密钥备份或其他设备分享历史会话密钥。经过服务端清理、通过成员补回的原包会安全保存在备份库，尚未注入网页 SDK 时间线；不伪造正文或重新发送历史。
+静态缓存只保存公开框架资源，认证 API、私聊媒体和头像不进入公开静态缓存。离线读取已同步的普通消息，未缓存历史、附件、头像和资产操作仍需网络。初次登录需要联网。旧原生实现保留在 android/legacy-native，仅供历史追溯，不参与 APK 编译。

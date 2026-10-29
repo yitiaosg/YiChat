@@ -44,7 +44,7 @@ class HistoryRepository(private val matrix: PacketStore, private val gateway: Ga
         } while (after != 0L)
         matrix.refreshTombstones()
         val missing=dao.allOperations().count { it.kind=="missing_packet" && it.state=="pending" }
-        status.value = if(missing==0) "原消息包已可靠保存；UTC ${java.time.Instant.ofEpochMilli(until)}" else "有 $missing 份已清理原包等待在线 App 成员补齐；无人持有或缺历史密钥时无法恢复，成功水位保留"
+        status.value = if(missing==0) "原消息包已可靠保存；UTC ${java.time.Instant.ofEpochMilli(until)}" else "有 $missing 份已清理原包等待在线 App 成员补齐；无人持有原包时无法恢复，成功水位保留"
     }
     private suspend fun accept(p: JsonObject, room: String) {
         val a = matrix.account ?: return; val db = matrix.database ?: return; val dao = db.local(); val eid = p.s("event_id")

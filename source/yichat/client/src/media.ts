@@ -1,4 +1,3 @@
-import { encryptAttachment, decryptAttachment } from 'matrix-encrypt-attachment';
 import { requests, path, ApiError, retryDelay, sleep } from './api';
 import { chat } from './chat';
 import {isApp,appSave} from './app';
@@ -6,11 +5,11 @@ export type Upload={id:string;file:File;progress:number;state:string;error?:stri
 let tail:Promise<any>=Promise.resolve();
 export function uploadFile(upload:Upload,changed:()=>void){
   const task=tail.then(async()=>{
-    const {file,room,abort}=upload;upload.state='encrypting';upload.error=undefined;changed();
+    const {file,room,abort}=upload;upload.state='preparing';upload.error=undefined;changed();
     if(file.size>chat.session.max_file)throw Error('文件超过 100 MB（100000000 字节）');
     let bytes=await file.arrayBuffer(),info:any;
-    if(chat.info.get(room)?.encryption!=='plain'){const encrypted=await encryptAttachment(bytes);bytes=encrypted.data;info=encrypted.info}
-    if(bytes.byteLength>chat.session.max_file)throw Error('实际上传的密文超过 100 MB');
+    if(chat.info.get(room)?.encryption!=='plain')throw Error('旧会话已停用，请重新打开会话');
+    if(bytes.byteLength>chat.session.max_file)throw Error('实际上传文件超过 100 MB');
     const blob=new Blob([bytes]);upload.state='uploading';changed();
     let result:any;
     for(let attempt=0;attempt<5;attempt++){
@@ -34,7 +33,8 @@ export function releaseUrl(url:string){URL.revokeObjectURL(url);urls.delete(url)
 export function blobUrl(blob:Blob){const url=URL.createObjectURL(blob);urls.add(url);return url}
 window.addEventListener('yc:locked',()=>{for(const url of urls)URL.revokeObjectURL(url);urls.clear()});
 export async function attachment(content:any,signal:AbortSignal){
-  const mxc=content.file?.url||content.url;
+  if(content.file)throw Error('旧加密附件已清空，请使用新会话中的附件');
+  const mxc=content.url;
   const match=/^mxc:\/\/chat\.yitiao\.org\/([a-f0-9]{48})$/.exec(mxc||'');if(!match)throw Error('附件地址不受支持');
   let response:Response|undefined;
   for(let attempt=0;attempt<5;attempt++){
@@ -44,7 +44,7 @@ export async function attachment(content:any,signal:AbortSignal){
     if(response.status===410)throw Error('文件已过期');if(response.status===503)throw Error('文件暂不可用，服务异常；可稍后重试');throw new ApiError(response.status,data)
   }
   if(!response?.ok)throw Error('文件暂不可用，请稍后重试');
-  let bytes=await response.arrayBuffer();if(content.file)bytes=await decryptAttachment(bytes,content.file);
+  const bytes=await response.arrayBuffer();
   // Never execute HTML/SVG or arbitrary uploaded files in the app origin.
   const type=String(content.info?.mimetype||'application/octet-stream');
   return new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});

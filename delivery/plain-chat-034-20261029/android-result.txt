@@ -1,0 +1,7 @@
+org.yitiao.yichat.MessageResetTest:.
+org.yitiao.yichat.PushNotificationsTest:.
+org.yitiao.yichat.FirebaseConfigurationTest:.
+
+Time: 8.247
+
+OK (3 tests)

@@ -150,19 +150,18 @@ def test_two_connections_share_actual_stream_byte_rate(gateway):
     assert time.monotonic()-started>=1.95
 
 
-def test_group_unicode_codepoint_limit_and_e2ee_ciphertext_bound(gateway):
+def test_plain_messages_limit_and_e2ee_disabled(gateway):
     c,app,s=gateway
     from fastapi import HTTPException
     info=policy.room(s,'!group')
     policy.validate_event(s,info,'m.room.message',{'body':'😀'*2000},'@alice:chat.yitiao.org')
     with pytest.raises(HTTPException):policy.validate_event(s,info,'m.room.message',{'body':'😀'*2001},'@alice:chat.yitiao.org')
     with pytest.raises(HTTPException):policy.validate_event(s,info,'m.room.message',{'body':'ok','m.new_content':{'body':'x'*2001}},'@alice:chat.yitiao.org')
-    direct=policy.room(s,'!direct')
-    policy.validate_event(s,direct,'m.room.encrypted',{'ciphertext':'opaque'},'@alice:chat.yitiao.org')
-    with pytest.raises(HTTPException):policy.validate_event(s,direct,'m.room.encrypted',{'ciphertext':'x'*65536},'@alice:chat.yitiao.org')
-    with pytest.raises(HTTPException):policy.validate_to_device(s,'@alice:chat.yitiao.org','m.room.message',{'messages':{}})
-    policy.validate_to_device(s,'@alice:chat.yitiao.org','m.room.encrypted',{'messages':{'@alice:chat.yitiao.org':{'device-two':{'algorithm':'m.olm.v1.curve25519-aes-sha2','ciphertext':{}}}}})
-
+    for room in ('!direct','!group'):
+        info=policy.room(s,room)
+        with pytest.raises(HTTPException) as exc:policy.validate_event(s,info,'m.room.encrypted',{'ciphertext':'opaque'},'@alice:chat.yitiao.org')
+        assert exc.value.detail['code']=='YICHAT_E2EE_DISABLED'
+        with pytest.raises(HTTPException):policy.validate_event(s,info,'m.room.encryption',{'algorithm':'m.megolm.v1.aes-sha2'},'@alice:chat.yitiao.org','')
 
 def test_preview_no_fetch_no_finance_effect_and_route_allowlist(gateway):
     c,app,s=gateway

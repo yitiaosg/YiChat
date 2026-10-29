@@ -9,6 +9,12 @@ import kotlinx.coroutines.flow.Flow
 @Entity(primaryKeys = ["room", "event"]) data class TrustedReceipt(val room: String, val event: String, val hash: String, val sequence: Long, val encrypted: ByteArray)
 @Entity data class Watermark(@PrimaryKey val room: String, val untilMs: Long, val cursor: String?)
 @Dao interface LocalDao {
+    @Query("DELETE FROM Packet") suspend fun clearPackets()
+    @Query("DELETE FROM TrustedReceipt") suspend fun clearReceipts()
+    @Query("DELETE FROM Tombstone") suspend fun clearTombstones()
+    @Query("DELETE FROM Watermark") suspend fun clearWatermarks()
+    @Query("DELETE FROM Operation WHERE kind='missing_packet'") suspend fun clearMissingOperations()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveOperation(value: Operation)
     @Query("SELECT * FROM Operation ORDER BY updated DESC") fun operations(): Flow<List<Operation>>
     @Query("SELECT * FROM Operation WHERE `key`=:key") suspend fun operation(key: String): Operation?

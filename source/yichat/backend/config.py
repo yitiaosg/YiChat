@@ -8,6 +8,8 @@ class Settings:
     site: Path = Path(os.getenv('YICHAT_SITE', '/root/yitiao'))
     origin: str = os.getenv('YICHAT_ORIGIN', 'https://chat.yitiao.org')
     synapse: str = os.getenv('YICHAT_SYNAPSE', 'http://127.0.0.1:8018')
+    # Changed only by an explicit chat reset, never by routine deployments.
+    message_epoch: str = 'plain-20261029-v1'
     server_name: str = 'chat.yitiao.org'
     issuer: str = 'https://yitiao.org'
     idp_internal: str = os.getenv('YICHAT_IDP_INTERNAL', 'http://127.0.0.1:5001')

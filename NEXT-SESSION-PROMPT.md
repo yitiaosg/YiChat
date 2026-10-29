@@ -1,3 +1,11 @@
+# 当前状态：0.3.4 普通消息与一次性聊天清理
+
+当前版本 Android 0.3.4 / code 12，沿用 org.yitiao.yichat.mobile 与原签名。私聊、群聊和附件不再使用 E2EE，服务端拒绝新的加密消息和状态。站点所有者明确要求清空旧聊天，已通过官方 Synapse API 重建空私聊；钱包账本、交易哈希链、资产订单和赠卡凭证独立保留。指定未领取托管款已按正常退款出账流程退回，勿重复操作或改余额。
+
+消息 epoch plain-20261029-v1 只代表这一次授权清理，后续常规部署不要更改。App 首次升级删除旧聊天包/快照/水位，保留钱包操作；不能每次启动清理新消息。保留 SHA-256、自动备份、口令导出、红包/转账/赠卡与站内特殊预览。网页下载指向 GitHub 0.3.4，服务端 APK 下载关闭。见 PRODUCTION-0.3.4.md 与最新 README/CHANGELOG。下方早期 E2EE 信息仅供历史追溯，不能作为当前设计要求。
+
+---
+
 # 当前交付：YiChat Android 0.3.3
 
 推送重构已合入本版，包名 org.yitiao.yichat.mobile，versionCode 11。构建需要仓库外的 YICHAT_FIREBASE_CONFIG 与 YICHAT_SIGNING_CONFIG；不得上传服务账号 JSON、签名私钥或生产环境文件。使用原签名覆盖安装，保留 IndexedDB / Rust 加密存储。

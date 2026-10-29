@@ -1,0 +1,22 @@
+{
+  "backend_synapse_browser_passed": 123,
+  "browser_checks_passed": 5,
+  "web_unit_passed": 15,
+  "android_release_jvm": {
+    "tests": 14,
+    "failures": 0,
+    "errors": 0
+  },
+  "production_old_chat_events_after_reset": 0,
+  "production_e2ee_state_events": 0,
+  "production_active_plain_rooms": 2,
+  "production_health_http": 200,
+  "wallet_chain_and_escrow_verified": true,
+  "immutable_wallet_history_preserved": true,
+  "real_device_fcm_verified": false,
+  "android_instrumentation_passed": 3,
+  "android_release_lint_errors": 0,
+  "same_signer_as_033": true,
+  "archive_immutable_trigger_preserved": true,
+  "archive_reader_has_no_write_grants": true
+}

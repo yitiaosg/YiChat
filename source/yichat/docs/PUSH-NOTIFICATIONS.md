@@ -1,10 +1,10 @@
 # YiChat 推送通知重构
 
-状态：已纳入 Android 0.3.3（versionCode 11），接入外置 Firebase Android 配置和服务账号。Google 认证及 API 校验已执行；实际手机的 FCM 投递、Doze 和重启未首次解锁验证仍需在有 Google Play services 的设备完成。详见根目录 PRODUCTION-0.3.3.md。
+状态：当前 Android 0.3.4 / code 12，已停用聊天 E2EE。FCM 外置配置、通知占位与后台补拉机制沿用 0.3.3，内容任务现在直接读取经过认证的普通消息。实际手机 FCM 投递、Doze 和重启未首次解锁仍需在 Google Play services 设备完成；见根目录 PRODUCTION-0.3.4.md。
 
 ## 现状与实现选择
 
-原实现没有 Firebase。原生前台服务每 15 秒轮询 `/api/notifications`，WorkManager 每 15 分钟兜底，通知仅显示通用正文。聊天和私聊解密在共用的 Matrix JS SDK / Rust WASM / WebView IndexedDB 中，原生 PacketStore 不是聊天密钥库。新群按既有策略使用 HTTPS，私聊及旧版加密群继续端到端加密。
+App 与 Web 共用 Matrix JS SDK、同源 WebView 存储及单写锁。聊天不再初始化 Rust 加密模块，不再依赖历史密钥；原生 PacketStore 用于哈希核验后的原包备份，本地存储和口令导出加密保留。
 
 新增的 FCM 入口、轮询、UI 实时事件进入同一通知管道：
 
@@ -12,9 +12,9 @@
 2. 通知标识为 `tag = conversation:<conversation_id>`、`id = conversation_id.hashCode()`。额外 tag 避免不同会话的整数哈希碰撞。PendingIntent action 同样按会话隔离。
 3. 占位标题来自本地显示名缓存，缺失为 `Yichat`，正文为 `你有新的消息`。私聊／群聊分别使用新的 `IMPORTANCE_HIGH` 通道。首次显示可响铃，已有同会话通知及替换使用 `setOnlyAlertOnce(true)`。
 4. 使用 `setExpedited(RUN_AS_NON_EXPEDITED_WORK_REQUEST)`。unique work 名基于会话 ID，策略为 `APPEND_OR_REPLACE`。`KEEP` 会丢弃工作执行期间到达的新请求；追加任务可顺序补拉；开始网络前跳过旧代任务及已经替换成功的重复请求，最新任务一次取最多 20 条未读消息以合并突发推送。失败返回 success 并保留占位，避免反复重试、阻塞会话链。后续推送或重启解锁可再次补处理。旧代任务可为聚合提供已验证结果，但不能覆盖较新的占位通知。
-5. Worker 复用当前 UI WebView 的 SDK；没有 Activity 时创建使用相同 origin、WebView 存储和 `yc:active-client` Web Lock 的后台 WebView。全进程串行运行此桥接，防止不同会话的后台 WebView 竞争一个密钥库。UI 优先，可中止后台实例；普通网页多标签锁不被强制抢占。
-6. 服务器提供最多 20 个该会话的未读事件 ID，再由现有 Matrix API 拉消息。检查当前成员、静音、归档、已读、撤回以及事件身份。加密事件只调用现有 SDK 的解密／重试入口；不导出密钥，不另写原语。SDK 正常 `/sync` 接收并持久化 to-device 密钥，没有原生第二套同步器。
-7. 成功以同一标识用 MessagingStyle 显示发送者及正文、合并消息。附件用类型标签，不下载附件。网络、密钥、解密、超时失败只写固定错误类别日志。45 秒原生超时；JS 解密等待上限 30 秒。用户已读／清除通知后，任务不会重新创建它。
+5. Worker 复用当前 UI WebView 的 SDK；没有 Activity 时创建使用相同 origin、WebView 存储和 `yc:active-client` Web Lock 的后台 WebView。全进程串行运行此桥接，防止不同会话的后台 WebView 竞争一个同步存储。UI 优先，可中止后台实例；普通网页多标签锁不被强制抢占。
+6. 服务器提供最多 20 个该会话的未读事件 ID，再由现有 Matrix API 拉消息。检查当前成员、静音、归档、已读、撤回以及事件身份。直接读取普通消息；旧加密事件拒绝用于通知替换，保留占位。SDK 继续正常同步，没有原生第二套同步器。
+7. 成功以同一标识用 MessagingStyle 显示发送者及正文、合并消息。附件用类型标签，不下载附件。网络、会话、事件类型或超时失败只写固定错误类别日志。45 秒原生超时；JS 启动等待上限 30 秒。用户已读／清除通知后，任务不会重新创建它。
 
 ## Direct Boot、隐私和权限
 
@@ -71,7 +71,7 @@ YICHAT_FCM_CREDENTIALS=/etc/yichat/private/fcm-service-account.json
 
 1. 前台、后台、移除最近任务分别发消息：应先看到本地会话名／通用占位，随后同一条通知更新。群聊可展开多条“发送者: 内容”。连发 10 条确认每个会话只有一条通知，替换不再次响铃。不同会话分别聚合。
 2. 接收者正在该会话底部阅读：不显示系统通知，界面收到消息。在另一会话页时应该收到通知。读取后或手动划掉通知，在途 Worker 不得重新弹出旧通知。
-3. 占位显示后切断网络，或使用没有对应会话密钥的**测试设备**：占位保留。正确恢复密钥后重新发送消息，确认可替换，且正常 UI 仍能解密。不得用生产密钥做故障注入。
+3. 占位显示后切断网络或使测试会话失效：占位保留。恢复网络及有效登录后重新发送消息，确认可替换。新设备无需导入密钥。
 4. Doze（先按 Home，屏幕熄灭，模拟拔电）：
 
 ```sh

@@ -54,7 +54,12 @@ def subject(s,matrix_id):
     return row['subject']
 
 
+def retired(s,room):
+    with connect(s.db) as c:return bool(c.execute('SELECT 1 FROM retired_rooms WHERE room=?',(room,)).fetchone())
+
+
 def require_send(s,info,sender):
+    if retired(s,info['room']):fail(410,'此旧会话已清空，请打开新会话')
     from .lifecycle import purged
     if purged(s,sender):fail(403,'账户已注销，不能继续发送')
     if info['kind']!='direct':
@@ -94,7 +99,7 @@ def register_room(s,token,room):
             if existing and ((existing['room'] and existing['room']!=room) or (existing['ticket'] and existing['ticket']!=token)):fail(409,'双方已有私聊或私聊正在创建，请复用原会话')
             c.execute('INSERT INTO direct_pairs VALUES(?,?,?,?) ON CONFLICT(first,second) DO UPDATE SET room=excluded.room,ticket=excluded.ticket',(first,second,room,token))
         c.execute('INSERT OR IGNORE INTO rooms VALUES(?,?,?,?,30)',(room,t['kind'],t['owner'],t['peer']))
-        c.execute('INSERT OR IGNORE INTO room_modes VALUES(?,?,?)',(room,'direct' if t['kind']=='direct' else 'plain',int(time.time()*1000)))
+        c.execute('INSERT OR IGNORE INTO room_modes VALUES(?,?,?)',(room,'plain',int(time.time()*1000)))
         if t['kind']=='group':
             from .groups import register
             register(c,room)
@@ -127,9 +132,7 @@ def validate_event(s,info,event_type,content,sender,state_key=None,control=None)
             validate_member(s,info,sender,state_key,content,control)
         return
     if event_type=='m.room.encryption':
-        if info['encryption']=='plain':fail(403,'新群不启用端到端加密')
-        if content.get('algorithm')!='m.megolm.v1.aes-sha2':fail(403,'不支持此加密算法')
-        return
+        fail(403,{'code':'YICHAT_E2EE_DISABLED','error':'聊天已停用端到端加密，请更新客户端'})
     if event_type=='m.room.history_visibility' and content.get('history_visibility')!='joined':
         fail(403,'历史可见性固定为 joined')
     if event_type=='m.room.guest_access' and content.get('guest_access')!='forbidden':
@@ -140,7 +143,7 @@ def validate_event(s,info,event_type,content,sender,state_key=None,control=None)
         if not control:require_send(s,info,sender)
         if info['encryption'] in ('direct','legacy_encrypted') and event_type not in ('m.room.encrypted','m.room.redaction','m.reaction'):
             fail(403,'加密会话禁止明文消息')
-        if info['encryption']=='plain' and event_type=='m.room.encrypted':fail(403,'新群只接收服务器可读事件')
+        if event_type=='m.room.encrypted':fail(403,{'code':'YICHAT_E2EE_DISABLED','error':'聊天已停用端到端加密，请更新客户端'})
         if event_type=='m.room.encrypted':
             import json
             if len(json.dumps(content,ensure_ascii=False,separators=(',',':')).encode())>65536:fail(413,'密文事件超过 65536 字节')

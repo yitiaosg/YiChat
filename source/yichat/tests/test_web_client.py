@@ -9,7 +9,7 @@ from backend.db import connect
 from backend.security import digest
 
 
-def test_web_client_real_e2ee_and_plain_group(synapse,monkeypatch):
+def test_web_client_plain_chat_without_session_keys(synapse,monkeypatch):
     s,f,users,h,process,logpath,start,stop=synapse
     s.origin='http://127.0.0.1:'+str(free_port())
     # Reuse real card authoring/production definitions with isolated fixture data.
@@ -142,7 +142,7 @@ def test_web_client_real_e2ee_and_plain_group(synapse,monkeypatch):
             if server.started:break
             time.sleep(.05)
         script=Path(__file__).parent/'browser'
-        child=subprocess.Popen(['node','chat.mjs'],cwd=script,env=dict(os.environ,CHAT_TEST_ORIGIN=s.origin,CHAT_TEST_TOKENS=json.dumps(tokens),CHAT_TEST_WALLET=wallet_origin),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+        child=subprocess.Popen(['node','plain-chat.mjs'],cwd=script,env=dict(os.environ,CHAT_TEST_ORIGIN=s.origin,CHAT_TEST_TOKENS=json.dumps(tokens),CHAT_TEST_WALLET=wallet_origin),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
         output=[]
         try:
             for line in child.stdout:
