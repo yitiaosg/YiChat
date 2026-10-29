@@ -143,7 +143,7 @@ def create_app(settings=None):
             checkpoint=c.execute("SELECT healthy,observed_ms FROM checkpoints WHERE source='synapse'").fetchone()
             errors=c.execute("SELECT EXISTS(SELECT 1 FROM archive_gaps) OR EXISTS(SELECT 1 FROM archive_jobs WHERE status='failed') failed").fetchone()['failed']
         ready=bool(checkpoint and checkpoint['healthy'] and not errors and checkpoint['observed_ms']>=int(time.time()*1000)-120000)
-        return JSONResponse({'service':'YiChat','status':'ok' if ready else 'degraded','funds_enabled':app.state.funds.enabled()},status_code=200 if ready else 503)
+        return JSONResponse({'service':'YiChat','status':'ok' if ready else 'degraded','message_epoch':s.message_epoch,'e2ee':False,'funds_enabled':app.state.funds.enabled()},status_code=200 if ready else 503)
 
     @app.get('/auth/login')
     async def login():
@@ -200,7 +200,7 @@ def create_app(settings=None):
     @app.get('/api/session')
     async def me(request:Request):
         who=session(request)
-        return {'uid':who['subject'],'user':who['username'],'mxid':who['mxid'],'device':who['device'],'token':request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('yc_session'),'expires':who['expires'],'user_id':who['mxid'],'device_id':who['device'],'home_server':s.server_name,'funds_enabled':app.state.funds.enabled(),'upload_rate':s.upload_rate,'max_file':s.max_file,'packet_ttl':s.packet_ttl,'retention':{'days':30,'timezone':'GMT+0','basis':'utc_day_end','cleanup_requires_sealed_archive':True}}
+        return {'uid':who['subject'],'user':who['username'],'mxid':who['mxid'],'device':who['device'],'token':request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('yc_session'),'expires':who['expires'],'user_id':who['mxid'],'device_id':who['device'],'home_server':s.server_name,'message_epoch':s.message_epoch,'e2ee':False,'funds_enabled':app.state.funds.enabled(),'upload_rate':s.upload_rate,'max_file':s.max_file,'packet_ttl':s.packet_ttl,'retention':{'days':30,'timezone':'GMT+0','basis':'utc_day_end','cleanup_requires_sealed_archive':True}}
 
     @app.post('/api/logout')
     async def logout(request:Request):
@@ -278,6 +278,7 @@ def create_app(settings=None):
         memberships={r['room']:r['membership'] for r in past}
         for rid in dict.fromkeys([*joined.get('joined_rooms',[]),*[r['room'] for r in past if r['membership']=='leave']]):
             try:
+                if policy.retired(s,rid):continue
                 info=room_info(rid)
                 with connect(s.db) as db:
                     hidden=conversations.deleted(db,who['subject'],rid)
@@ -330,7 +331,6 @@ def create_app(settings=None):
             with transaction(s.db) as db:db.execute('UPDATE room_tickets SET expires=? WHERE token=? AND room IS NULL',(time.time()-1,ticket))
             raise
         initial=[{'type':'m.room.history_visibility','state_key':'','content':{'history_visibility':'joined'}}]
-        if kind=='direct':initial.insert(0,{'type':'m.room.encryption','state_key':'','content':{'algorithm':'m.megolm.v1.aes-sha2'}})
         body={'preset':'private_chat','name':str(data.get('name') or (names[0] if kind=='direct' else '新群聊'))[:100],'is_direct':kind=='direct','invite':invite if kind=='group' else [],'room_version':'11','creation_content':{'m.federate':False,'org.yitiao.ticket':ticket},'initial_state':initial}
         result=await app.state.matrix.call('POST','/_matrix/client/v3/createRoom',app.state.matrix.token(who),body)
         policy.register_room(s,ticket,result['room_id'])
@@ -492,7 +492,16 @@ def create_app(settings=None):
     async def order_access(request,oid):
         with connect(s.ledger) as c:o=c.execute('SELECT * FROM yichat_orders WHERE id=?',(oid,)).fetchone()
         if not o:fail(404,'订单不存在')
-        who=session(request);conversations.accessible(s,who,o['room'])
+        who=session(request)
+        if policy.retired(s,o['room']):
+            # Chat history deletion never removes access to one's wallet receipt.
+            # Retired orders are read-only and authenticated by immutable UID.
+            with connect(s.ledger) as ledger:
+                participants=ledger.execute('SELECT sender_uid,recipient_uid FROM yichat_order_participants WHERE order_id=?',(oid,)).fetchone()
+                claimed=ledger.execute('SELECT 1 FROM yichat_payout_identities WHERE order_id=? AND uid=?',(oid,who['subject'])).fetchone()
+            if not participants or (who['subject'] not in (participants['sender_uid'],participants['recipient_uid']) and not claimed):fail(403,'没有此历史资金订单的权限')
+            return who,o
+        conversations.accessible(s,who,o['room'])
         with connect(s.ledger) as ledger:member=ledger.execute("SELECT 1 FROM yichat_memberships WHERE room=? AND mxid=? AND membership='join' AND pending_event IS NULL",(o['room'],who['mxid'])).fetchone()
         if not member:
             fence=await app.state.matrix.fence()

@@ -79,7 +79,7 @@ def migrate(settings):
         c.executescript(push.SCHEMA)
         c.execute("INSERT OR IGNORE INTO direct_pairs(first,second,room) SELECT min(owner,peer),max(owner,peer),room FROM rooms WHERE kind='direct' ORDER BY rowid")
         for row in c.execute("SELECT room FROM rooms WHERE kind='group'").fetchall():groups.register(c,row['room'],seeded=0)
-        c.execute("INSERT OR IGNORE INTO direct_visibility SELECT room,EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=rooms.room AND h.type='m.room.encrypted') FROM rooms WHERE kind='direct'")
+        c.execute("INSERT OR IGNORE INTO direct_visibility SELECT room,EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=rooms.room AND h.type IN ('m.room.message','m.room.encrypted')) FROM rooms WHERE kind='direct'")
         for room in c.execute('SELECT DISTINCT room FROM group_members WHERE admin=1').fetchall():
             for row in c.execute('SELECT mxid FROM group_members WHERE room=? AND admin=1 ORDER BY mxid LIMIT -1 OFFSET 8',(room['room'],)).fetchall():c.execute('UPDATE group_members SET admin=0 WHERE room=? AND mxid=?',(room['room'],row['mxid']))
         c.execute('INSERT OR IGNORE INTO yc_migrations VALUES(2)')

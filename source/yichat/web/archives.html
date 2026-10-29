@@ -3,5 +3,5 @@
 <p><label>UTC 日期 <input id="day" type="date" required></label></p><label>规格 <select id="spec"><option value="events-manifest">事件与附件清单</option><option value="with-attachments">事件、清单与附件实体</option></select></label>
 <button>获取可信摘要</button></form><p id="status" role="status"></p><pre id="summary"></pre><p><a id="download" hidden>下载完整归档</a></p>
 <label>选择本地文件校验 <input id="local-file" type="file" accept=".zip"></label><p id="verification" role="status"></p>
-<p>私聊归档保存密文，恢复还需要用户自己保存的加密密钥备份。本页不解密或恢复消息。</p>
+<p>私聊与群聊归档保存服务器接收的原消息包，可本地校验 SHA-256，无需会话密钥。本页不导入或重发历史消息。</p>
 <p><a href="/tools/verify_archive.py">下载本地 Python 校验工具</a> · <a href="/auth/login">主站登录</a></p><script src="/static/archive.js" defer></script></html>

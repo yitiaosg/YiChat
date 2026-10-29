@@ -71,7 +71,7 @@ def backfill(s,limit=500):
 
 def current_rooms(s,who):
     with connect(s.ledger) as c:
-        return {r['room'] for r in c.execute("SELECT room FROM yichat_memberships WHERE mxid=? AND membership='join' AND pending_event IS NULL",(who['mxid'],))}
+        return {r['room'] for r in c.execute("SELECT room FROM yichat_memberships WHERE mxid=? AND membership='join' AND pending_event IS NULL",(who['mxid'],)) if not policy.retired(s,r['room'])}
 
 
 def accessible(pg,rooms,who,row,s=None):

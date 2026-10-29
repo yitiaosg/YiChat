@@ -13,7 +13,7 @@ def test_wallet_refresh_and_recipient_binding_error_over_http(gateway):
         # The legacy gateway fixture seeds archive evidence only. Transfers also
         # require the current membership admission barrier in the asset ledger.
         for name,event in [('alice','$join1'),('bob','$join2')]:
-            db.execute("INSERT INTO yichat_memberships VALUES(?,?,'join',?,NULL,NULL,NULL)",('!direct','@'+name+':chat.yitiao.org',event))
+            db.execute("INSERT OR IGNORE INTO yichat_memberships VALUES(?,?,'join',?,NULL,NULL,NULL)",('!direct','@'+name+':chat.yitiao.org',event))
         recipient=dict(db.execute("SELECT * FROM yidt_bindings WHERE user='bob' AND service='yichat'").fetchone())
         db.execute("DELETE FROM yidt_bindings WHERE user='bob' AND service='yichat'")
     payload={'room':'!direct','key':secrets.token_urlsafe(24),'amount':'0.01','count':1,'title':'test'}

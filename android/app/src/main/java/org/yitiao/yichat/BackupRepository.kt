@@ -142,7 +142,7 @@ class BackupRepository(private val context: Context, private val matrix: PacketS
         }
         db.withTransaction { verified.forEach { if (dao.packet(it.room, it.event) == null) dao.addPacket(it) } }
         plain.fill(0)
-        status.value = "已恢复 ${verified.size} 份认证原消息包；Matrix 历史密钥需独立恢复"
+        status.value = "已恢复 ${verified.size} 份认证原消息包；无需会话密钥"
         verified.size
     }
 }

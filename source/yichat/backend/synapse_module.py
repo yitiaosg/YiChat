@@ -83,9 +83,7 @@ class YiChatModule:
             initial=config.setdefault('initial_state',[])
             if not any(e['type']=='m.room.guest_access' for e in initial):
                 initial.append({'type':'m.room.guest_access','state_key':'','content':{'guest_access':'forbidden'}})
-            if t['kind']=='group' and any(e['type']=='m.room.encryption' for e in initial):raise HTTPException(403,'新群不启用端到端加密')
-            if t['kind']=='direct' and not any(e['type']=='m.room.encryption' for e in initial):
-                initial.append({'type':'m.room.encryption','state_key':'','content':{'algorithm':'m.megolm.v1.aes-sha2'}})
+            if any(e['type']=='m.room.encryption' for e in initial):raise HTTPException(403,'聊天已停用端到端加密')
         except HTTPException as e:raise self.convert(e)
 
     @staticmethod
@@ -96,6 +94,11 @@ class YiChatModule:
     async def check_event_allowed(self,event,state):
         try:
             if not self.ready:raise HTTPException(503,'会话服务正在恢复，请稍后重试')
+            if policy.retired(self.s,event.room_id):
+                # Operator-marked retired rooms only admit self-leave events for
+                # the official Synapse shutdown API. No content or asset action.
+                if event.type=='m.room.member' and event.sender==event.state_key and event.content.get('membership')=='leave':return True,None
+                raise HTTPException(410,'此旧会话已清空，请打开新会话')
             # A stable, live main-site grant is required even for a stolen raw token.
             control=groups.admitted(self.s,event.room_id,event.sender,event.type,unfreeze(event.content),event.state_key if event.is_state() else '')
             with connect(self.s.db) as c:
@@ -174,7 +177,7 @@ class YiChatModule:
 
     async def on_new_event(self,event,state):
         groups.apply(self.s,unfreeze(event.content),event.event_id)
-        if event.type=='m.room.encrypted':
+        if event.type in ('m.room.message','m.room.encrypted'):
             with transaction(self.s.db) as c:c.execute('UPDATE direct_visibility SET visible=1 WHERE room=?',(event.room_id,))
         if event.content.get(archive.ATTACHMENT_KEY):
             def received(txn):
@@ -209,6 +212,7 @@ class YiChatModule:
         with connect(self.s.db) as c:rooms=c.execute('SELECT room FROM rooms').fetchall()
         for row in rooms:
             room=row['room']
+            if policy.retired(self.s,room):continue
             if room in self.initialized_rooms:continue
             state=await self.api.get_room_state(room,[('m.room.member',None)])
             with transaction(self.s.ledger) as c:
@@ -268,9 +272,10 @@ class YiChatModule:
             fences=[];day=first
             while day<=yesterday:
                 fences.append((day,allocated,at));day+=timedelta(days=1)
+            rows=[row for row in rows if not policy.retired(self.s,row[1])]
             for eid,rid,_,_,raw in rows:
                 accepted=json.loads(raw);groups.apply(self.s,accepted.get('content',{}),eid)
-                if accepted.get('type')=='m.room.encrypted':
+                if accepted.get('type') in ('m.room.message','m.room.encrypted'):
                     with transaction(self.s.db) as c:c.execute('UPDATE direct_visibility SET visible=1 WHERE room=?',(rid,))
             await defer_to_thread(reactor,history.record_rows,self.s,rows)
             await defer_to_thread(reactor,archive.ingest_batch,self.s.archive_ingest,rows,through,at,fences)

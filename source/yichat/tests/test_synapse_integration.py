@@ -103,13 +103,14 @@ def test_native_matrix_enforces_policy_and_durable_recovery(synapse):
         joined=c.post('/api/rooms/'+quote(direct,safe='')+'/prepare',json={});assert joined.status_code==200,joined.text
         uploaded=c.post('/api/files/'+quote(direct,safe=''),content=b'OPAQUE_ATTACHMENT_BYTES');assert uploaded.status_code==200,uploaded.text
         fid=uploaded.json()['id']
-        body={archive.ATTACHMENT_KEY:[fid],'algorithm':'m.megolm.v1.aes-sha2','ciphertext':'OPAQUE_CIPHERTEXT','session_id':'test','sender_key':'test','device_id':tokens['alice']['device']}
-        accepted=h.put(s.synapse+room_path+'/send/m.room.encrypted/one',headers=raw,json=body);assert accepted.status_code==200,accepted.text
+        body={archive.ATTACHMENT_KEY:[fid],'msgtype':'m.text','body':'PLAIN_TEST_MESSAGE'}
+        accepted=h.put(s.synapse+room_path+'/send/m.room.message/one',headers=raw,json=body);assert accepted.status_code==200,accepted.text
         eid=accepted.json()['event_id']
-        clear=h.put(s.synapse+room_path+'/send/m.room.message/clear',headers=raw,json={'msgtype':'m.text','body':'no downgrade'});assert clear.status_code==403,clear.text
+        assert h.get(s.synapse+room_path+'/state/m.room.encryption',headers=raw).status_code==404
+        clear=h.put(s.synapse+room_path+'/send/m.room.encrypted/clear',headers=raw,json={'algorithm':'m.megolm.v1.aes-sha2','ciphertext':'disabled'});assert clear.status_code==403 and clear.json()['code']=='YICHAT_E2EE_DISABLED',clear.text
         # Privacy policy still applies with a valid raw Matrix access token.
         social.mutate(s.accounts,u['bob']['subject'],u['alice']['subject'],'block')
-        for typ,data in [('m.room.encrypted',body),('m.reaction',{'m.relates_to':{'rel_type':'m.annotation','event_id':eid,'key':'x'}})]:
+        for typ,data in [('m.room.message',body),('m.reaction',{'m.relates_to':{'rel_type':'m.annotation','event_id':eid,'key':'x'}})]:
             r=h.put(s.synapse+room_path+'/send/'+typ+'/blocked',headers=raw,json=data)
             assert r.status_code==403 and r.json()['code']=='YICHAT_MESSAGE_FORBIDDEN',r.text
         group=c.post('/api/rooms',json={'kind':'group','users':['bob'],'name':'test'});assert group.status_code==200,group.text
@@ -144,7 +145,7 @@ def test_native_matrix_enforces_policy_and_durable_recovery(synapse):
             with archive.connect(s.archive_reader) as pg:stored=pg.execute('SELECT * FROM events WHERE event_id=%s',(eid,)).fetchone()
             if stored:break
             time.sleep(.1)
-        assert stored and b'OPAQUE_CIPHERTEXT' in bytes(stored['body'])
+        assert stored and b'PLAIN_TEST_MESSAGE' in bytes(stored['body'])
         with archive.connect(s.archive_reader) as pg:
             assert pg.execute('SELECT event_id FROM attachment_references WHERE file=%s',(fid,)).fetchone()['event_id']==eid
         assert b'no downgrade' not in bytes(stored['body'])
@@ -174,6 +175,13 @@ def test_native_matrix_enforces_policy_and_durable_recovery(synapse):
             if status.json().get('status')!='active':break
             time.sleep(.1)
         assert status.json()['status']=='complete',status.text
+        # Full explicit reset uses the official room shutdown/purge endpoint;
+        # retired rooms permit only the self-leave needed by that operation.
+        with connect(s.db) as db:db.execute('INSERT INTO retired_rooms VALUES(?,?)',(direct,int(time.time()*1000)))
+        deleted=h.request('DELETE',s.synapse+'/_synapse/admin/v1/rooms/'+quote(direct,safe=''),headers={'Authorization':'Bearer '+s.admin_token},json={'block':True,'purge':True})
+        assert deleted.status_code==200,deleted.text
+        assert h.get(s.synapse+room_path+'/state',headers=raw).status_code in (403,404)
+        assert direct not in [r['room'] for r in c.get('/api/rooms').json()]
         # Main logout revokes raw tokens while preserving the device and its keys.
         with connect(s.ledger) as db:db.execute("UPDATE yidt_sessions SET revoked=1 WHERE user='alice'")
         assert c.get('/api/session').status_code==401

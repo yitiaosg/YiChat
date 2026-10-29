@@ -10,7 +10,7 @@ import kotlinx.serialization.json.*
 import java.util.UUID
 
 /** Shares the UI's existing JS SDK. A headless WebView uses the identical origin,
- * IndexedDB, Rust crypto module and yc:active-client Web Lock when no UI exists.
+ * IndexedDB and yc:active-client Web Lock when no UI exists.
  * Never creates a native Matrix device or a second native /sync consumer. */
 class NotificationContent(private val context:Context,private val graph:Graph) {
     private val serial=Mutex()

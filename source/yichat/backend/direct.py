@@ -1,4 +1,4 @@
-"""No private recipient room is visible before an accepted encrypted message."""
+"""No private recipient room is visible before an accepted message."""
 import asyncio,secrets,time
 from urllib.parse import quote
 from fastapi import Request
@@ -95,6 +95,7 @@ def install(app,s,session):
         for category in ('join','invite','leave'):
             rows=data.get('rooms',{}).get(category,{})
             for room in list(rows):
+                if policy.retired(s,room):del rows[room];continue
                 try:info=policy.room(s,room)
                 except Exception:continue
                 if not visible(s,info,who['mxid']):del rows[room];continue

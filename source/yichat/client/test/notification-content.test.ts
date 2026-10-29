@@ -16,7 +16,7 @@ function fixture(event:MatrixEvent,options:{failed?:boolean;muted?:boolean}={}){
   client:{getRoom:()=>room,fetchRoomEvent:async()=>{fetched++;return event.event},getCrypto:()=>({}),decryptEventIfNeeded:async()=>{if(options.failed)throw Error('key missing')}}} as unknown as Chat;
  return {chat,fetched:()=>fetched};
 }
-test('verified plain group content becomes a notification message',async()=>{
+test('verified plain private content becomes a notification message',async()=>{
  const event=new MatrixEvent({event_id:'$event',room_id:'!room',sender:'@sender',type:'m.room.message',origin_server_ts:123,content:{msgtype:'m.text',body:'正文'}});
  const {chat}=fixture(event);
  const messages=await notificationContent(chat,{id:'work',room:'!room',kind:'private',event:'$event'});
@@ -28,12 +28,12 @@ test('muted or read-only conversations are not fetched for previews',async()=>{
  await assert.rejects(notificationContent(chat,{id:'work',room:'!room',kind:'private',event:'$event'}));
  assert.equal(fetched(),0);
 });
-test('SDK-decrypted content is used without forwarding ciphertext',async()=>{
- const event=new MatrixEvent({event_id:'$event',room_id:'!room',sender:'@sender',type:'m.room.encrypted',origin_server_ts:123,content:{algorithm:'m.megolm.v1.aes-sha2',ciphertext:'must never display'}});
- const {chat}=fixture(event);
- chat.client.decryptEventIfNeeded=async()=>{await event.attemptDecryption({decryptEvent:async()=>({clearEvent:{type:'m.room.message',content:{msgtype:'m.text',body:'解密后的消息'}}})} as any)};
- const result=await notificationContent(chat,{id:'work',room:'!room',kind:'private',event:'$event'});
- assert.equal(result[0].body,'解密后的消息');assert.ok(!JSON.stringify(result).includes('ciphertext'));
+test('retired ciphertext is rejected without invoking crypto or replacing placeholder',async()=>{
+ const event=new MatrixEvent({event_id:'$event',room_id:'!room',sender:'@sender',type:'m.room.encrypted',content:{algorithm:'m.megolm.v1.aes-sha2',ciphertext:'must never display'}});
+ const {chat}=fixture(event);let cryptoCalled=false;
+ chat.client.decryptEventIfNeeded=async()=>{cryptoCalled=true};
+ await assert.rejects(notificationContent(chat,{id:'work',room:'!room',kind:'private',event:'$event'}),/Retired/);
+ assert.equal(cryptoCalled,false);
 });
 test('network errors and mismatched event identity cannot produce a replacement',async()=>{
  const event=new MatrixEvent({event_id:'$other',room_id:'!room',sender:'@sender',type:'m.room.message',content:{body:'do not show'}});
@@ -41,17 +41,6 @@ test('network errors and mismatched event identity cannot produce a replacement'
  await assert.rejects(notificationContent(chat,{id:'work',room:'!room',kind:'private',event:'$event'}));
  chat.client.fetchRoomEvent=async()=>{throw Error('offline')};
  await assert.rejects(notificationContent(chat,{id:'work',room:'!room',kind:'private',event:'$event'}));
-});
-test('missing room keys or decryption timeout cannot produce notification text',async()=>{
- const event=new MatrixEvent({event_id:'$event',room_id:'!room',sender:'@sender',type:'m.room.encrypted',content:{algorithm:'m.megolm.v1.aes-sha2',ciphertext:'unavailable'}});
- const {chat}=fixture(event);
- chat.client.decryptEventIfNeeded=async()=>{await event.attemptDecryption({decryptEvent:async()=>{throw Error('synthetic missing key')}} as any)};
- const clock=Date.now;let calls=0;
- try {
-  Date.now=()=>calls++===0?0:31_000;
-  await assert.rejects(notificationContent(chat,{id:'work',room:'!room',kind:'private',event:'$event'}));
-  assert.equal(event.isDecryptionFailure(),true);
- } finally {Date.now=clock}
 });
 test('attachments use labels without fetching or decrypting media',()=>{
  assert.equal(notificationText({msgtype:'m.image',body:'image.jpg'}),'[图片]');
