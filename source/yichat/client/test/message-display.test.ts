@@ -14,3 +14,9 @@ test('native fetch and server FCM summaries use the same private/group wording',
  const fixtures=JSON.parse(readFileSync(new URL('../../tests/fixtures/notification-summary.json',import.meta.url),'utf8'));
  for(const row of fixtures)for(const kind of ['private','group'] as const)assert.equal(notificationText(row.content,kind),row[kind],row.name+':'+kind);
 });
+test('cards and media omit the outer bubble; plain text and disabled previews retain it',async()=>{
+ const {standaloneContent}=await import('../src/message-display');
+ for(const msgtype of ['m.image','m.audio','m.video','m.file'])assert.equal(standaloneContent({msgtype}),true);
+ assert.equal(standaloneContent({msgtype:'m.text'},[card]),true);assert.equal(standaloneContent({msgtype:'m.text'},[],true),true);
+ assert.equal(standaloneContent({msgtype:'m.text',body:card,'org.yitiao.no_preview':true}),false);assert.equal(standaloneContent({msgtype:'m.text',body:'hello'}),false);
+});

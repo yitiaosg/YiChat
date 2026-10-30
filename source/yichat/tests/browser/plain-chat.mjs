@@ -4,13 +4,18 @@ import {mkdir,writeFile,readFile} from 'node:fs/promises';
 const origin=process.env.CHAT_TEST_ORIGIN,tokens=JSON.parse(process.env.CHAT_TEST_TOKENS);
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 const contexts=[],wire=[],errors=[],requests=[],checks=[];
-async function setup(user){
- const context=await browser.newContext({acceptDownloads:true});contexts.push(context);
- await context.addCookies([{name:'yc_session',value:tokens[user],url:origin}]);const page=await context.newPage();page.setDefaultTimeout(25000);
+async function setup(user,app=false){
+ const context=await browser.newContext({acceptDownloads:true,...(app?{viewport:{width:412,height:915}}:{})});contexts.push(context);
+ await context.addCookies([{name:'yc_session',value:tokens[user],url:origin}]);
+ if(app){
+  const session=await(await context.request.get(origin+'/api/session')).json();
+  await context.addInitScript(({session})=>{window.YiChatApp={onmessage:null,postMessage(text){const {id,method}=JSON.parse(text);let value=null;if(method==='session')value={session,online:localStorage.getItem('test:offline')!=='1'};if(method==='backupStatus')value={packets:0,status:'隔离测试备份'};setTimeout(()=>window.YiChatApp.onmessage?.({data:JSON.stringify({id,ok:true,value})}),0)}};sessionStorage.setItem('yc:backup-hint-seen','1')},{session});
+ }
+ const page=await context.newPage();page.setDefaultTimeout(25000);
  page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{requests.push(new URL(r.url()).pathname);if(r.url().includes('/send/'))wire.push({path:r.url(),data:r.postDataJSON()})});
  await page.goto(origin);await page.locator('.sidebar').waitFor();return page;
 }
-async function send(page,text){await page.getByRole('textbox',{name:'消息',exact:true}).fill(text);await page.getByRole('button',{name:'发送消息',exact:true}).click();await page.locator('.outgoing').waitFor({state:'detached'})}
+async function send(page,text){await page.getByRole('textbox',{name:'消息',exact:true}).fill(text);await page.getByRole('button',{name:'发送消息',exact:true}).click();await page.waitForFunction(()=>document.querySelector('textarea[aria-label="消息"]')?.value==='');await page.locator('.outgoing').waitFor({state:'detached'})}
 async function check(name,fn){console.log('CHECK',name);await fn();checks.push(name)}
 try{
  await mkdir('artifacts',{recursive:true});const a=await setup('alice'),b=await setup('bob');
@@ -55,7 +60,7 @@ try{
  });
  await check('station URLs still render game and real card previews on both sides',async()=>{
   await send(a,'https://yitiao.org/games/parachute/share/'+'G'.repeat(32)+'/');await a.locator('.game-art').waitFor();await b.locator('.game-art').waitFor();
-  await send(a,'https://yitiao.org/ycards/card/'+'a'.repeat(32)+'/WEB-CID/');await a.locator('.card-art canvas.yc-canvas').waitFor();await b.locator('.card-art canvas.yc-canvas').waitFor();
+  await send(a,'https://yitiao.org/ycards/card/'+'a'.repeat(32)+'/WEB-CID/');await a.locator('.timeline .card-art canvas.yc-canvas').waitFor();await b.locator('.timeline .card-art canvas.yc-canvas').waitFor();
  });
  await check('preview-only shares hide raw URLs on both sides and retain captions',async()=>{
   for(const page of [a,b]){
@@ -68,6 +73,35 @@ try{
   await b.locator('.timeline .message-body').getByText('看看这张卡片',{exact:true}).waitFor();
   assert.equal(await b.locator('.timeline .message-body').filter({hasText:url}).count(),0);
   assert.ok(wire.some(row=>row.data.body==='看看这张卡片 '+url),'stored message still contains only URL and caption, not card data');
+ });
+ await check('cards and media have transparent outer shells in both themes and directions',async()=>{
+  for(const page of [a,b])for(const theme of ['light','dark']){
+   await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+   const shells=await page.locator('.timeline .bubble.content-bubble').evaluateAll(rows=>rows.map(node=>{const s=getComputedStyle(node);return {background:s.backgroundColor,padding:s.padding,shadow:s.boxShadow}}));
+   assert.ok(shells.length>=5);assert.ok(shells.every(s=>s.background==='rgba(0, 0, 0, 0)'&&s.padding==='0px'&&s.shadow==='none'));
+   const text=page.locator('.timeline .message-body').filter({hasText:'清理后的普通私聊消息'}).locator('..');assert.notEqual(await text.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+  }
+ });
+ await check('App persists encrypted previews across page closure and offline reopening without refetching',async()=>{
+  let app=await setup('alice2',true),previewRequests=0;const context=app.context();
+  context.on('request',r=>{if(new URL(r.url()).pathname==='/api/preview')previewRequests++});
+  await app.locator('.room-row').first().click();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline .game-art').evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline canvas.game-art').waitFor();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline .share-card').last().evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline .card-art canvas.yc-canvas').last().waitFor();
+  const stored=await app.evaluate(async()=>{
+   const dbs=(await indexedDB.databases()).filter(d=>d.name.startsWith('yc-vault:')&&!d.name.includes('business'));let result=[];
+   for(const {name} of dbs){const db=await new Promise(resolve=>{const r=indexedDB.open(name);r.onsuccess=()=>resolve(r.result)});const rows=await new Promise(resolve=>{const r=db.transaction('previews').objectStore('previews').getAll();r.onsuccess=()=>resolve(r.result)});result.push(...rows.map(row=>({encrypted:row.data instanceof ArrayBuffer&&row.iv instanceof Uint8Array,hashed:/^[a-f0-9]{64}$/.test(row.id),plain:JSON.stringify(row).includes('极光纪念卡')})));db.close()}
+   return result;
+  });
+  assert.ok(stored.length>=2);assert.ok(stored.every(row=>row.encrypted&&row.hashed&&!row.plain));
+  await app.waitForTimeout(1800);await app.screenshot({path:'artifacts/preview-cards-mobile.png',fullPage:true});
+  await app.evaluate(()=>localStorage.setItem('test:offline','1'));await app.close();
+  const before=previewRequests;app=await context.newPage();app.setDefaultTimeout(25000);app.on('pageerror',e=>errors.push(e.message));
+  await app.goto(origin);await app.locator('.sidebar').waitFor();await app.locator('.room-row').first().click();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline .game-art').evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline canvas.game-art').waitFor();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline .share-card').last().evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline .card-art canvas.yc-canvas').last().waitFor();
+  assert.equal(previewRequests,before,'reopened App uses encrypted local preview rows');
+  await context.route('**/api/preview',async route=>{previewRequests++;await route.fulfill({json:null})});
+  await app.locator('.timeline .share-card[data-share-type="card"]').first().getByRole('button',{name:'刷新卡片状态'}).click();
+  await app.locator('.timeline .share-card[data-share-type="pending"]').first().getByText('资源未公开、已失效或无权查看，可打开原链接',{exact:true}).waitFor();
+  assert.ok(previewRequests>before,'manual refresh bypasses cache');
+  await context.close();
  });
  await check('client never initializes E2EE or sends ciphertext',async()=>{
   assert.ok(wire.length>=5);assert.ok(wire.every(r=>r.path.includes('/m.room.message/')&&!r.data.ciphertext));

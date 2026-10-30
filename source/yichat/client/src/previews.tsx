@@ -2,13 +2,20 @@ import {useEffect,useRef,useState} from 'preact/hooks';
 import {ExternalLink,RefreshCw,Gift,ArrowUpRight,ArrowLeftRight,CheckCircle2,ChevronRight} from 'lucide-preact';
 import {requests,decimal,path} from './api';
 import {chat} from './chat';
+import {isApp} from './app';
+import {PreviewCache} from './preview-cache';
 import {useVisible,rendererScript,ErrorText,Modal} from './shared';
-const cache=new Map<string,{value:any;until:number;bytes:number}>();let cacheBytes=0;let concurrent=0;const waiters:Array<()=>void>=[];
+let cache:PreviewCache|undefined;let concurrent=0;const waiters:Array<()=>void>=[];
 async function limited<T>(fn:()=>Promise<T>){if(concurrent>=2)await new Promise<void>(resolve=>waiters.push(resolve));concurrent++;try{return await fn()}finally{concurrent--;waiters.shift()?.()}}
-export async function preview(url:string,room:string,force=false){const key=[chat.session?.uid,room,url].join('|'),cached=cache.get(key);if(!force&&cached&&cached.until>Date.now())return cached.value;
-  return requests.single('preview:'+key,()=>limited(async()=>{const uid=chat.session?.uid;const value=await requests.api('/api/preview',{url,room});if(!uid||uid!==chat.session?.uid)throw new DOMException('会话已锁定','AbortError');const bytes=JSON.stringify(value).length*2;cacheBytes-=cache.get(key)?.bytes||0;cache.delete(key);while(cache.size&&(cacheBytes+bytes>24*1024*1024||cache.size>=160)){const oldest=cache.keys().next().value!;cacheBytes-=cache.get(oldest)!.bytes;cache.delete(oldest)}if(bytes<=24*1024*1024){cache.set(key,{value,until:Date.now()+60000,bytes});cacheBytes+=bytes}return value}));
+async function cachedPreview(resource:string,room:string,load:()=>Promise<any>,force=false){
+ const session=chat.session;if(!session)throw new DOMException('会话已锁定','AbortError');
+ const key=JSON.stringify([session.uid,session.device_id,room,resource]);
+ if(!cache){const vault=chat.vault;cache=new PreviewCache(isApp?{read:key=>vault.preview(key),write:(key,row)=>vault.savePreview(key,row),remove:key=>vault.deletePreview(key)}:undefined)}
+ const value=await cache.get(key,()=>limited(async()=>{if(chat.session!==session)throw new DOMException('会话已锁定','AbortError');const value=await load();if(chat.session!==session)throw new DOMException('会话已锁定','AbortError');return value}),force);
+ if(chat.session!==session)throw new DOMException('会话已锁定','AbortError');return value;
 }
-window.addEventListener('yc:locked',()=>{cache.clear();cacheBytes=0});
+export function preview(url:string,room:string,force=false){return cachedPreview(url,room,()=>requests.api('/api/preview',{url,room}),force)}
+window.addEventListener('yc:locked',()=>{cache?.close();cache=undefined});
 export function CardArt({data}:{data:any}){
  const ref=useRef<HTMLDivElement>(null),[error,setError]=useState('');
  useEffect(()=>{let disposed=false,renderer:any,timer:ReturnType<typeof setInterval>|undefined;
@@ -80,20 +87,21 @@ export function OrderCard({initial,room,onFunded,onCancelled,confirmFund=false}:
 const beanLabel=(n:number)=>n>1000000?Number((n/1000000).toFixed(2))+'B':n>1000?Number((n/1000).toFixed(2))+'K':String(n);
 export function ShareCard({url,room,receiptSender}:{url:string;room:string;receiptSender?:string}){
  const {ref,visible}=useVisible(),[data,setData]=useState<any>(),[error,setError]=useState(''),[loading,setLoading]=useState(false);
- async function load(force=false){setLoading(true);try{const value=await preview(url,room,force);setData(value);setError(value?'':'资源未公开、已失效或无权查看，可打开原链接')}catch(e:any){setError(e.message)}finally{setLoading(false)}}
+ async function load(force=false){setLoading(true);try{const value=await preview(url,room,force);setData(value);setError(value?'':'资源未公开、已失效或无权查看，可打开原链接')}catch(e:any){if([401,403,404,410].includes(e.status))setData(undefined);setError(e.message)}finally{setLoading(false)}}
  useEffect(()=>{if(visible&&data===undefined&&!loading&&!error)void load();if(!visible&&data?.type==='card'){const timer=setTimeout(()=>setData(undefined),60000);return()=>clearTimeout(timer)}},[visible,data]);
+ useEffect(()=>{if(!visible||!['card','doudizhu'].includes(data?.type))return;const timer=setInterval(()=>{if(!document.hidden&&navigator.onLine)void load()},20000);return()=>clearInterval(timer)},[visible,url,room,data?.type]);
  return <div ref={ref} class="share-card" data-share-type={data?.type||'pending'}>{data?.type==='doudizhu_record'?<div class="share-content" style="background:#102442;color:#f4d28e;padding:24px"><div class="share-eyebrow">♠ ♥ 斗地主 · 对局记录</div><h3>{data.data.variant==='happy'?'欢乐 · 双副牌':'普通 · 单副牌'} · {data.data.winner_role}胜</h3><p>{new Date(data.data.ended*1000).toLocaleString('zh-CN')} · {data.data.base} 倍</p>{data.data.players.map((p:any,i:number)=><p key={i}>{p.nickname} · {p.role} · {p.profit>0?'+':''}{beanLabel(p.profit)} 豆 · 剩 {p.hand.length} 张</p>)}<p class="small">打开查看三家剩余手牌与完整结算</p><button type="button" onClick={()=>load(true)}>刷新记录</button></div>:data?.type==='doudizhu'?<div class="share-content" style="background:#102442;color:#f4d28e;padding:24px"><div class="share-eyebrow">♠ ♥ 斗地主 · 房间邀请</div><h3>{data.data.variant==='happy'?'欢乐斗地主 · 双副牌':'普通斗地主'}</h3><p>房间 {data.data.code} · {data.data.base} 倍</p><p>{data.data.players} / 3 人 · {data.data.status==='waiting'?'等待加入':'已开始或结束'}</p><p class="small">入场至少 {beanLabel(data.data.minimum)} 豆 · 打开链接加入</p><button type="button" onClick={()=>load(true)}>刷新房间状态</button></div>:data?.type==='game'?<>{visible?<GameArt data={data.data}/>:<div class="game-art" aria-hidden="true"/>}<div class="share-content"><div class="share-eyebrow">PARACHUTE · 固定结果快照</div><h3>{data.data.status==='jumped'?'安全跳伞':'飞机爆炸'}</h3><p>跳伞 / 结束高度 {data.data.exit_height} m · 爆炸高度 {data.data.crash_height} m</p></div></>:data?.type==='card'?<>{visible?<CardArt data={data.data}/>:<div class="card-art" aria-hidden="true"/>}<div class="share-content"><div class="share-eyebrow">YCARD · 真实实例</div><h3>{data.data.name}</h3><p class="small">{data.data.cid}</p></div></>:data?.type==='transaction'?<div class="share-content"><div class="share-eyebrow">YIDT · 交易</div><h3>{decimal(String(data.data.credit))} YIDT</h3><p class="small">{data.data.source} → {data.data.destination}</p><p class="small">{new Date(data.data.created*1000).toLocaleString('zh-CN',{})} · {data.data.hash.slice(0,10)}…{data.data.hash.slice(-8)}</p></div>:data?.type==='order'?<OrderBubble initial={data.data} room={room} receiptSender={receiptSender}/>:<div class="share-content"><p class="muted">{loading?'正在获取分享…':error||'分享将在可见时加载'}</p>{error&&<button type="button" class="text-button" onClick={()=>load(true)}>重试预览</button>}</div>}
- {data?.type!=='order'&&<a class="share-original" href={url} target="_blank" rel="noopener noreferrer">打开分享内容 <ArrowUpRight size={14}/></a>}</div>
+ {data?.type==='card'&&<button type="button" class="text-button" onClick={()=>load(true)}><RefreshCw size={14}/>刷新卡片状态</button>}{data?.type!=='order'&&<a class="share-original" href={url} target="_blank" rel="noopener noreferrer">打开分享内容 <ArrowUpRight size={14}/></a>}</div>
 }
 export function GiftCard({id,room}:{id:string;room:string}){
  const {ref,visible}=useVisible(),[gift,setGift]=useState<any>(),[error,setError]=useState(''),[open,setOpen]=useState(false),[destroyed,setDestroyed]=useState(false);
- async function load(){setError('');try{const value=await requests.single('gift:'+room+':'+id,()=>requests.api('/api/cards/gifts/'+path(id)+'?room='+path(room)));if(value.id!==id||value.room!==room||value.state!=='transferred')throw Error('赠卡记录与当前会话不匹配');setDestroyed(false);setGift(value)}catch(e:any){setGift(undefined);setOpen(false);setDestroyed(e.status===410);setError(e.message)}}
+ async function load(force=false){setError('');try{const value=await cachedPreview('gift:'+id,room,()=>requests.api('/api/cards/gifts/'+path(id)+'?room='+path(room)),force);if(value.id!==id||value.room!==room||value.state!=='transferred')throw Error('赠卡记录与当前会话不匹配');setDestroyed(false);setGift(value)}catch(e:any){setGift(undefined);setOpen(false);setDestroyed(e.status===410);setError(e.message)}}
  useEffect(()=>{if(!visible)return;const refresh=()=>{if(!document.hidden)void load()};refresh();const timer=setInterval(refresh,20000);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);return()=>{clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh)}},[visible,id,room]);
  return <div ref={ref} class="gift-message" data-gift-id={id}>
   <div class="gift-bubble">
    <div class="gift-heading"><span class="gift-icon"><Gift size={21}/></span><strong>赠送卡片</strong><span class="gift-state">{gift?'已赠送':destroyed?'已销毁':error?'暂不可用':'核实中'}</span></div>
    <div class="gift-art">{gift&&visible?<CardArt data={gift.card}/>:<div class="card-art gift-placeholder"><Gift size={32}/><span>{destroyed?'卡片已销毁':error?'卡片预览暂不可用':gift?'YCard 卡片预览':'正在获取卡片…'}</span></div>}</div>
-   <div class="gift-summary">{gift?<><h3>{gift.card.name}</h3><p>{gift.sender} → {gift.recipient}</p></>:<p class="muted">{error||'正在核实赠送记录…'}</p>}{error&&!destroyed&&<button type="button" class="text-button" onClick={load}>重试赠卡预览</button>}</div>
+   <div class="gift-summary">{gift?<><h3>{gift.card.name}</h3><p>{gift.sender} → {gift.recipient}</p></>:<p class="muted">{error||'正在核实赠送记录…'}</p>}{error&&!destroyed&&<button type="button" class="text-button" onClick={()=>load(true)}>重试赠卡预览</button>}</div>
    <button type="button" class="gift-footer" disabled={!gift} aria-label="查看赠卡详情" onClick={()=>setOpen(true)}><span>YCard · {gift?'赠送已完成':'赠卡消息'}</span><span>查看详情 <ChevronRight size={14}/></span></button>
   </div>
   {open&&gift&&<Modal title="赠卡详情" close={()=>setOpen(false)}><CardArt data={gift.card}/><h3 class="gift-detail-title">{gift.card.name}</h3><p>{gift.sender} → {gift.recipient}</p><p class="small muted">{new Date(gift.created*1000).toLocaleString()} · 当前卡片</p><p class="small gift-cid">{gift.card.cid}</p></Modal>}

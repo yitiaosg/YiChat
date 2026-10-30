@@ -1,0 +1,14 @@
+{
+  "apk_bytes": 9755602,
+  "apk_sha256": "bbd7b7f0bc77b66368e58a4db56870446ae04622619e538823030be7ce548308",
+  "identical_web_assets": 14,
+  "version": "0.3.7",
+  "version_code": 15,
+  "web_unit_tests": 34,
+  "browser_scenarios": 9,
+  "android_jvm_tests": 15,
+  "lint_errors": 0,
+  "app_bridge_persistent_cache_verified": true,
+  "physical_android_tested": false,
+  "message_epoch": "plain-20261029-v1"
+}
