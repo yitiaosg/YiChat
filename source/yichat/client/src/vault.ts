@@ -1,17 +1,19 @@
 // Only the active, authenticated device opens its vault. Encrypted local outboxes are preserved
 // on logout and are never shared with a new device.
+import {PREVIEW_BYTES,PREVIEW_COUNT,type PreviewEntry} from './preview-cache';
 export class Vault {
   private writes:Promise<void>=Promise.resolve();db!:IDBDatabase; key!:CryptoKey;
   async open(scope:string){
-    this.db=await new Promise((resolve,reject)=>{const r=indexedDB.open('yc-vault:'+scope,2);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('data'))r.result.createObjectStore('data');if(!r.result.objectStoreNames.contains('packets')){const store=r.result.createObjectStore('packets',{keyPath:'id'});store.createIndex('at','at')}};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+    this.db=await new Promise((resolve,reject)=>{const r=indexedDB.open('yc-vault:'+scope,3);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('data'))r.result.createObjectStore('data');if(!r.result.objectStoreNames.contains('packets')){const store=r.result.createObjectStore('packets',{keyPath:'id'});store.createIndex('at','at')}if(!r.result.objectStoreNames.contains('previews')){const store=r.result.createObjectStore('previews',{keyPath:'id'});store.createIndex('budget',['at','bytes','until','id'])}};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
     this.key=await this.get('wrap')||await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
     await this.set('wrap',this.key);
   }
   async clearChatState(){
     const keys:IDBValidKey[]=await new Promise((resolve,reject)=>{const r=this.db.transaction('data').objectStore('data').getAllKeys();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
-    await new Promise<void>((resolve,reject)=>{const tx=this.db.transaction(['data','packets'],'readwrite');
+    await new Promise<void>((resolve,reject)=>{const tx=this.db.transaction(['data','packets','previews'],'readwrite');
       for(const key of keys)if(typeof key==='string'&&(key==='app-ui'||key.startsWith('history')||key.startsWith('recall:')))tx.objectStore('data').delete(key);
       tx.objectStore('packets').clear();tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);
+      tx.objectStore('previews').clear();
     });
   }
   get(key:string):Promise<any>{return new Promise((resolve,reject)=>{const r=this.db.transaction('data').objectStore('data').get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
@@ -27,5 +29,25 @@ export class Vault {
   async putPacket(id:string,value:any){const iv=crypto.getRandomValues(new Uint8Array(12)),data=await crypto.subtle.encrypt({name:'AES-GCM',iv},this.key,new TextEncoder().encode(JSON.stringify(value)));await new Promise<void>((resolve,reject)=>{const tx=this.db.transaction('packets','readwrite');tx.objectStore('packets').put({id,room:value.receipt.room,iv,data,at:value.receipt.received_ms,bytes:data.byteLength});tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
   async storedPackets(){return new Promise<any[]>((resolve,reject)=>{const r=this.db.transaction('packets').objectStore('packets').index('at').getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
   async prunePackets(){const rows=await this.storedPackets();let bytes=rows.reduce((n,r)=>n+r.bytes,0),count=rows.length;const remove:string[]=[];for(const row of rows){if(bytes<=100*1024*1024&&count<=10000)break;remove.push(row.id);bytes-=row.bytes;count--}if(remove.length)await new Promise<void>((resolve,reject)=>{const tx=this.db.transaction('packets','readwrite');for(const id of remove)tx.objectStore('packets').delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
+  private async previewKey(key:string){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),b=>b.toString(16).padStart(2,'0')).join('')}
+  async preview(key:string):Promise<PreviewEntry|undefined>{
+    const id=await this.previewKey(key),db=this.db,wrap=this.key;
+    const row:any=await new Promise((resolve,reject)=>{const r=db.transaction('previews').objectStore('previews').get(id);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+    return row?JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:row.iv,additionalData:new TextEncoder().encode(id)},wrap,row.data))):undefined;
+  }
+  async savePreview(key:string,value:PreviewEntry){
+    const id=await this.previewKey(key),db=this.db,wrap=this.key;
+    const task=this.writes.then(async()=>{
+      if(value.bytes>PREVIEW_BYTES){await this.deletePreview(key);return}
+      const iv=crypto.getRandomValues(new Uint8Array(12)),data=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode(id)},wrap,new TextEncoder().encode(JSON.stringify(value)));
+      await new Promise<void>((resolve,reject)=>{const tx=db.transaction('previews','readwrite'),store=tx.objectStore('previews');store.put({id,iv,data,at:value.at,bytes:data.byteLength,until:value.until});
+        // Inspect index metadata, never clone every encrypted card into memory.
+        const rows:Array<{id:IDBValidKey;bytes:number}>=[],r=store.index('budget').openKeyCursor();let bytes=0;
+        r.onsuccess=()=>{const cursor=r.result;if(cursor){const [,size,until]=cursor.key as [number,number,number,string];if(until<=Date.now())store.delete(cursor.primaryKey);else{rows.push({id:cursor.primaryKey,bytes:size});bytes+=size}cursor.continue();return}
+          let count=rows.length;for(const row of rows){if(bytes<=PREVIEW_BYTES&&count<=PREVIEW_COUNT)break;store.delete(row.id);bytes-=row.bytes;count--}};tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);
+      });
+    });this.writes=task.catch(()=>{});return task;
+  }
+  async deletePreview(key:string){const id=await this.previewKey(key);await new Promise<void>((resolve,reject)=>{const tx=this.db.transaction('previews','readwrite');tx.objectStore('previews').delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
   close(){this.db?.close();this.key=undefined!}
 }

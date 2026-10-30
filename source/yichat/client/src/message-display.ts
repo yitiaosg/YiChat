@@ -1,4 +1,7 @@
 import {shareUrls} from './api';
+export function standaloneContent(content:Record<string,any>,previews:string[]=[],gift=false){
+ return gift||previews.length>0||['m.image','m.audio','m.video','m.file'].includes(content.msgtype);
+}
 // Only remove a URL when that exact resource has a preview in this message.
 // Keep captions, other websites, unrecognized routes and unrendered extra URLs.
 export function messageBody(content:Record<string,any>,previews:string[]=[]):string {

@@ -1,10 +1,17 @@
 # YiChat
 
-当前版本 **Android 0.3.6 / versionCode 14**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.3.7 / versionCode 15**，包名 `org.yitiao.yichat.mobile`。
 
-[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.6 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261029-v0.3.6/YiChat-0.3.6-14.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
+[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.7 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261030-v0.3.7/YiChat-0.3.7-15.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
+
+## 0.3.7 更新
+
+- 站内 URL 预览、图片、音视频、文件和赠卡沿用转账的独立内容布局，去掉外围聊天气泡；双方消息及发送中草稿一致。说明文字、回复、时间、已读及操作继续显示，普通文字保留原气泡。
+- App 将 URL 预览和赠卡渲染内容缓存到账号/设备/会话隔离的本地加密库，关闭页面或重开后可复用。缓存最多 160 项、24 MiB；不将卡片数据写入聊天消息。
+- 固定交易/游戏/对局结果缓存 30 天；卡片 60 秒，房间/赠卡 20 秒，订单初始预览 5 秒，资金操作继续向服务器核实。动态预览过期再查询，手动刷新可立即检查销毁或状态变化；已失效响应覆盖旧缓存。
+- 见 [预览缓存说明](source/yichat/docs/PREVIEW-CACHE.md) 和 [发布验证](PRODUCTION-0.3.7.md)。
 
 ## 0.3.6 更新
 

@@ -36,3 +36,13 @@ html[data-app="android"] .message-body,html[data-app="android"] input,html[data-
 @media(pointer:coarse){.conversation-row-actions{opacity:1;right:6px;bottom:2px}.conversation-row-actions .icon{width:30px;height:24px}.conversation-entry .room-row{padding-bottom:27px}}
 .conversation-entry.pinned{background:var(--raised)}.message:not(.mine):not(.direct-message){gap:10px}.message:not(.mine):not(.direct-message) .message-avatar{display:inline-flex;flex-shrink:0}.message.continued{padding-left:39px}
 .bubble:has(.gift-message){padding:0;background:transparent;border:0;box-shadow:none}.bubble:has(.gift-message)>.message-meta{padding:5px 8px}.bubble:has(.gift-message)>.message-body.only-order{display:none}.bubble:has(.gift-message)>.actions{padding:0 8px 8px}.gift-message{width:290px;max-width:100%}.gift-bubble{border:1px solid var(--border);border-radius:14px;background:var(--panel);overflow:hidden;box-shadow:0 2px 9px #142f4b0a}.gift-heading{display:flex;align-items:center;gap:9px;padding:12px 14px;color:var(--accent);background:var(--accent-soft)}.gift-heading strong{font-size:13px;flex:1}.gift-icon{display:grid;place-items:center}.gift-state{font-size:10px;border:1px solid currentColor;border-radius:20px;padding:2px 7px;white-space:nowrap}.gift-art .card-art{height:245px}.gift-placeholder{display:flex;flex-direction:column;gap:12px;color:#b4d6f1;font-size:11px}.gift-summary{padding:12px 14px;color:var(--text)}.gift-summary h3{font-size:15px;margin:0 0 6px;overflow-wrap:anywhere}.gift-summary p{font-size:11px;margin:0;overflow-wrap:anywhere;color:var(--muted)}.gift-footer{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;border-top:1px solid var(--border);border-radius:0;padding:10px 13px;background:var(--panel);font-size:10px;color:var(--muted);font-weight:400}.gift-footer>span:last-child{display:flex;align-items:center;gap:3px;color:var(--accent)}.gift-footer:disabled{opacity:1}.gift-detail-title{margin:16px 0 9px}.gift-cid{overflow-wrap:anywhere}
+
+/* Standalone cards and media share the transfer layout in both directions. */
+.message .bubble.content-bubble{background:transparent;border:0;box-shadow:none;padding:0;overflow:visible;border-radius:0}
+.content-bubble>.share-card{margin:0}
+.content-bubble>.share-card+.share-card,.content-bubble>.message-body+.share-card{margin-top:8px}
+.content-bubble>.message-body{padding:0 3px 8px}
+.content-bubble>.message-meta{padding:5px 8px;margin-top:0}
+.content-bubble>.actions{padding:0 8px 8px}
+.content-bubble>.media-content .image-preview{background:transparent;border:0;padding:0}
+.content-bubble>.media-content .file-row{padding:8px 3px}
