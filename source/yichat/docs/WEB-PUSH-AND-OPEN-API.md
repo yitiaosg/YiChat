@@ -97,7 +97,7 @@ sudo git -C /root/yitiao show 4951b6c | sudo git -C /root/yitiao apply --cached 
 
 两张新表、VAPID 私钥和 `websockets` 包可以保留。
 
-## 扩展：发送、附件和单会话订阅（2026-11-06，已在本仓库实现，**尚未部署**）
+## 扩展：发送、附件、单会话订阅、Key 权限和撤回（2026-11-06，**已部署到生产**，记录见本节末尾）
 
 接口文档已同步更新：[OPEN-API.md](OPEN-API.md)。
 
@@ -144,4 +144,36 @@ sudo git -C /root/yitiao show 4951b6c | sudo git -C /root/yitiao apply --cached 
 ### 回退
 
 代码和网页回退到上一版本，重启 `yichat-synapse` 和 `yichat`。新增的列和表可以保留。回退后已发出的消息不受影响；Key 专用的 Matrix 设备会保留在设备列表中，可在删除 Key 前先回退，或之后在 App 的设备列表中手动登出。
+
+### 生产部署记录（2026-11-06）
+
+- 仓库提交：`6c4a029`（发送、附件、文字转换、单会话订阅）+ `8e51ec2`（Key 权限）+ `bc0d460`（撤回）。生产部署分支：`2966ace` → `f20cef3`。
+- 部署前确认：生产上 10 个相关文件都与上次部署的版本一致，直接替换，没有合并；生产网页源码不加改动时的构建与线上版本逐字节一致。
+- 测试（生产代码 + 本仓库夹具）：相关 8 个测试文件共 232 个，全部通过；Synapse 模块在生产 venv 中导入正常。
+- 重启顺序：`yichat-synapse`（约 4 秒恢复）→ `yichat`。两者 journal 中均无 ERROR、WARNING、Traceback，`/health` 为 `ok`。
+- 迁移：`api_keys` 已有 `device`、`upstream`、`scope` 列；`api_send_grants` 表已创建。生产上还没有 API Key。
+- 网页：`/var/lib/yichat/web/releases/20261106T164504Z`（上一版本 `20261106T151447Z`）。
+- 备份：`/root/yitiao/backups/yichat-v2-20261106T163813Z/`，其中 `api2-baseline/` 是 9 个被修改文件的原样副本（`api_grants.py` 为新增）。
+- 部署分支提交说明：`backend/app.py`、`backend/db.py` 中的改动与服务器上原有的未提交改动重叠，只存在于生产工作区，内容与本仓库一致；其余文件已提交。
+- 只读验证（经 Cloudflare）：发送、上传、撤回、下载在 Key 无效时返回 401；不带认证也不带 Origin 的 POST 返回 403；无网页 Cookie 修改 Key 权限返回 403 `YICHAT_WEB_ONLY`；`wss://…/open/v1/stream?conversation=…` 在 Key 无效时以 4401 关闭。
+
+#### 回退
+
+```bash
+B=/root/yitiao/backups/yichat-v2-20261106T163813Z/api2-baseline
+cd /root/yitiao/yichat
+# 1. 网页切回上一版本
+sudo ln -sfn /var/lib/yichat/web/releases/20261106T151447Z /var/lib/yichat/web/current.next
+sudo mv -T /var/lib/yichat/web/current.next /var/lib/yichat/web/current
+# 2. 恢复 9 个原文件（新增的 backend/api_grants.py 留着无害）
+for f in backend/app.py backend/db.py backend/limits.py backend/open_api.py backend/synapse_module.py \
+         client/src/web-tools.tsx docs/OPEN-API.md docs/WEB-PUSH-AND-OPEN-API.md tests/test_open_api.py; do sudo cp $B/$f $f; done
+# 3. 先 Synapse，再网关
+sudo systemctl restart yichat-synapse.service && sudo systemctl restart yichat.service
+# 4. 在部署分支记录回退（只改暂存区）
+sudo git -C /root/yitiao show f20cef3 | sudo git -C /root/yitiao apply --cached -R -C1 && \
+  sudo git -C /root/yitiao commit -m "Revert developer API send/recall deploy (f20cef3)"
+```
+
+新增的列和表可以保留。回退前如已有 Key 用于发送，请先在网页版删除这些 Key，让对应的“YiChat API”设备被登出；回退后旧代码不会再登出它们。
 
