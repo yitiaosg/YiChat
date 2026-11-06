@@ -55,7 +55,7 @@ Rust: bridge.rs（会话/登录/锁定/退出/下载保存） auth.rs（PKCE + R
 | --- | --- | --- |
 | Windows | `YiChat_<版本>_x64-setup.exe`（NSIS） | 为当前用户安装，不需要管理员权限，安装界面支持简体中文和英文。开始菜单和桌面快捷方式的 AppUserModelID 是 `org.yitiao.yichat.desktop`（Tauri 模板设置）。安装钩子 `windows/hooks.nsh` 会在 HKCU 登记 AppUserModelId 的 DisplayName 和 IconUri（`toast-icon.png`），所以 Toast 即使没有快捷方式也能显示名称和图标。`yichat-open:` 协议来自 `plugins.deep-link.desktop.schemes`。卸载时清理 AppUserModelId、协议和开机自启项。 |
 | Linux | `YiChat_<版本>_amd64.AppImage` | 首次运行时为当前用户写入 `~/.local/share/applications/yichat-desktop-appimage.desktop`，注册 `x-scheme-handler/yichat-open`。 |
-| Linux | `yichat-desktop_<版本>_amd64.deb` | 桌面文件使用自定义模板 `linux/yichat-desktop.desktop`，`Exec` 带 `%u`，`MimeType` 包含 `x-scheme-handler/yichat-open`；依赖 `libayatana-appindicator3-1`（托盘）。 |
+| Linux | `YiChat_<版本>_amd64.deb`（包名 `yi-chat`） | 桌面文件使用自定义模板 `linux/yichat-desktop.desktop`，`Exec` 带 `%u`，`MimeType` 包含 `x-scheme-handler/yichat-open`；托盘依赖 `libayatana-appindicator3-1` 由 Tauri 自动添加。 |
 
 rpm 暂不构建。
 

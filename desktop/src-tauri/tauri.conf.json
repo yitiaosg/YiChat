@@ -57,9 +57,6 @@
     },
     "linux": {
       "deb": {
-        "depends": [
-          "libayatana-appindicator3-1"
-        ],
         "desktopTemplate": "linux/yichat-desktop.desktop"
       },
       "appimage": {

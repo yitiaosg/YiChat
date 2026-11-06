@@ -68,6 +68,10 @@ jobs:
         with:
           workspaces: desktop/src-tauri
 
+      - name: NASM for vendored OpenSSL (SQLCipher)
+        if: matrix.platform == 'windows'
+        uses: ilammy/setup-nasm@v1
+
       - name: Linux build dependencies
         if: matrix.platform == 'linux'
         run: |
