@@ -127,7 +127,7 @@ export function ApiKeys({close}:{close:()=>void}){
  const remove=(k:Key)=>{if(confirm(`删除 API Key “${k.name}”？使用它的程序将立即无法访问，已建立的 WebSocket 会在 10 秒内断开。`))void run(async()=>{await requests.api('/api/developer/keys/'+path(k.id),undefined,'DELETE')})};
  async function copy(){try{await navigator.clipboard.writeText(created.key);setCopied(true)}catch{setError('无法写入剪贴板，请手动选中复制')}}
  return <Modal title="开发者 API" close={close}>
-  <p class="small muted">API Key 可用于读取你的会话列表（含归档）和服务器保存的消息，并通过 WebSocket 订阅新消息。只读：不能发送消息、管理会话或操作资金。限速：同一账户 5 次/秒；每个账户最多 {limit} 个 Key。只能在网页版申请和管理。</p>
+  <p class="small muted">API Key 可用于读取你的会话列表（含归档）和服务器保存的消息、下载图片和文件、向私聊和群聊发送文字、图片和文件，并通过 WebSocket 订阅新消息。Key 可以以你的名义发消息，请像密码一样保管。不能管理会话或操作资金。限速：同一账户 5 次/秒（读取、发送、上传、下载合计）；每个账户最多 {limit} 个 Key、3 个同时运行的订阅。只能在网页版申请和管理。</p>
   {docs&&<p><a href={docs} target="_blank" rel="noopener noreferrer">查看 API 文档（GitHub）</a></p>}
   {created&&<div class="notice" role="status"><p><strong>请立即复制并妥善保存。此 Key 只显示这一次，关闭后无法再次查看。</strong></p><p><code style="word-break:break-all;user-select:all">{created.key}</code></p><div class="actions"><button type="button" onClick={()=>void copy()}>{copied?'已复制':'复制'}</button><button type="button" onClick={()=>setCreated(undefined)}>我已保存</button></div></div>}
   <h3>我的 API Key（{keys.length}/{limit}）</h3>

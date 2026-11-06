@@ -5,8 +5,16 @@ browser/App sessions are never accepted there. Keys are created, listed and
 deleted only from a browser session of the Web version. A key is shown once;
 only its SHA-256 digest is stored.
 
-Limits (shared by REST and WebSocket): 5 requests per rolling second per
-account; at most 3 keys per account. There is no per-IP limit.
+Limits (shared by REST, uploads, downloads and WebSocket): 5 requests per
+rolling second per account; at most 3 keys and 3 concurrent WebSocket
+subscriptions per account. There is no per-IP limit.
+
+Sending: each key gets its own Matrix device ("YiChat API · <name>"), created
+on first use and removed when the key is deleted. Every message passes the
+same gateway checks as the apps (membership, send policy, attachment
+ownership) and is admitted by the Synapse module through a one-time grant for
+exactly that content (backend/api_grants.py) instead of a live main-site
+session.
 """
 import asyncio
 import hashlib
@@ -17,7 +25,8 @@ import secrets
 import time
 from urllib.parse import quote
 from fastapi import Request, WebSocket, WebSocketDisconnect, HTTPException
-from . import archive, policy
+from . import archive, policy, previews, api_grants
+from .notification_summary import URL, TRAILING
 from .db import connect, transaction
 from .security import authenticate, digest, fail, request_limit
 
@@ -38,6 +47,25 @@ KEY=re.compile(r'yck_[A-Za-z0-9_-]{43}\Z')
 ROOM=re.compile(r'![A-Za-z0-9._=:-]{1,255}\Z')
 NAME=re.compile(r'[^\x00-\x1f\x7f]{1,40}\Z')
 MESSAGE_TYPES=('m.room.message','m.room.encrypted')
+MAX_STREAMS=3             # concurrent WebSocket subscriptions per account
+MAX_TEXT=2000             # same limit as the apps (Unicode code points)
+FILE_ID=re.compile(r'[a-f0-9]{48}\Z')
+MXC=re.compile(r'mxc://chat\.yitiao\.org/([a-f0-9]{48})\Z')
+TXN=re.compile(r'[A-Za-z0-9._-]{1,64}\Z')
+FILENAME=re.compile(r'[^\x00-\x1f\x7f/\\]{1,200}\Z')
+MIME=re.compile(r'[a-z0-9][a-z0-9!#$&^_.+-]{0,63}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\Z')
+IMAGE_TYPES=('image/png','image/jpeg','image/gif','image/webp','image/avif')
+MEDIA={'m.image':('image','图片'),'m.file':('file','文件'),'m.audio':('audio','语音'),'m.video':('video','视频')}
+SHARES={'card':'卡片','transaction':'YIDT 交易','doudizhu':'斗地主房间','doudizhu_record':'斗地主对局记录','game':'游戏记录'}
+GIFT=re.compile(r'https://chat\.yitiao\.org/gifts/[a-f0-9]{32}')
+NOT_MEMBER={'code':'YICHAT_NOT_MEMBER','error':'你当前不是此会话的成员'}
+
+
+def migrate(c):
+    columns={r[1] for r in c.execute('PRAGMA table_info(api_keys)')}
+    for column in ('device','upstream'):
+        if column not in columns:c.execute(f'ALTER TABLE api_keys ADD COLUMN {column} TEXT')
+    c.executescript(api_grants.SCHEMA)
 STREAM_TYPES=MESSAGE_TYPES+('m.room.redaction',)
 SCOPE_ERROR={'code':'YICHAT_WEB_ONLY','error':'API Key 仅可在 YiChat 网页版中申请、查看和删除'}
 
@@ -56,7 +84,8 @@ def owner(s,token):
     if not person or dict(person).get('purged_at'):raise key_error('API Key 所属账户已不可用')
     with connect(s.db) as c:identity=c.execute('SELECT mxid FROM identities WHERE subject=?',(row['subject'],)).fetchone()
     if not identity:raise key_error('API Key 所属账户尚未开通 YiChat')
-    return {'key_id':row['id'],'subject':row['subject'],'username':person['username'],'mxid':identity['mxid'],'last_used':row['last_used']}
+    return {'key_id':row['id'],'key_name':row['name'],'subject':row['subject'],'username':person['username'],'mxid':identity['mxid'],
+            'last_used':row['last_used'],'device':row['device'],'upstream':row['upstream']}
 
 
 def touch(s,who):
@@ -88,7 +117,59 @@ class Names:
         return self.cache[mxid]
 
 
-def message(s,row,names,redacted=False):
+class Describer:
+    """Plain-text view of a message for API clients.
+
+    Transfers, red packets, receipts and in-site shares are URLs underneath;
+    they become short text such as "[转账] 0.01 YIDT". Images and files show
+    their name and expose an attachment that can be downloaded separately.
+    """
+    def __init__(self,s,fmt):self.s=s;self.fmt=fmt
+    def order(self,room,oid):
+        with connect(self.s.ledger) as c:
+            if not c.execute("SELECT 1 FROM sqlite_master WHERE name='yichat_orders'").fetchone():return None
+            # Same room only: a message cannot reveal another conversation's order.
+            return c.execute('SELECT kind,title,principal,count,state FROM yichat_orders WHERE id=? AND room=?',(oid,room)).fetchone()
+    def __call__(self,room,content):
+        msgtype=content.get('msgtype');body=content.get('body') if isinstance(content.get('body'),str) else ''
+        if msgtype in MEDIA:
+            kind,label=MEDIA[msgtype];info=content.get('info') if isinstance(content.get('info'),dict) else {}
+            name=body.strip() or label;match=MXC.fullmatch(str(content.get('url','')))
+            attachment={'id':match[1],'name':name,'mimetype':info.get('mimetype') if isinstance(info.get('mimetype'),str) else None,
+                        'size':info.get('size') if type(info.get('size'))==int else None,'download_url':'/open/v1/files/'+match[1]} if match else None
+            return {'kind':kind,'text':'['+label+'] '+name,'attachment':attachment,'share':None}
+        share=content.get('org.yitiao.share') if isinstance(content.get('org.yitiao.share'),dict) else {}
+        business=content.get('org.yitiao.business') if isinstance(content.get('org.yitiao.business'),dict) else {}
+        urls=[u.rstrip(TRAILING) for u in URL.findall(body)]
+        if isinstance(share.get('url'),str):urls.insert(0,share['url'])
+        parsed=[(u,p) for u,p in ((u,previews.parse(u)) for u in urls) if p]
+        oid=business.get('id') if business.get('kind')=='order' and isinstance(business.get('id'),str) else next((p[1][0] for _,p in parsed if p[0]=='order'),None)
+        if oid:
+            receipt=share.get('type')=='receipt';order=self.order(room,oid)
+            if order:
+                amount=self.fmt(int(order['principal']))+' YIDT';title=(order['title'] or '').strip()
+                if receipt:kind,text='receipt','[已收款] '+amount
+                elif order['kind']=='group':kind,text='red_packet','[红包] '+amount+' · '+str(order['count'])+' 个'+(' · '+title if title else '')
+                else:kind,text='transfer','[转账] '+amount+(' · '+title if title and title!='私聊转账' else '')
+                detail={'type':'order','order_id':oid,'url':self.s.origin+'/orders/'+oid,'amount':self.fmt(int(order['principal'])),'currency':'YIDT','state':order['state']}
+            else:
+                kind,text='receipt' if receipt else 'transfer','[已收款]' if receipt else '[转账 / 红包]'
+                detail={'type':'order','order_id':oid,'url':self.s.origin+'/orders/'+oid}
+            return {'kind':kind,'text':text,'attachment':None,'share':detail}
+        gift=next((u for u in urls if GIFT.fullmatch(u)),None)
+        if gift or share.get('type')=='gift':
+            return {'kind':'gift','text':'[赠卡]','attachment':None,'share':{'type':'gift','url':gift or share.get('url')}}
+        for url,(kind,_) in parsed:
+            if kind not in SHARES:continue
+            try:meta=previews.metadata(self.s,url)
+            except Exception:meta=None
+            title=meta['title'] if meta and isinstance(meta.get('title'),str) else SHARES[kind]
+            label='[分享] '+title
+            return {'kind':'share','text':body.replace(url,label) if url in body else label,'attachment':None,'share':{'type':kind,'url':url,'title':title}}
+        return {'kind':'text','text':body,'attachment':None,'share':None}
+
+
+def message(s,row,names,redacted=False,describe=None):
     """Public message shape shared by REST and WebSocket."""
     raw=bytes(row['body'])
     if hashlib.sha256(raw).hexdigest()!=row['body_sha256']:raise RuntimeError('Archive integrity mismatch')
@@ -97,6 +178,7 @@ def message(s,row,names,redacted=False):
     content=event.get('content') if isinstance(event.get('content'),dict) else {}
     encrypted=row['type']=='m.room.encrypted'
     visible=not encrypted and not redacted
+    view=(describe or Describer(s,str))(row['room'],content) if visible else {'kind':'encrypted' if encrypted else 'redacted','text':None,'attachment':None,'share':None}
     return {
         'id':row['event_id'],
         'conversation_id':row['room'],
@@ -104,8 +186,11 @@ def message(s,row,names,redacted=False):
         'sender':{'mxid':row['sender'],'username':names(row['sender'])},
         'sent_at':event.get('origin_server_ts',row['received_ms']),
         'received_at':row['received_ms'],
+        'kind':view['kind'],
+        'text':view['text'],
+        'attachment':view['attachment'],
+        'share':view['share'],
         'msgtype':content.get('msgtype') if visible and isinstance(content.get('msgtype'),str) else None,
-        'text':content.get('body') if visible and isinstance(content.get('body'),str) else None,
         'content':content if visible else None,
         'encrypted':encrypted,
         'redacted':redacted,
@@ -125,7 +210,9 @@ def require_archive_ready(pg):
 
 
 def install(app,s):
-    streams={}  # key_id -> open WebSocket count (single gateway worker)
+    streams={}  # account subject -> open WebSocket count (single gateway worker)
+    device_locks={}  # key_id -> lock for first-use Matrix device creation
+    def describer():return Describer(s,app.state.funds.y.fmt)
     room_names={}  # room -> (expires, name)
 
     def web_session(request):
@@ -162,7 +249,7 @@ def install(app,s):
         with transaction(s.db) as c:
             if c.execute('SELECT count(*) FROM api_keys WHERE subject=?',(who['subject'],)).fetchone()[0]>=MAX_KEYS:
                 fail(409,{'code':'YICHAT_API_KEY_LIMIT','error':'每个账户最多 3 个 API Key，请先删除不再使用的 Key'})
-            c.execute('INSERT INTO api_keys VALUES(?,?,?,?,?,?,NULL)',(kid,who['subject'],name.strip(),digest(token),token[:12],now))
+            c.execute('INSERT INTO api_keys(id,subject,name,key_hash,prefix,created) VALUES(?,?,?,?,?,?)',(kid,who['subject'],name.strip(),digest(token),token[:12],now))
         # The only response that ever contains the key.
         return {'id':kid,'name':name.strip(),'prefix':token[:12],'created':now,'key':token,'docs_url':s.api_docs_url}
 
@@ -170,9 +257,113 @@ def install(app,s):
     async def delete_key(request:Request,kid:str):
         who=web_session(request)
         with transaction(s.db) as c:
-            if not c.execute('DELETE FROM api_keys WHERE id=? AND subject=?',(kid,who['subject'])).rowcount:fail(404,'API Key 不存在')
+            row=c.execute('SELECT device FROM api_keys WHERE id=? AND subject=?',(kid,who['subject'])).fetchone()
+            if not row:fail(404,'API Key 不存在')
+            c.execute('DELETE FROM api_keys WHERE id=?',(kid,));api_grants.revoke_key(c,kid)
+        device_locks.pop(kid,None)
+        if row['device']:await drop_device(who['mxid'],row['device'])
         # Open streams notice within RECHECK_SECONDS and close.
         return {'ok':True}
+
+    async def drop_device(mxid,device):
+        # Logs the key's Matrix device out. Best effort: the token was only ever
+        # stored (encrypted) in the deleted row, so nothing can use it anyway.
+        try:await app.state.matrix.call('DELETE','/_synapse/admin/v2/users/'+quote(mxid,safe='')+'/devices/'+quote(device,safe=''))
+        except Exception:log.warning('Developer API device removal pending')
+
+    async def matrix_session(who):
+        """The key's own Matrix device, created on first send."""
+        if who.get('upstream'):return who
+        async with device_locks.setdefault(who['key_id'],asyncio.Lock()):
+            with connect(s.db) as c:row=c.execute('SELECT name,device,upstream FROM api_keys WHERE id=?',(who['key_id'],)).fetchone()
+            if not row:raise key_error()
+            if row['upstream']:return who|{'device':row['device'],'upstream':row['upstream']}
+            with connect(s.db) as c:identity=c.execute('SELECT password FROM identities WHERE subject=?',(who['subject'],)).fetchone()
+            if not identity:raise key_error('API Key 所属账户尚未开通 YiChat')
+            cipher=app.state.cipher;password=cipher.decrypt(identity['password'].encode()).decode();m=app.state.matrix
+            await m.provision(who['mxid'],password,who['username'])
+            auth=await m.login(who['mxid'],password,device_name=('YiChat API · '+row['name'])[:60])
+            upstream=cipher.encrypt(auth['access_token'].encode()).decode()
+            with transaction(s.db) as c:
+                stored=c.execute('UPDATE api_keys SET device=?,upstream=? WHERE id=? AND upstream IS NULL',(auth['device_id'],upstream,who['key_id'])).rowcount
+            if not stored:
+                await drop_device(who['mxid'],auth['device_id']);raise key_error()
+            return who|{'device':auth['device_id'],'upstream':upstream}
+
+    def writable(who,room):
+        if not ROOM.fullmatch(room):fail(400,'会话 ID 无效')
+        if room not in current_rooms(s,who['mxid']):fail(403,NOT_MEMBER)
+        info=policy.room(s,room)
+        if info.get('encryption')!='plain':fail(403,{'code':'YICHAT_LEGACY_ROOM','error':'旧加密会话已停用，不能发送消息'})
+        policy.require_send(s,info,who['mxid'])
+        return info
+
+    async def send_message(who,info,content,txn):
+        room=info['room']
+        policy.validate_event(s,info,'m.room.message',content,who['mxid'])
+        who=await matrix_session(who)
+        gid=api_grants.create(s,who['key_id'],room,who['mxid'],'m.room.message',content)
+        path='/_matrix/client/v3/rooms/'+quote(room,safe='')+'/send/m.room.message/'+quote(txn,safe='')
+        try:result=await app.state.matrix.call('PUT',path,app.state.matrix.token(who),content)
+        except HTTPException as e:
+            detail=e.detail if isinstance(e.detail,dict) else {}
+            if e.status_code==401 and detail.get('errcode')=='M_UNKNOWN_TOKEN':
+                # The key's device was logged out elsewhere; a retry creates a new one.
+                with transaction(s.db) as c:c.execute('UPDATE api_keys SET device=NULL,upstream=NULL WHERE id=?',(who['key_id'],))
+                raise HTTPException(503,{'code':'YICHAT_API_DEVICE_RESET','error':'API 设备已失效并已重置，请重试'},headers={'Retry-After':'1'})
+            raise HTTPException(e.status_code,{'errcode':detail.get('errcode','M_UNKNOWN'),'code':'YICHAT_SEND_REJECTED','error':detail.get('error') or '服务器拒绝了这条消息'},headers=e.headers)
+        event_id=result.get('event_id')
+        if not isinstance(event_id,str):fail(502,'服务器未返回消息 ID')
+        api_grants.consume(s,gid,event_id)
+        return event_id
+
+    def txn_of(value):
+        txn=value or secrets.token_hex(16)
+        if not isinstance(txn,str) or not TXN.fullmatch(txn):fail(400,'txn_id 需为 1～64 个字母、数字或 . _ -')
+        return txn
+
+    @app.post('/open/v1/conversations/{room}/messages')
+    async def send_text(request:Request,room:str):
+        who=api_owner(request)
+        if request.headers.get('content-type','').split(';')[0].strip().lower()!='application/json':fail(415,'需要 Content-Type: application/json')
+        try:data=await request.json()
+        except ValueError:fail(400,'JSON 无效')
+        if not isinstance(data,dict) or set(data)-{'text','txn_id'}:fail(400,'只接受 text 和 txn_id 两个字段')
+        text=data.get('text')
+        if not isinstance(text,str) or not text.strip() or len(text)>MAX_TEXT:fail(400,'text 需为 1～2000 个字符（Unicode 码点）')
+        txn=txn_of(data.get('txn_id'));info=writable(who,room)
+        event_id=await send_message(who,info,{'msgtype':'m.text','body':text},txn)
+        return {'event_id':event_id,'conversation_id':room,'txn_id':txn}
+
+    @app.post('/open/v1/conversations/{room}/files')
+    async def send_file(request:Request,room:str,name:str='',type:str='auto',txn_id:str=''):
+        who=api_owner(request)
+        if not FILENAME.fullmatch(name.strip()):fail(400,'name 需为 1～200 个字符，不能包含控制字符、/ 或 \\')
+        name=name.strip()
+        if type not in ('auto','image','file'):fail(400,'type 只能是 auto、image 或 file')
+        mime=request.headers.get('content-type','application/octet-stream').split(';')[0].strip().lower()
+        if not MIME.fullmatch(mime):fail(400,'Content-Type 无效')
+        if type=='image' and mime not in IMAGE_TYPES:fail(415,{'code':'YICHAT_IMAGE_TYPE','error':'图片只支持 PNG、JPEG、GIF、WebP、AVIF'})
+        msgtype='m.image' if mime in IMAGE_TYPES and type!='file' else 'm.file'
+        try:size=int(request.headers['content-length'])
+        except (KeyError,ValueError):fail(411,'需要 Content-Length')
+        if size<=0:fail(400,'文件不能为空')
+        if size>s.max_file:fail(413,'文件超过 100 MB（100000000 字节）')
+        txn=txn_of(txn_id);info=writable(who,room)
+        who=await matrix_session(who)
+        token=request.headers.get('authorization','').removeprefix('Bearer ')
+        stored=await app.state.store_upload(who,info,room,request.stream(),size,lambda:owner(s,token))
+        content={'msgtype':msgtype,'body':name,'info':{'mimetype':mime,'size':stored['bytes']},'url':stored['url'],archive.ATTACHMENT_KEY:[stored['id']]}
+        event_id=await send_message(who,info,content,txn)
+        return {'event_id':event_id,'conversation_id':room,'txn_id':txn,'kind':MEDIA[msgtype][0],
+                'attachment':{'id':stored['id'],'name':name,'mimetype':mime,'size':stored['bytes'],'expires':stored['expires'],'download_url':'/open/v1/files/'+stored['id']}}
+
+    @app.get('/open/v1/files/{fid}')
+    async def download_file(request:Request,fid:str):
+        who=api_owner(request)
+        if not FILE_ID.fullmatch(fid):fail(404,'附件不存在')
+        token=request.headers.get('authorization','').removeprefix('Bearer ')
+        return await app.state.serve_file(lambda:owner(s,token),fid)
 
     def api_owner(request):
         auth=request.headers.get('authorization','')
@@ -240,35 +431,37 @@ def install(app,s):
                 whole=archive.allowed(pg,room,who['mxid'],start,end)
                 visible=[r for r in rows[:limit] if whole or archive.allowed(pg,room,who['mxid'],r['received_ms'],r['received_ms']+1)]
             return rows,visible
-        rows,visible=await asyncio.to_thread(read)
+        rows,visible=await asyncio.to_thread(read);describe=describer()
         gone=redacted_ids(s,room,[r['event_id'] for r in visible])
         more=len(rows)>limit
         return {'conversation_id':room,'start':start,'end':end,
-                'messages':[message(s,r,names,r['event_id'] in gone) for r in visible],
+                'messages':[message(s,r,names,r['event_id'] in gone,describe) for r in visible],
                 'next_after':str(rows[limit-1]['sequence']) if more else None}
 
     @app.websocket('/open/v1/stream')
     async def stream(ws:WebSocket):
         auth=ws.headers.get('authorization','')
+        conversation=ws.query_params.get('conversation') or None
         try:
             if not auth.startswith('Bearer '):raise key_error('需要 Authorization: Bearer <API Key>')
             who=owner(s,auth.removeprefix('Bearer '))
             request_limit(s,'api-user:'+who['subject'],limit=RATE)
+            if conversation is not None and (not ROOM.fullmatch(conversation) or conversation not in current_rooms(s,who['mxid'])):raise HTTPException(403,NOT_MEMBER)
         except HTTPException as e:
             # Accept first so the client can read the close code and reason.
             await ws.accept()
-            code='YICHAT_RATE_LIMITED' if e.status_code==429 else 'YICHAT_API_KEY_INVALID'
+            code,close={429:('YICHAT_RATE_LIMITED',4429),403:('YICHAT_NOT_MEMBER',4403)}.get(e.status_code,('YICHAT_API_KEY_INVALID',4401))
             await ws.send_json({'type':'closing','code':code,'error':e.detail.get('error') if isinstance(e.detail,dict) else str(e.detail)})
-            await ws.close(code=4429 if e.status_code==429 else 4401);return
-        if streams.get(who['key_id'],0)>=1:
+            await ws.close(code=close);return
+        if streams.get(who['subject'],0)>=MAX_STREAMS:
             await ws.accept()
-            await ws.send_json({'type':'closing','code':'YICHAT_STREAM_BUSY','error':'此 API Key 已有一个 WebSocket 连接'})
+            await ws.send_json({'type':'closing','code':'YICHAT_STREAM_LIMIT','error':'每个账户最多同时运行 3 个订阅'})
             await ws.close(code=4409);return
-        streams[who['key_id']]=streams.get(who['key_id'],0)+1
+        streams[who['subject']]=streams.get(who['subject'],0)+1
         try:
             touch(s,who)
             await ws.accept()
-            await run_stream(ws,who)
+            await run_stream(ws,who,conversation)
         except WebSocketDisconnect:pass
         except RuntimeError:
             # Socket already closed by the reader, or an archive integrity
@@ -276,15 +469,15 @@ def install(app,s):
             log.warning('Developer API stream ended early')
             with __import__('contextlib').suppress(Exception):await ws.close(code=1011)
         finally:
-            streams[who['key_id']]-=1
-            if not streams[who['key_id']]:del streams[who['key_id']]
+            streams[who['subject']]-=1
+            if not streams[who['subject']]:del streams[who['subject']]
 
-    async def run_stream(ws,who):
+    async def run_stream(ws,who,conversation=None):
         def high():
             with archive.connect(s.archive_reader) as pg:return pg.execute('SELECT coalesce(max(sequence),0) n FROM events').fetchone()['n']
         cursor=await asyncio.to_thread(high)
-        await ws.send_json({'type':'ready','server_time':int(time.time()*1000),'ping_interval':PING_SECONDS})
-        closed=asyncio.Event();names=Names(s)
+        await ws.send_json({'type':'ready','server_time':int(time.time()*1000),'ping_interval':PING_SECONDS,'conversation_id':conversation})
+        closed=asyncio.Event();names=Names(s);describe=describer()
 
         async def reader():
             # Client frames are optional; each counts toward the account limit.
@@ -311,6 +504,11 @@ def install(app,s):
                         await ws.send_json({'type':'closing','code':'YICHAT_API_KEY_INVALID','error':'API Key 已删除或账户不可用'})
                         await ws.close(code=4401);return
                 rooms=current_rooms(s,who['mxid'])
+                if conversation is not None:
+                    if conversation not in rooms:
+                        await ws.send_json({'type':'closing','code':'YICHAT_NOT_MEMBER','error':'你已不是此会话的成员'})
+                        await ws.close(code=4403);return
+                    rooms={conversation}
                 def poll(after):
                     with archive.connect(s.archive_reader) as pg:
                         rows=pg.execute('SELECT event_id,room,sequence,received_ms,sender,type,body,body_sha256 FROM events WHERE sequence>%s AND room = ANY(%s) AND type = ANY(%s) ORDER BY sequence LIMIT 100',
@@ -325,7 +523,7 @@ def install(app,s):
                         target=(event.get('content') or {}).get('redacts') or event.get('redacts')
                         if isinstance(target,str):await ws.send_json({'type':'redaction','conversation_id':row['room'],'message_id':target,'sequence':str(row['sequence'])})
                     else:
-                        await ws.send_json({'type':'message','conversation_id':row['room'],'message':message(s,row,names)})
+                        await ws.send_json({'type':'message','conversation_id':row['room'],'message':message(s,row,names,describe=describe)})
                     last_sent=time.monotonic()
                 if time.monotonic()-last_sent>=PING_SECONDS:
                     await ws.send_json({'type':'ping','server_time':int(time.time()*1000)});last_sent=time.monotonic()

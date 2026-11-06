@@ -97,3 +97,49 @@ sudo git -C /root/yitiao show 4951b6c | sudo git -C /root/yitiao apply --cached 
 
 两张新表、VAPID 私钥和 `websockets` 包可以保留。
 
+## 扩展：发送、附件和单会话订阅（2026-11-06，已在本仓库实现，**尚未部署**）
+
+接口文档已同步更新：[OPEN-API.md](OPEN-API.md)。
+
+| 功能 | 说明 |
+| --- | --- |
+| 消息转为文字 | 消息对象新增 `kind`、`attachment`、`share`。转账、红包、收款、赠卡、站内分享（本质为网址）由服务器转换为文字，例如 `[转账] 0.01 YIDT`、`[红包] 1 YIDT · 3 个 · 恭喜发财`、`[分享] YIDT 交易`；图片、文件、语音、视频显示为 `[图片] 文件名` 等。订单只在同一会话内显示金额和状态。 |
+| 下载附件 | `GET /open/v1/files/{id}`：每次请求下载一个文件，访问规则与网页版下载相同（上传者，或作为成员看到过引用该文件的消息），到期返回 410。 |
+| 发送 | `POST /open/v1/conversations/{id}/messages`（文字，最多 2000 字符）和 `POST /open/v1/conversations/{id}/files`（图片或文件，原始字节，最大 100 MB，一个请求完成上传和发送）。支持 `txn_id` 幂等重试。私聊和群聊都可以；旧版加密会话不可以。 |
+| 限速 | 读取、发送、上传、下载、WebSocket 连接共用同一个账户限额（5 次/秒）。上传另外与网页版和 App 共用账户的上传额度（单文件 100 MB、每天 1 GiB、速度和并发限制）。 |
+| WebSocket | `?conversation=<会话ID>` 只订阅一个会话（私聊或群聊）；不是成员时以 `4403` 关闭。并发限制从“每个 Key 1 个”改为“**每个账户 3 个**”，第 4 个以 `4409 YICHAT_STREAM_LIMIT` 关闭。 |
+
+### 发送的实现与安全模型变化
+
+- 每个 Key 第一次发送时，网关用账户已有的 Matrix 凭据为它登录一个专用设备“YiChat API · Key 名称”，令牌加密保存在 `api_keys.upstream`。删除 Key 时通过 Synapse 管理接口登出该设备。
+- 消息经过与 App 相同的网关检查：当前成员、`policy.require_send`（禁言、解散、注销、私聊隐私）、`policy.validate_event`（字数）、附件归属。上传复用网页版的上传实现（`store_upload`），下载复用 `serve_file`；两者从原来的闭包中提取出来，网页版和 App 的行为不变。
+- **Synapse 模块的变化**：原规则要求发送者必须有一个有效的主站登录会话。API 发送没有这样的会话，因此模块现在也接受网关预先登记的**一次性授权**（`backend/api_grants.py`，表 `api_send_grants`）：授权绑定会话、发送者、事件类型和完整内容的摘要，2 分钟内有效，所属 Key 删除后立即失效，发送成功后标记为已使用。只适用于 `m.room.message`；其后的所有检查不变。
+- 这意味着：**持有 API Key 即可在用户未登录网页或 App 时以其名义发消息**（读取原本就是如此）。主站账户注销或 Key 删除后立即失效。
+
+### 改动的文件
+
+| 文件 | 改动 |
+| --- | --- |
+| `backend/open_api.py` | 消息文字转换、下载、发送文字/文件、Key 专用设备、单会话订阅、每账户 3 个订阅 |
+| `backend/api_grants.py` | 新增：一次性发送授权 |
+| `backend/synapse_module.py` | 无主站会话时接受匹配的一次性授权 |
+| `backend/app.py` | 上传、下载核心提取为 `store_upload`、`serve_file`；API 上传路径加入上传大小例外 |
+| `backend/limits.py` | API 上传路径使用文件大小上限 |
+| `backend/db.py` | 调用 `open_api.migrate()`：`api_keys` 增加 `device`、`upstream` 两列，新增 `api_send_grants` 表 |
+| `client/src/web-tools.tsx` | API Key 说明文字 |
+| `tests/test_open_api.py` | 新增发送、下载、文字转换、授权、订阅限制等测试 |
+| `docs/OPEN-API.md` | 接口文档 |
+
+### 部署步骤
+
+与上一节相同（备份 → 同步文件 → 构建并发布网页 → 重启），另外：
+
+1. 本次修改了 Synapse 模块，**需要同时重启 `yichat-synapse` 和 `yichat`**（先 Synapse，再网关）。迁移在网关启动时自动执行。
+2. 不需要新依赖，不需要修改 Caddy。
+3. 只读验证：`curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer yck_invalid' https://chat.yitiao.org/open/v1/conversations/x/messages` 应返回 `401`（不带 `Authorization` 也不带 `Origin` 的 POST 会先被来源检查拒绝，返回 `403`）；`curl … https://chat.yitiao.org/open/v1/files/0` 应返回 `401`。
+4. 手动验证（自己的账户）：用 API 发送文字、图片、文件到一个私聊和一个群聊，在 App 中确认收到、图片能显示、文件能下载；查询消息时转账和红包显示为文字；在网页版删除 Key 后，设备列表中的“YiChat API”设备消失，再用该 Key 发送返回 401。
+
+### 回退
+
+代码和网页回退到上一版本，重启 `yichat-synapse` 和 `yichat`。新增的列和表可以保留。回退后已发出的消息不受影响；Key 专用的 Matrix 设备会保留在设备列表中，可在删除 Key 前先回退，或之后在 App 的设备列表中手动登出。
+

@@ -233,22 +233,52 @@ def test_stream_pings_when_idle_and_answers_client_ping(gateway,monkeypatch):
         assert 'pong' in seen
 
 
-def test_stream_one_connection_per_key_and_closes_after_delete(gateway,monkeypatch):
+def test_stream_limit_is_three_per_account_and_delete_closes(gateway,monkeypatch):
     c,app,s=gateway
     monkeypatch.setattr(open_api,'RECHECK_SECONDS',0.2)
-    created=new_key(c);unthrottle(s)
-    with api(app,created['key']).websocket_connect('/open/v1/stream') as ws:
-        assert ws.receive_json()['type']=='ready'
-        with api(app,created['key'],'203.0.113.50').websocket_connect('/open/v1/stream') as busy:
-            assert busy.receive_json()['code']=='YICHAT_STREAM_BUSY'
+    one,two=new_key(c,'one'),new_key(c,'two')
+    unthrottle(s)
+    with api(app,one['key']).websocket_connect('/open/v1/stream') as a, \
+         api(app,one['key'],'203.0.113.51').websocket_connect('/open/v1/stream') as b, \
+         api(app,two['key'],'203.0.113.52').websocket_connect('/open/v1/stream?conversation=!direct') as d:
+        for ws in (a,b,d):assert ws.receive_json()['type']=='ready'
+        unthrottle(s)
+        # A fourth concurrent subscription of the same account is refused, whatever the key.
+        with api(app,two['key'],'203.0.113.53').websocket_connect('/open/v1/stream') as busy:
+            assert busy.receive_json()['code']=='YICHAT_STREAM_LIMIT'
             with pytest.raises(WebSocketDisconnect) as e:busy.receive_json()
             assert e.value.code==4409
-        assert c.delete('/api/developer/keys/'+created['id']).status_code==200
+        # Another account is counted separately.
+        bob=new_key(other(app,s,'bob-token'))['key'];unthrottle(s)
+        with api(app,bob,'203.0.113.54').websocket_connect('/open/v1/stream') as theirs:
+            assert theirs.receive_json()['type']=='ready'
+        assert c.delete('/api/developer/keys/'+one['id']).status_code==200
+        for ws in (a,b):
+            msg=ws.receive_json()
+            while msg['type']=='ping':msg=ws.receive_json()
+            assert msg=={'type':'closing','code':'YICHAT_API_KEY_INVALID','error':'API Key 已删除或账户不可用'}
+            with pytest.raises(WebSocketDisconnect) as e:ws.receive_json()
+            assert e.value.code==4401
+    # Slots are released when the connections end.
+    unthrottle(s)
+    with api(app,two['key']).websocket_connect('/open/v1/stream') as again:
+        assert again.receive_json()['type']=='ready'
+
+
+def test_stream_can_subscribe_to_one_conversation(gateway):
+    c,app,s=gateway
+    key=new_key(c)['key'];unthrottle(s);now=int(time.time()*1000)
+    with api(app,key).websocket_connect('/open/v1/stream?conversation=!direct') as ws:
+        ready=ws.receive_json();assert ready['type']=='ready' and ready['conversation_id']=='!direct'
+        put(s,[text('$grp','!group',60,now,mxid(s,'bob'),'group only'),text('$dm','!direct',61,now,mxid(s,'bob'),'direct only')])
         msg=ws.receive_json()
-        while msg['type']=='ping':msg=ws.receive_json()
-        assert msg=={'type':'closing','code':'YICHAT_API_KEY_INVALID','error':'API Key 已删除或账户不可用'}
-        with pytest.raises(WebSocketDisconnect) as e:ws.receive_json()
-        assert e.value.code==4401
+        assert msg['conversation_id']=='!direct' and msg['message']['id']=='$dm'
+    for target in ('!nope:chat.yitiao.org','bad id'):
+        unthrottle(s)
+        with api(app,key).websocket_connect('/open/v1/stream?conversation='+target) as ws:
+            assert ws.receive_json()['code']=='YICHAT_NOT_MEMBER'
+            with pytest.raises(WebSocketDisconnect) as e:ws.receive_json()
+            assert e.value.code==4403
 
 
 def test_stream_rejects_missing_or_invalid_key(gateway):
@@ -270,3 +300,222 @@ def test_stream_handshake_account_limit_closes_with_4429(gateway):
         assert ws.receive_json()['code']=='YICHAT_RATE_LIMITED'
         with pytest.raises(WebSocketDisconnect) as e:ws.receive_json()
         assert e.value.code==4429
+
+
+# ---------- text view of URL-shaped messages and attachments ----------
+
+def order(s,app,oid,room,kind,amount,count=1,title='私聊转账'):
+    units=str(app.state.funds.y.units(amount))
+    with connect(s.ledger) as db:
+        db.execute('''INSERT INTO yichat_orders(id,user,sid,room,kind,request_key,payload,source,title,principal,remaining,count,left_count,fees,state,intent,created)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',(oid,'alice','sid-alice',room,kind,'key-'+oid,'[]','src',title,units,units,count,count,'0','awaiting_receipt','intent-'+oid,time.time()))
+
+
+def event(eid,room,seq,at,sender,content):
+    return (eid,room,seq,at,json.dumps({'type':'m.room.message','sender':sender,'origin_server_ts':at,'content':content}))
+
+
+def test_url_messages_become_text_and_media_show_names(gateway):
+    c,app,s=gateway;now=int(time.time()*1000)-60000;a=mxid(s,'alice')
+    t1,t2,t3,t4='T'*32,'G'*32,'R'*32,'X'*32
+    order(s,app,t1,'!direct','direct','0.01');order(s,app,t2,'!group','group','1',3,'恭喜发财')
+    order(s,app,t4,'!group','group','5',1,'别的会话')
+    url=lambda oid:'https://chat.yitiao.org/orders/'+oid
+    origin_url=lambda oid:s.origin+'/orders/'+oid
+    fid='ab'*24
+    put(s,[
+        event('$transfer','!direct',70,now,a,{'msgtype':'m.text','body':url(t1),'org.yitiao.share':{'type':'order','url':url(t1)},'org.yitiao.business':{'kind':'order','id':t1}}),
+        event('$receipt','!direct',71,now+1,a,{'msgtype':'m.text','body':'已收款 · '+url(t1),'org.yitiao.share':{'type':'receipt','url':url(t1),'id':t1},'org.yitiao.business':{'kind':'order','id':t1}}),
+        event('$foreign','!direct',72,now+2,a,{'msgtype':'m.text','body':url(t4)}),
+        event('$image','!direct',73,now+3,a,{'msgtype':'m.image','body':'cat.png','info':{'mimetype':'image/png','size':12},'url':'mxc://chat.yitiao.org/'+fid}),
+        event('$file','!direct',74,now+4,a,{'msgtype':'m.file','body':'report.pdf','info':{'mimetype':'application/pdf','size':3456},'url':'mxc://chat.yitiao.org/'+fid}),
+        event('$gift','!direct',75,now+5,a,{'msgtype':'m.text','body':'https://chat.yitiao.org/gifts/'+'c'*32}),
+        event('$tx','!direct',76,now+6,a,{'msgtype':'m.text','body':'看这笔 https://yidt.yitiao.org/explorer/tx/'+'d'*64+' 吧'}),
+        event('$plain','!direct',77,now+7,a,{'msgtype':'m.text','body':'普通文字 https://example.com/x'}),
+        event('$packet','!group',78,now+8,a,{'msgtype':'m.text','body':url(t2),'org.yitiao.business':{'kind':'order','id':t2}}),
+    ])
+    key=new_key(c)['key'];unthrottle(s)
+    got={}
+    for room in ('!direct','!group'):
+        r=api(app,key).get('/open/v1/conversations/'+room+'/messages',params={'start':now-1000,'end':now+60000})
+        assert r.status_code==200,r.text
+        got.update({m['id']:m for m in r.json()['messages']})
+    assert (got['$transfer']['kind'],got['$transfer']['text'])==('transfer','[转账] 0.01 YIDT')
+    assert got['$transfer']['share']=={'type':'order','order_id':t1,'url':origin_url(t1),'amount':'0.01','currency':'YIDT','state':'awaiting_receipt'}
+    assert (got['$receipt']['kind'],got['$receipt']['text'])==('receipt','[已收款] 0.01 YIDT')
+    assert (got['$packet']['kind'],got['$packet']['text'])==('red_packet','[红包] 1 YIDT · 3 个 · 恭喜发财')
+    # An order of another conversation is never described (no amount leak).
+    assert got['$foreign']['text']=='[转账 / 红包]' and 'amount' not in got['$foreign']['share']
+    assert (got['$image']['kind'],got['$image']['text'])==('image','[图片] cat.png')
+    assert got['$image']['attachment']=={'id':fid,'name':'cat.png','mimetype':'image/png','size':12,'download_url':'/open/v1/files/'+fid}
+    assert (got['$file']['kind'],got['$file']['text'],got['$file']['attachment']['size'])==('file','[文件] report.pdf',3456)
+    assert (got['$gift']['kind'],got['$gift']['text'])==('gift','[赠卡]')
+    assert got['$tx']['kind']=='share' and got['$tx']['text']=='看这笔 [分享] YIDT 交易 吧' and got['$tx']['share']['type']=='transaction'
+    assert (got['$plain']['kind'],got['$plain']['text'],got['$plain']['share'])==('text','普通文字 https://example.com/x',None)
+
+
+# ---------- sending (text, image, file) ----------
+
+class FakeSynapse:
+    """Stands in for Synapse: the send succeeds only if the module's grant check would pass."""
+    def __init__(self,s):self.s=s;self.sent=[];self.deleted=[];self.reject=None;self.logins=0
+    async def call(self,method,path,token=None,data=None,params=None):
+        from fastapi import HTTPException
+        from backend import api_grants
+        if method=='PUT' and '/send/m.room.message/' in path:
+            if self.reject:raise HTTPException(*self.reject)
+            room=path.split('/rooms/')[1].split('/')[0].replace('%21','!')
+            sender=mxid(self.s,'alice')
+            assert api_grants.granted(self.s,room,sender,'m.room.message',data),'Synapse module would reject: no grant'
+            assert token=='api-device-token'
+            self.sent.append((room,path.rsplit('/',1)[1],data))
+            return {'event_id':'$sent'+str(len(self.sent))}
+        if method=='DELETE' and '/devices/' in path:self.deleted.append(path);return {}
+        return {}
+    async def login(self,mxid,password,device_id=None,device_name=''):
+        self.logins+=1;self.device_name=device_name
+        return {'access_token':'api-device-token','device_id':'APIDEVICE'}
+
+
+def sending(gateway):
+    c,app,s=gateway
+    # New conversations are plain; the fixture DM uses the legacy 'direct' mode.
+    with connect(s.db) as db:db.execute("UPDATE room_modes SET encryption='plain' WHERE room='!direct'")
+    fake=FakeSynapse(s);m=app.state.matrix
+    m.call=fake.call;m.login=fake.login;m.provision=AsyncMock()
+    return c,app,s,fake
+
+
+def test_send_text_uses_key_device_and_one_time_grant(gateway):
+    c,app,s,fake=sending(gateway)
+    created=new_key(c);key=created['key'];unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'你好','txn_id':'t-1'})
+    assert r.status_code==200,r.text
+    assert r.json()=={'event_id':'$sent1','conversation_id':'!direct','txn_id':'t-1'}
+    assert fake.sent[0][1:]==('t-1',{'msgtype':'m.text','body':'你好'}) and fake.device_name=='YiChat API · bot'
+    with connect(s.db) as db:
+        row=db.execute('SELECT device,upstream FROM api_keys').fetchone()
+        assert row['device']=='APIDEVICE' and 'api-device-token' not in row['upstream']
+        assert db.execute('SELECT event FROM api_send_grants').fetchone()[0]=='$sent1'
+    from backend import api_grants
+    # Consumed: the same content is not admitted again without a new grant.
+    assert not api_grants.granted(s,'!direct',mxid(s,'alice'),'m.room.message',{'msgtype':'m.text','body':'你好'})
+    unthrottle(s)
+    assert api(app,key).post('/open/v1/conversations/!group/messages',json={'text':'群里好'}).status_code==200
+    assert fake.logins==1 and fake.sent[1][0]=='!group'
+    # Deleting the key logs its Matrix device out and drops unused grants.
+    assert c.delete('/api/developer/keys/'+created['id']).status_code==200
+    assert fake.deleted and fake.deleted[0].endswith('/devices/APIDEVICE')
+
+
+@pytest.mark.parametrize('body,headers,code',[
+    ({'text':''},{},400),({'text':'x'*2001},{},400),({'text':'ok','extra':1},{},400),
+    ({'text':'ok','txn_id':'bad txn!'},{},400),(None,{'Content-Type':'text/plain'},415),
+])
+def test_send_text_validation(gateway,body,headers,code):
+    c,app,s,fake=sending(gateway)
+    key=new_key(c)['key'];unthrottle(s)
+    client=api(app,key)
+    r=client.post('/open/v1/conversations/!direct/messages',content='ok',headers=headers) if body is None else client.post('/open/v1/conversations/!direct/messages',json=body)
+    assert r.status_code==code,r.text
+    assert not fake.sent
+
+
+def test_send_requires_membership_and_plain_room(gateway):
+    c,app,s,fake=sending(gateway)
+    key=new_key(other(app,s,'bob-token'))['key'];unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!group/messages',json={'text':'not a member'})
+    assert r.status_code==403 and r.json()['code']=='YICHAT_NOT_MEMBER'
+    with connect(s.db) as db:db.execute("UPDATE room_modes SET encryption='legacy_encrypted' WHERE room='!direct'")
+    unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'old room'})
+    assert r.status_code==403 and r.json()['code']=='YICHAT_LEGACY_ROOM'
+    assert not fake.sent
+
+
+def test_send_rejection_is_reported_and_dead_device_is_reset(gateway):
+    c,app,s,fake=sending(gateway)
+    key=new_key(c)['key'];unthrottle(s)
+    fake.reject=(403,{'errcode':'M_FORBIDDEN','error':'对方已拒绝私聊'})
+    r=api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'hi'})
+    assert r.status_code==403 and r.json()=={'errcode':'M_FORBIDDEN','code':'YICHAT_SEND_REJECTED','error':'对方已拒绝私聊'}
+    fake.reject=(401,{'errcode':'M_UNKNOWN_TOKEN','error':'Invalid access token'});unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'hi'})
+    assert r.status_code==503 and r.json()['code']=='YICHAT_API_DEVICE_RESET'
+    with connect(s.db) as db:assert db.execute('SELECT upstream FROM api_keys').fetchone()[0] is None
+    fake.reject=None;unthrottle(s)
+    assert api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'hi'}).status_code==200
+    assert fake.logins==2
+
+
+PNG=b'\x89PNG\r\n\x1a\n'+b'\x00'*32
+
+
+def test_send_image_and_file_then_download_once_per_request(gateway):
+    c,app,s,fake=sending(gateway)
+    key=new_key(c)['key'];unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!direct/files',params={'name':'cat.png'},content=PNG,headers={'Content-Type':'image/png'})
+    assert r.status_code==200,r.text
+    image=r.json();fid=image['attachment']['id']
+    assert image['kind']=='image' and image['attachment']['size']==len(PNG) and image['attachment']['download_url']=='/open/v1/files/'+fid
+    sent=fake.sent[0][2]
+    assert sent['msgtype']=='m.image' and sent['body']=='cat.png' and sent['url']=='mxc://chat.yitiao.org/'+fid
+    assert sent['org.yitiao.attachments']==[fid] and sent['info']=={'mimetype':'image/png','size':len(PNG)}
+    unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!direct/files',params={'name':'pic.png','type':'file'},content=PNG,headers={'Content-Type':'image/png'})
+    assert r.status_code==200 and r.json()['kind']=='file' and fake.sent[1][2]['msgtype']=='m.file'
+    unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!direct/files',params={'name':'notes.txt'},content=b'hello',headers={'Content-Type':'text/plain'})
+    assert r.status_code==200 and fake.sent[2][2]['msgtype']=='m.file'
+    unthrottle(s)
+    got=api(app,key).get('/open/v1/files/'+fid)
+    assert got.status_code==200 and got.content==PNG and got.headers['content-disposition']=='attachment'
+    unthrottle(s)
+    assert api(app,key).get('/open/v1/files/'+'0'*48).status_code==404
+    assert api(app,key).get('/open/v1/files/not-an-id').status_code==404
+
+
+@pytest.mark.parametrize('params,content,headers,code',[
+    ({},PNG,{'Content-Type':'image/png'},400),
+    ({'name':'a/b.png'},PNG,{'Content-Type':'image/png'},400),
+    ({'name':'x.txt','type':'image'},b'hi',{'Content-Type':'text/plain'},415),
+    ({'name':'x','type':'video'},b'hi',{'Content-Type':'text/plain'},400),
+    ({'name':'empty.txt'},b'',{'Content-Type':'text/plain'},400),
+    ({'name':'x.bin'},b'hi',{'Content-Type':'not a type'},400),
+])
+def test_send_file_validation(gateway,params,content,headers,code):
+    c,app,s,fake=sending(gateway)
+    key=new_key(c)['key'];unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!direct/files',params=params,content=content,headers=headers)
+    assert r.status_code==code,r.text
+    assert not fake.sent
+
+
+def test_upload_download_and_send_share_the_account_limit(gateway):
+    c,app,s,fake=sending(gateway)
+    key=new_key(c)['key'];unthrottle(s)
+    client=api(app,key)
+    fid=client.post('/open/v1/conversations/!direct/files',params={'name':'a.txt'},content=b'a',headers={'Content-Type':'text/plain'}).json()['attachment']['id']
+    assert client.post('/open/v1/conversations/!direct/messages',json={'text':'1'}).status_code==200
+    assert client.get('/open/v1/files/'+fid).status_code==200
+    assert client.get('/open/v1/conversations').status_code==200
+    assert client.get('/open/v1/files/'+fid).status_code==200
+    r=client.post('/open/v1/conversations/!direct/files',params={'name':'b.txt'},content=b'b',headers={'Content-Type':'text/plain'})
+    assert r.status_code==429 and r.json()['code']=='YICHAT_RATE_LIMITED'
+
+
+def test_grant_requires_live_key_and_expires(gateway):
+    c,app,s=gateway
+    from backend import api_grants
+    created=new_key(c);a=mxid(s,'alice');content={'msgtype':'m.text','body':'x'}
+    with connect(s.db) as db:kid=db.execute('SELECT id FROM api_keys').fetchone()[0]
+    api_grants.create(s,kid,'!direct',a,'m.room.message',content)
+    assert api_grants.granted(s,'!direct',a,'m.room.message',content)
+    assert not api_grants.granted(s,'!direct',a,'m.room.message',{'msgtype':'m.text','body':'y'})
+    assert not api_grants.granted(s,'!group',a,'m.room.message',content)
+    assert not api_grants.granted(s,'!direct',mxid(s,'bob'),'m.room.message',content)
+    with connect(s.db) as db:db.execute('UPDATE api_send_grants SET expires=0')
+    assert not api_grants.granted(s,'!direct',a,'m.room.message',content)
+    api_grants.create(s,kid,'!direct',a,'m.room.message',content)
+    assert c.delete('/api/developer/keys/'+created['id']).status_code==200
+    assert not api_grants.granted(s,'!direct',a,'m.room.message',content)

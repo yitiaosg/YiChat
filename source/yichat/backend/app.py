@@ -128,7 +128,7 @@ def create_app(settings=None):
                     request_limit(s,'anonymous:'+host,limit=10)
             try:length=int(request.headers.get('content-length','0'))
             except ValueError:fail(400,'无效请求长度')
-            is_upload=request.method=='POST' and (request.url.path.startswith('/api/files/') or request.url.path in ('/_matrix/media/v3/upload','/_matrix/client/v1/media/upload') or bool(re.fullmatch(r'/api/groups/[^/]+/avatar',request.url.path)))
+            is_upload=request.method=='POST' and (request.url.path.startswith('/api/files/') or request.url.path in ('/_matrix/media/v3/upload','/_matrix/client/v1/media/upload') or bool(re.fullmatch(r'/open/v1/conversations/[^/]+/files',request.url.path)) or bool(re.fullmatch(r'/api/groups/[^/]+/avatar',request.url.path)))
             if not is_upload and length>262144: fail(413,'请求体过大')
             response=await call_next(request)
         except HTTPException as e:response=error_response(e)
@@ -411,6 +411,12 @@ def create_app(settings=None):
         who,info=await room_access(request,room);require_send(who,info)
         try:size=int(request.headers.get('content-length','0'))
         except ValueError:fail(400,'无效文件长度')
+        token=request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('yc_session','')
+        return await store_upload(who,info,room,request.stream(),size,lambda:authenticate(s,token))
+
+    async def store_upload(who,info,room,stream,size,recheck):
+        # Shared by the session upload above and the developer API; recheck()
+        # re-validates the caller (session or API key) before every chunk.
         if size<0 or size>s.max_file:fail(413,'文件大小超限')
         fid=secrets.token_hex(24);await upload_slot(s,who['subject'],fid,size or s.max_file)
         archive.reserve_upload(s.archive_ingest,fid)
@@ -418,12 +424,12 @@ def create_app(settings=None):
         try:
             # Starlette/ASGI transport is bounded by Uvicorn high-water mark. Reserve
             # each read quantum globally BEFORE requesting the next transport chunk.
-            iterator=request.stream().__aiter__()
+            iterator=stream.__aiter__()
             with target.open('xb') as f:
                 while True:
                     delay=reserve_rate(s,who['subject'],'upload',min(65536,size-total) if size else 65536,s.upload_rate)
                     await asyncio.sleep(delay)
-                    authenticate(s,request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('yc_session',''))
+                    recheck()
                     try: chunk=await asyncio.wait_for(iterator.__anext__(),30)
                     except StopAsyncIteration:break
                     if not chunk:break
@@ -464,9 +470,14 @@ def create_app(settings=None):
 
     @app.get('/api/files/{fid}/content')
     async def download(request:Request,fid:str):
+        return await serve_file(lambda:session(request),fid)
+
+    async def serve_file(recheck,fid):
+        # Shared by the session download above and the developer API; recheck()
+        # returns the caller and runs again before every chunk.
         with connect(s.db) as c:row=c.execute('SELECT * FROM files WHERE id=?',(fid,)).fetchone()
         if not row:fail(404,'附件不存在')
-        who=session(request)
+        who=recheck()
         expiry=await file_access(who,row)
         if expiry<=time.time() or row['removed']:fail(410,'服务器附件已到期；可从已保存的本地归档打开')
         if not (s.objects/fid).is_file():fail(503,'附件实体缺失，下载和清理已暂停')
@@ -474,7 +485,7 @@ def create_app(settings=None):
         async def stream():
             with handle as f:
                 while True:
-                    session(request)
+                    recheck()
                     if expiry<=time.time():return
                     chunk=f.read(65536)
                     if not chunk:return
@@ -669,6 +680,7 @@ def create_app(settings=None):
     push.install(app,s,session)
     # Web-only browser notifications, the developer API and download links.
     # None of these change any existing route or App behaviour.
+    app.state.store_upload=store_upload;app.state.serve_file=serve_file
     from . import webpush,open_api,downloads
     webpush.install(app,s)
     open_api.install(app,s)

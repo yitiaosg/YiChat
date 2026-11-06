@@ -108,7 +108,11 @@ class YiChatModule:
             retirement=event.type=='m.room.member' and event.sender==event.state_key and event.content.get('membership')=='leave' and lifecycle.purged(self.s,event.sender)
             if not control and not retirement and lifecycle.purged(self.s,event.sender):raise HTTPException(401,'账户已注销')
             if not control and not retirement and not any(valid_sid(self.s,r['sid'],r['username']) for r in sessions):
-                raise HTTPException(401,'主站会话已退出')
+                # Developer API: a one-time gateway grant for exactly this message
+                # stands in for the live session. All checks below still apply.
+                from . import api_grants
+                if not (event.type=='m.room.message' and not event.is_state() and api_grants.granted(self.s,event.room_id,event.sender,event.type,unfreeze(event.content))):
+                    raise HTTPException(401,'主站会话已退出')
             if event.type=='m.room.create':
                 token=event.content.get('org.yitiao.ticket','')
                 ticket=policy.validate_ticket(self.s,token,event.sender)
