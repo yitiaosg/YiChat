@@ -1,6 +1,6 @@
 # 网关升级：桌面端回环登录（2026-11-06）
 
-状态：**已审核待部署**。桌面版（Windows/Linux，见 [desktop/README.md](../../../desktop/README.md)）上线前必须先部署这一项。Android 行为不变。
+状态：**已于 2026-11-06 部署到生产**（见文末部署记录）。桌面版（Windows/Linux，见 [desktop/README.md](../../../desktop/README.md)）依赖这一项。Android 行为不变；Android 0.3.7 登录回归由维护者手动确认。
 
 - 源码提交：`441c9d6`（分支 `claude/yichat-desktop-planning-sodnv1`）
 - 补丁：[delivery/desktop-loopback-20261106/backend.patch](../../../delivery/desktop-loopback-20261106/backend.patch)，路径相对 `/root/yitiao/yichat`
@@ -58,6 +58,16 @@ Android 用 App Link `https://chat.yitiao.org/app/callback` 接收登录回跳�
    ```
    每次 307 都会写入一条 10 分钟后过期的待处理登录记录，无害。
 7. **Android 回归**：用 Android 0.3.7 完成一次登录。客户端不传 platform，走 App Link，设备名仍是 `YiChat Android`。
+
+## 部署记录（2026-11-06）
+
+- 生产部署分支 `deploy/yichat-server-v2`：部署前 `674d9a8`（回退点），部署后 `93e066e`（只含本补丁：3 个文件，+109/−9）。
+- 部署前三个文件的哈希与上面给出的基线一致；部署后的哈希与仓库根 `SHA256SUMS` 一致。
+- 备份：`/root/yitiao/backups/yichat-v2-20261106T103410Z/`（仅 root 可读），其中 `loopback-baseline/` 保存三个文件的原样副本和补丁。
+- 测试：只用本机测试库，`test_native_auth.py` 补丁前 22 个通过，补丁后 45 个通过。
+- 迁移：`native_logins`、`native_codes` 都新增了 `redirect_uri` 和 `platform` 两列。
+- 只读 curl：307/307/400/400/400，与预期一致。journal 中 ERROR 为 0；服务 active，NRestarts=0。
+- 说明：生产目录里的 `backend/db.py` 在部署前就有未提交的改动（与本仓库 `e74016d` 一致，但领先于生产 git 的 `674d9a8`）。这次只把补丁新增的两行提交进去，原有未提交改动保持原样。部署目录里其他未提交改动不在本次范围内。
 
 ## 回退
 
