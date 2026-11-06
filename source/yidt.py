@@ -21,6 +21,9 @@ with wallet_passkeys.db():pass
 
 @app.before_request
 def guard():
+    # Browser resource requests and missing routes must never reset an OAuth
+    # flow or replace the user's payment return path in the session cookie.
+    if request.url_rule is None or request.endpoint=='favicon':return
     if request.path.startswith(('/explorer','/static/','/health','/login','/oauth/callback')):return
     with y.connect() as c:
         if not y.sid_valid(c,session.get('sid'),session.get('user')):
@@ -53,6 +56,9 @@ def error(e):return render_template('yidt.html',screen='error',title='操作未�
 
 @app.get('/session-state')
 def session_state():return {'ok':True}
+
+@app.get('/favicon.ico')
+def favicon():return app.send_static_file('logo.ico')
 
 @app.get('/health')
 def health():return {'ok':True,'service':'yidt'}
@@ -165,9 +171,12 @@ def authorize(token):
         b=y.binding(c,r['user'],r['service'])
         if not b or b['address']!=r['address'] or b['created']!=r['binding_stamp']:raise y.Error('钱包绑定已变化，请重新发起付款')
         debit,credit=y.quote(c,r['address'],int(r['amount']))
-        if request.method=='POST':
-            if request.form.get('action')=='cancel':
-                c.execute("UPDATE yidt_intents SET state='cancelled' WHERE id=?",(token,));return redirect(r['return_url'])
+        destination=y.service_address(c,r['service'])
+        if request.method=='POST' and request.form.get('action')=='cancel':
+            c.execute("UPDATE yidt_intents SET state='cancelled' WHERE id=?",(token,));return redirect(r['return_url'])
+        # An unlocked service grant authorizes the handoff on arrival, without
+        # rendering a confirmation page. Locked grants still require a POST proof.
+        if not b['locked'] or request.method=='POST':
             if b['locked']:pin_check(c)
             c.execute("UPDATE yidt_intents SET state='approved' WHERE id=?",(token,))
             # Native return (Android App Link or desktop handoff page) carries only
@@ -176,7 +185,7 @@ def authorize(token):
             if r['return_url'].startswith(('https://chat.yitiao.org/app/return?order=','https://chat.yitiao.org/app/desktop-return?order=')):
                 return redirect(r['return_url'])
             return redirect(r['return_url']+('&' if '?' in r['return_url'] else '?')+urlencode({'yidt_intent':token}))
-    return render_template('yidt.html',screen='authorize',title='确认付款',intent=r,binding=b,debit=y.fmt(debit),credit=y.fmt(credit))
+    return render_template('yidt.html',screen='authorize',title='确认付款',intent=r,binding=b,destination=destination,debit=y.fmt(debit),credit=y.fmt(credit))
 
 @app.route('/wallet/<address>',methods=['GET','POST'])
 def wallet(address):
@@ -207,7 +216,8 @@ def wallet(address):
                     c.execute('UPDATE yidt_bindings SET locked=?,created=? WHERE user=? AND service=?',(int(not b['locked']),y.stamp(),user,b['service']))
             return redirect(request.path)
         name=c.execute('SELECT name FROM yidt_members WHERE user=? AND address=?',(user,address)).fetchone()[0]
-        bindings=list(c.execute('SELECT * FROM yidt_bindings WHERE address=?',(address,)))
+        bindings=list(c.execute('''SELECT b.* FROM yidt_bindings b JOIN yidt_members m
+            ON m.user=b.user AND m.address=b.address WHERE b.address=?''',(address,)))
         history=list(c.execute('SELECT t.* FROM yidt_transactions t JOIN yidt_postings p ON p.tx=t.id WHERE p.address=? ORDER BY t.id DESC LIMIT 50',(address,)))
     return render_template('yidt.html',screen='wallet',title=name,wallet=w,bindings=bindings,history=history)
 
@@ -265,32 +275,74 @@ def backup(address):
                 c.execute('INSERT INTO yidt_backup_challenges VALUES(?,?,?,?,?,0)',(challenge,user,address,hashlib.sha256(answer.encode()).hexdigest(),time.time()+300))
     return render_template('yidt.html',screen='backup',title='安全记录钱包',wallet=w,content=content,challenge=challenge,question=question,done=done)
 
+def explorer_page():
+    value=request.args.get('page','1')
+    return max(1,int(value)) if y.re.fullmatch('[0-9]{1,9}',value) else 1
+
+
 @app.get('/explorer/')
 def explorer():
     q=request.args.get('q','').strip()
     if q:
         if (q==y.OFFICIAL or y.re.fullmatch('yidt-[a-z0-9]{16}',q)):return redirect('/explorer/address/'+q)
-        if y.re.fullmatch('[a-f0-9]{64}',q):return redirect('/explorer/tx/'+q)
-        return render_template('yidt.html',screen='error',title='YIDT Explorer',public=True,error='请输入完整钱包地址或 64 位交易哈希，不支持模糊搜索'),400
+        if y.re.fullmatch('[0-9]{1,18}',q):return redirect('/explorer/block/'+str(int(q)))
+        if y.re.fullmatch('[a-fA-F0-9]{64}',q):
+            digest=q.lower()
+            with y.connect() as c:
+                block=c.execute('SELECT height FROM yidt_blocks WHERE hash=?',(digest,)).fetchone()
+            return redirect('/explorer/block/'+digest if block else '/explorer/tx/'+digest)
+        return render_template('yidt.html',screen='error',title='YIDT Explorer',public=True,error='请输入区块高度、完整的 64 位区块哈希或交易哈希，或完整钱包地址，不支持模糊搜索'),400
+    page=explorer_page()
     with y.connect() as c:
+        c.execute('BEGIN')
+        blocks=list(c.execute('SELECT height,hash,previous,capacity,tx_count,created,locked_at FROM yidt_blocks ORDER BY height DESC LIMIT 21 OFFSET ?',((page-1)*20,)))
         signed_in=y.sid_valid(c,session.get('sid'),session.get('user'))
         history=list(c.execute('''SELECT DISTINCT t.* FROM yidt_transactions t
             JOIN yidt_postings p ON p.tx=t.id JOIN yidt_members m ON m.address=p.address
             WHERE m.user=? ORDER BY t.id DESC LIMIT 50''',(session['user'],))) if signed_in else []
-    return render_template('yidt.html',screen='explorer',title='YIDT Explorer',public=True,history=history,own_history=signed_in)
+    return render_template('yidt.html',screen='explorer',title='YIDT Explorer',public=True,history=history,
+                           own_history=signed_in,blocks=blocks[:20],page=page,has_next=len(blocks)>20)
+
+
+@app.get('/explorer/block/<identifier>')
+def block_page(identifier):
+    page=explorer_page()
+    with y.connect() as c:
+        c.execute('BEGIN')
+        if y.re.fullmatch('[0-9]{1,18}',identifier):
+            block=c.execute('SELECT height,hash,previous,capacity,tx_count,created,locked_at FROM yidt_blocks WHERE height=?',(int(identifier),)).fetchone()
+        elif y.re.fullmatch('[a-fA-F0-9]{64}',identifier):
+            block=c.execute('SELECT height,hash,previous,capacity,tx_count,created,locked_at FROM yidt_blocks WHERE hash=?',(identifier.lower(),)).fetchone()
+        else:abort(404)
+        if not block:abort(404)
+        history=list(c.execute('''SELECT t.* FROM yidt_transactions t JOIN yidt_block_transactions m ON m.tx=t.id
+            WHERE m.height=? ORDER BY t.id LIMIT 51 OFFSET ?''',(block['height'],(page-1)*50)))
+        next_block=c.execute('SELECT height FROM yidt_blocks WHERE height=?',(block['height']+1,)).fetchone()
+    return render_template('yidt.html',screen='block',title='区块 #'+str(block['height']),public=True,
+                           block=block,history=history[:50],page=page,has_next=len(history)>50,next_block=next_block)
+
 
 @app.get('/explorer/tx/<digest>')
 def transaction(digest):
     with y.connect() as c:
+        c.execute('BEGIN')
         tx=c.execute('SELECT * FROM yidt_transactions WHERE hash=?',(digest,)).fetchone()
         if not tx:abort(404)
+        block=c.execute('''SELECT b.height,b.hash,b.previous,b.capacity,b.tx_count,b.created,b.locked_at FROM yidt_blocks b JOIN yidt_block_transactions m USING(height)
+                           WHERE m.tx=?''',(tx['id'],)).fetchone()
         can_view_note=y.sid_valid(c,session.get('sid'),session.get('user')) and bool(c.execute('SELECT 1 FROM yidt_members WHERE user=? AND address IN (?,?)',(session['user'],tx['source'],tx['destination'])).fetchone())
-    return render_template('yidt.html',screen='transaction',title='交易详情',public=True,tx=tx,can_view_note=can_view_note)
+    return render_template('yidt.html',screen='transaction',title='交易详情',public=True,tx=tx,block=block,can_view_note=can_view_note)
+
+
+@app.errorhandler(404)
+def not_found(exc):
+    if request.path.startswith('/explorer'):
+        return render_template('yidt.html',screen='error',title='未找到记录',public=True,error='未找到该区块、交易或页面，请检查输入。'),404
+    return exc
 
 @app.get('/explorer/address/<address>')
 def address_page(address):
-    try:page=max(1,int(request.args.get('page','1')))
-    except ValueError:page=1
+    page=explorer_page()
     with y.connect() as c:
         w=y.wallet(c,address)
         history=list(c.execute('SELECT t.* FROM yidt_transactions t JOIN yidt_postings p ON p.tx=t.id WHERE p.address=? ORDER BY t.id DESC LIMIT 50 OFFSET ?',(address,(page-1)*50)))

@@ -63,3 +63,4 @@
 - 实施时与规格有出入的地方：`/app/desktop-return` 放在 `app.py`；`Funds.create` 只接受 `None/'android'/'desktop'`，其他值会抛出 ValueError；`native_auth.migrate()` 遇到还不存在的表会跳过；`test_push.py`、`test_native_transactions.py` 的夹具改成了显式列名。
 - **本仓库 `source/` 尚未同步这次的服务端代码**：生产提交 `eb0fec6`、`5eb9f66` 只在服务器的部署分支上。需要在服务器导出补丁，回填到本仓库。
   - **已回填（2026-11-06）**：仓库提交 `0ba5940`。用 `git format-patch` 从部署分支导出 `eb0fec6`、`5eb9f66`，应用到 `source/`，并同步了 `test_push.py` 的显式列名修改（这个文件在服务器上没有纳入 git），`SHA256SUMS` 已更新。`funds.py` 需要减少上下文才能应用，没有内容冲突。回填后 `source/yichat/` 下 7 个文件与生产文件逐字节一致。`source/yidt.py` 与 `5eb9f66` 中的版本一致，但与生产文件不同：生产 `yidt.py` 还有更早的未提交改动（区块浏览器页面、未锁定授权直接批准、favicon、绑定与钱包成员关联查询），这些不属于这两个提交，没有回填。
+  - **YIDT 已按生产文件同步（2026-11-06）**：`source/yidt.py`、`source/yidt_core.py`、`source/yidt_bridge.py`、`source/templates/yidt.html` 已整体替换为生产版本，与生产文件逐字节一致；`SHA256SUMS` 已更新。后三个文件一起同步，是因为生产 `yidt.py` 依赖其中的 `service_address()`、`yidt_blocks` 表和 `block` 页面。
