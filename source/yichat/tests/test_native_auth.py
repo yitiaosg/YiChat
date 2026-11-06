@@ -131,3 +131,67 @@ def test_android_assetlinks_public_fixed_package_and_certificate(native):
     target=response.json()[0]['target']
     assert target['package_name']=='org.yitiao.yichat'
     assert target['sha256_cert_fingerprints']==['6A:B2:1F:96:1A:37:35:69:C0:67:E0:48:E0:E0:E5:D3:8B:49:0D:07:D9:40:B9:74:A4:A3:29:05:F0:62:85:ED']
+
+# RFC 8252 loopback redirect for desktop clients (Windows/Linux).
+LOOP='http://127.0.0.1:53682/app/callback'
+
+@pytest.mark.parametrize('platform,name',[('windows','YiChat Windows'),('linux','YiChat Linux')])
+@pytest.mark.asyncio
+async def test_desktop_loopback_flow_binds_redirect_and_device_name(native,platform,name):
+    c,app,s,p,v,authorize=native
+    p.update(redirect_uri=LOOP,platform=platform)
+    r=await authorize();assert r.status_code==303,r.text
+    location=r.headers['location']
+    assert location.startswith(LOOP+'?') and 'token' not in location
+    data=exchange_data(native,r);c.cookies.clear()
+    # The code is bound to the exact loopback URI, including the port.
+    assert c.post('/auth/native/exchange',json=data|{'redirect_uri':'http://127.0.0.1:53683/app/callback'}).status_code==400
+    assert c.post('/auth/native/exchange',json=data|{'redirect_uri':s.origin+'/app/callback'}).status_code==400
+    result=c.post('/auth/native/exchange',json=data);assert result.status_code==200,result.text
+    assert app.state.matrix.login.call_args.kwargs['device_name']==name
+
+@pytest.mark.asyncio
+async def test_android_default_and_explicit_platform_keep_app_link(native):
+    c,app,s,p,v,authorize=native
+    for extra in ({},{'platform':'android'}):
+        p.pop('platform',None);p.update(extra)
+        r=await authorize();assert r.status_code==303
+        assert r.headers['location'].startswith(s.origin+'/app/callback?')
+        data=exchange_data(native,r);c.cookies.clear()
+        assert c.post('/auth/native/exchange',json=data|{'redirect_uri':LOOP}).status_code==400
+        assert c.post('/auth/native/exchange',json=data).status_code==200
+        assert app.state.matrix.login.call_args.kwargs['device_name']=='YiChat Android'
+
+@pytest.mark.parametrize('redirect,platform',[
+    (LOOP,'android'),(LOOP,None),(LOOP,'macos'),(LOOP,'Windows'),
+    ('http://testserver/app/callback','windows'),
+    ('http://127.0.0.1:0/app/callback','windows'),('http://127.0.0.1:65536/app/callback','windows'),
+    ('http://127.0.0.1:080/app/callback','windows'),('http://127.0.0.1/app/callback','windows'),
+    ('http://localhost:53682/app/callback','windows'),('http://[::1]:53682/app/callback','linux'),
+    ('https://127.0.0.1:53682/app/callback','windows'),('http://127.0.0.1:53682/app/callback/','linux'),
+    ('http://127.0.0.1:53682/other','linux'),('http://127.0.0.1:53682/app/callback?x=1','linux'),
+    ('http://127.0.0.1:53682/app/callback#x','linux'),('http://user@127.0.0.1:53682/app/callback','linux'),
+    ('http://127.0.0.2:53682/app/callback','linux'),
+])
+def test_loopback_redirect_and_platform_whitelist(native,redirect,platform):
+    c,app,s,p,v,authorize=native
+    query=p|{'redirect_uri':redirect}|({'platform':platform} if platform else {})
+    assert c.get('/auth/native/login',params=query,follow_redirects=False).status_code==400
+
+def test_loopback_still_requires_s256(native):
+    c,app,s,p,v,authorize=native
+    query=p|{'redirect_uri':LOOP,'platform':'linux','code_challenge_method':'plain'}
+    assert c.get('/auth/native/login',params=query,follow_redirects=False).status_code==400
+    duplicated=list((p|{'redirect_uri':LOOP,'platform':'linux'}).items())+[('platform','windows')]
+    assert c.get('/auth/native/login',params=duplicated,follow_redirects=False).status_code==400
+
+def test_native_columns_migrate_idempotently(tmp_path):
+    import sqlite3
+    from backend.native_auth import migrate as native_migrate
+    db=sqlite3.connect(tmp_path/'old.db')
+    db.execute('CREATE TABLE native_logins(state TEXT PRIMARY KEY,app_state TEXT NOT NULL,app_nonce TEXT NOT NULL,challenge TEXT NOT NULL)')
+    db.execute('CREATE TABLE native_codes(code_hash TEXT PRIMARY KEY,app_state TEXT NOT NULL,app_nonce TEXT NOT NULL,challenge TEXT NOT NULL,subject TEXT NOT NULL,username TEXT NOT NULL,sid TEXT NOT NULL,expires REAL NOT NULL)')
+    db.execute("INSERT INTO native_codes VALUES('h','s','n','c','sub','u','sid',1)")
+    native_migrate(db);native_migrate(db)
+    row=db.execute('SELECT redirect_uri,platform FROM native_codes').fetchone()
+    assert row==(None,None)

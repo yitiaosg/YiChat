@@ -1,7 +1,9 @@
 """Gateway-native handoff; deliberately not an OIDC public client endpoint.
 
-Only one fixed HTTPS redirect. No gateway/upstream token ever enters a URL.
-The existing callback verifies the upstream signature, UID, nonce and SID first.
+Two redirect forms only: the fixed HTTPS App Link (Android) and an RFC 8252
+loopback redirect http://127.0.0.1:<port>/app/callback (desktop). PKCE S256 is
+mandatory for both. No gateway/upstream token ever enters a URL. The existing
+callback verifies the upstream signature, UID, nonce and SID first.
 """
 import base64
 import hashlib
@@ -18,6 +20,27 @@ from . import policy
 
 OPAQUE=re.compile(r'[A-Za-z0-9_-]{43,128}\Z')
 VERIFIER=re.compile(r'[A-Za-z0-9._~-]{43,128}\Z')
+# RFC 8252 section 7.3: IPv4 loopback literal, any port, fixed path. No
+# "localhost" (resolver-dependent), userinfo, query, fragment or leading zeros.
+LOOPBACK=re.compile(r'http://127\.0\.0\.1:([1-9][0-9]{0,4})/app/callback\Z')
+# Client-declared platform, used only for the Matrix device display name.
+PLATFORMS={'android':'YiChat Android','windows':'YiChat Windows','linux':'YiChat Linux'}
+DESKTOP={'windows','linux'}
+
+SCHEMA_COLUMNS=(('native_logins','redirect_uri'),('native_logins','platform'),('native_codes','redirect_uri'),('native_codes','platform'))
+
+def migrate(c):
+    """Add nullable columns; NULL means the pre-existing Android HTTPS flow."""
+    for table,column in SCHEMA_COLUMNS:
+        if column not in {r[1] for r in c.execute(f'PRAGMA table_info({table})')}:
+            c.execute(f'ALTER TABLE {table} ADD COLUMN {column} TEXT')
+
+def redirect_kind(s,uri):
+    """Return 'app_link', 'loopback' or None for an exact redirect string."""
+    if uri==s.origin+'/app/callback':return 'app_link'
+    m=LOOPBACK.fullmatch(uri)
+    if m and int(m.group(1))<=65535:return 'loopback'
+    return None
 
 def s256(verifier):
     return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode('ascii')).digest()).decode().rstrip('=')
@@ -26,11 +49,15 @@ def finish_authorization(s,native,claims,person):
     code=secrets.token_urlsafe(32)
     with transaction(s.db) as c:
         c.execute('DELETE FROM native_codes WHERE expires<=?',(time.time(),))
-        c.execute('INSERT INTO native_codes VALUES(?,?,?,?,?,?,?,?)',(
+        c.execute('INSERT INTO native_codes(code_hash,app_state,app_nonce,challenge,subject,username,sid,expires,redirect_uri,platform) VALUES(?,?,?,?,?,?,?,?,?,?)',(
             digest(code),native['app_state'],native['app_nonce'],native['challenge'],
             claims['sub'],person['username'],claims['sid'],time.time()+60,
+            native['redirect_uri'],native['platform'],
         ))
-    r=RedirectResponse(s.origin+'/app/callback?'+urlencode({'code':code,'state':native['app_state']}),status_code=303)
+    # Redirect only to the URI stored at login (re-validated); legacy rows use the App Link.
+    target=native['redirect_uri'] or s.origin+'/app/callback'
+    if redirect_kind(s,target) is None:fail(400,'回跳地址无效')
+    r=RedirectResponse(target+'?'+urlencode({'code':code,'state':native['app_state']}),status_code=303)
     r.delete_cookie('yc_login')
     return r
 
@@ -43,14 +70,19 @@ def install(app,s):
     @app.get('/auth/native/login')
     async def start(request:Request):
         q=request.query_params
-        if len(list(q.multi_items()))!=5 or set(q)!={'state','nonce','code_challenge','code_challenge_method','redirect_uri'}:fail(400,'原生登录参数不完整')
-        if q['redirect_uri']!=s.origin+'/app/callback' or q['code_challenge_method']!='S256':fail(400,'回跳或 PKCE 方法不匹配')
+        base={'state','nonce','code_challenge','code_challenge_method','redirect_uri'}
+        # Android 0.3.x sends exactly the five base fields; platform is optional.
+        if set(q) not in (base,base|{'platform'}) or len(list(q.multi_items()))!=len(set(q)):fail(400,'原生登录参数不完整')
+        kind=redirect_kind(s,q['redirect_uri']);platform=q.get('platform','android')
+        if kind is None or q['code_challenge_method']!='S256':fail(400,'回跳或 PKCE 方法不匹配')
+        # Loopback is desktop-only; the App Link stays Android-only.
+        if platform not in PLATFORMS or (kind=='loopback')!=(platform in DESKTOP):fail(400,'客户端平台与回跳方式不匹配')
         if not all(OPAQUE.fullmatch(q[k]) for k in ('state','nonce','code_challenge')) or len(q['code_challenge'])!=43:fail(400,'登录随机参数无效')
         state=secrets.token_urlsafe(32);verifier=secrets.token_urlsafe(48);nonce=secrets.token_urlsafe(32)
         with transaction(s.db) as c:
             c.execute('DELETE FROM logins WHERE expires<=?',(time.time(),))
             c.execute('INSERT INTO logins VALUES(?,?,?,?)',(digest(state),verifier,nonce,time.time()+600))
-            c.execute('INSERT INTO native_logins VALUES(?,?,?,?)',(digest(state),q['state'],q['nonce'],q['code_challenge']))
+            c.execute('INSERT INTO native_logins(state,app_state,app_nonce,challenge,redirect_uri,platform) VALUES(?,?,?,?,?,?)',(digest(state),q['state'],q['nonce'],q['code_challenge'],q['redirect_uri'],platform))
         params=dict(client_id='yichat',response_type='code',scope='openid profile',redirect_uri=s.origin+'/auth/callback',
                     state=state,nonce=nonce,code_challenge=s256(verifier),code_challenge_method='S256')
         r=RedirectResponse(s.issuer+'/oidc/authorize?'+urlencode(params))
@@ -63,10 +95,12 @@ def install(app,s):
         except ValueError:fail(400,'JSON 无效')
         if not isinstance(d,dict):fail(400,'JSON 无效')
         if not all(isinstance(d.get(k),str) for k in ('code','state','nonce','code_verifier','redirect_uri')):fail(400,'交换参数不完整')
-        if not OPAQUE.fullmatch(d['code']) or not VERIFIER.fullmatch(d['code_verifier']) or d['redirect_uri']!=s.origin+'/app/callback':fail(400,'交换参数无效')
+        if not OPAQUE.fullmatch(d['code']) or not VERIFIER.fullmatch(d['code_verifier']) or redirect_kind(s,d['redirect_uri']) is None:fail(400,'交换参数无效')
         with transaction(s.db) as c:
             row=c.execute('SELECT * FROM native_codes WHERE code_hash=? AND expires>?',(digest(d['code']),time.time())).fetchone()
             if not row or not all(secrets.compare_digest(row[k],v) for k,v in [('app_state',d['state']),('app_nonce',d['nonce']),('challenge',s256(d['code_verifier']))]):fail(400,'交换码过期、已使用或校验失败')
+            # The exchange must name the exact redirect the code was issued to.
+            if d['redirect_uri']!=(row['redirect_uri'] or s.origin+'/app/callback'):fail(400,'交换码过期、已使用或校验失败')
             if not valid_sid(s,row['sid'],row['username']):fail(401,'主站会话已退出')
             person=policy.identity(s,row['username'])
             if row['subject']!=person['uid']:fail(401,'账户身份已改变')
@@ -85,7 +119,7 @@ def install(app,s):
         password=cipher.decrypt(identity['password'].encode()).decode()
         m=app.state.matrix
         await m.provision(mxid,password,username)
-        auth=await m.login(mxid,password,device_id=resume['device'] if resume else None,device_name='YiChat Android')
+        auth=await m.login(mxid,password,device_id=resume['device'] if resume else None,device_name=PLATFORMS.get(row['platform'] or 'android','YiChat Android'))
         if resume and auth['device_id']!=resume['device']:fail(503,'服务器未恢复原设备，拒绝打开原密钥库')
         token=secrets.token_urlsafe(48);proof=proof or secrets.token_urlsafe(48)
         expires=time.time()+30*86400

@@ -78,6 +78,8 @@ def migrate(settings):
         c.executescript(direct.SCHEMA)
         c.executescript(push.SCHEMA)
         push.migrate(c)
+        from . import native_auth
+        native_auth.migrate(c)
         c.executescript(uploads.SCHEMA)
         c.execute("INSERT OR IGNORE INTO direct_pairs(first,second,room) SELECT min(owner,peer),max(owner,peer),room FROM rooms WHERE kind='direct' ORDER BY rowid")
         for row in c.execute("SELECT room FROM rooms WHERE kind='group'").fetchall():groups.register(c,row['room'],seeded=0)
