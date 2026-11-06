@@ -13,7 +13,7 @@ Windows / Linux 桌面版位于 [desktop/](desktop/README.md)，使用 Tauri 2 �
 - **服务端前置升级**：桌面登录使用 RFC 8252 回环回调 `http://127.0.0.1:<端口>/app/callback`，网关需先部署 [DESKTOP-LOOPBACK-LOGIN.md](source/yichat/docs/DESKTOP-LOOPBACK-LOGIN.md)（提交 `441c9d6`，补丁见 `delivery/desktop-loopback-20261106/`）。Android 请求格式不变。
 - 网关升级已于 2026-11-06 部署。
 - 桌面端钱包/付款回跳已于 2026-11-06 部署，见 [DESKTOP-WALLET-RETURN.md](source/yichat/docs/DESKTOP-WALLET-RETURN.md)（网关 + YIDT；服务端代码待回填到本仓库）。
-- 进度：①外壳与加载界面 ✅ ②托盘与通知 ✅ ③本地加密备份 ✅ ④打包与 CI。
+- 进度：①外壳与加载界面 ✅ ②托盘与通知 ✅ ③本地加密备份 ✅ ④打包与 CI ✅（Windows NSIS、Linux AppImage/.deb，带签名的自动更新，`.github/workflows/desktop.yml`）。首次发布前需配置更新签名密钥，见 [desktop/README.md](desktop/README.md)。
 
 ## 0.3.7 更新
 
