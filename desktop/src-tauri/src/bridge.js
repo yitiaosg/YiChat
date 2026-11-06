@@ -20,6 +20,24 @@
   };
   Object.defineProperty(window, 'YiChatApp', { value: port, writable: false, configurable: false, enumerable: false });
 
+  // Window hidden to the tray counts as a hidden page on every platform, so
+  // the shared UI notifies for the conversation that was last open.
+  const proto = Document.prototype;
+  const nativeHidden = Object.getOwnPropertyDescriptor(proto, 'hidden');
+  const nativeState = Object.getOwnPropertyDescriptor(proto, 'visibilityState');
+  let trayHidden = false;
+  if (nativeHidden && nativeState) {
+    Object.defineProperty(document, 'hidden', { configurable: false, get() { return trayHidden || nativeHidden.get.call(this); } });
+    Object.defineProperty(document, 'visibilityState', { configurable: false, get() { return trayHidden ? 'hidden' : nativeState.get.call(this); } });
+  }
+  window.addEventListener('yc-desktop:visibility', event => {
+    const hidden = event.detail === true;
+    if (hidden === trayHidden) return;
+    trayHidden = hidden;
+    document.dispatchEvent(new Event('visibilitychange'));
+    if (!hidden) window.dispatchEvent(new Event('focus'));
+  });
+
   // Desktop-only notice when no OS secure store is available (Linux without
   // Secret Service): nothing is persisted, so say why. Shared UI is untouched.
   const status = () => invoke('yichat_bridge', { message: JSON.stringify({ id: 'desktop-status', method: 'desktopStatus', args: {} }) })

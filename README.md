@@ -10,8 +10,9 @@ Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**�
 
 Windows / Linux 桌面版位于 [desktop/](desktop/README.md)，使用 Tauri 2 外壳，界面沿用共享 Web 前端和 `YiChatApp` 消息桥；Android 与共享前端不受影响。
 
-- **服务端前置升级（待部署）**：桌面登录使用 RFC 8252 回环回调 `http://127.0.0.1:<端口>/app/callback`，网关需先部署 [DESKTOP-LOOPBACK-LOGIN.md](source/yichat/docs/DESKTOP-LOOPBACK-LOGIN.md)（提交 `441c9d6`，补丁见 `delivery/desktop-loopback-20261106/`）。Android 请求格式不变。
-- 进度：①外壳与加载界面 ✅ ②托盘与通知 ③本地加密备份 ④打包与 CI。
+- **服务端前置升级**：桌面登录使用 RFC 8252 回环回调 `http://127.0.0.1:<端口>/app/callback`，网关需先部署 [DESKTOP-LOOPBACK-LOGIN.md](source/yichat/docs/DESKTOP-LOOPBACK-LOGIN.md)（提交 `441c9d6`，补丁见 `delivery/desktop-loopback-20261106/`）。Android 请求格式不变。
+- 网关升级已于 2026-11-06 部署。
+- 进度：①外壳与加载界面 ✅ ②托盘与通知 ✅ ③本地加密备份 ④打包与 CI。
 
 ## 0.3.7 更新
 

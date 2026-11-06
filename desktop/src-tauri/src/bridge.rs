@@ -4,8 +4,10 @@
 //! exposed to the webview (see capabilities/main.json).
 use crate::auth::{self, Account, Attempt, Loopback};
 use crate::config::{self, ORIGIN, PLATFORM};
+use crate::notify;
 use crate::proxy;
 use crate::secure_store::SecureStore;
+use crate::settings::Settings;
 use crate::shell::{self, ShellCache};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use http::{header, Request, Response, StatusCode};
@@ -15,6 +17,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
@@ -41,6 +44,21 @@ pub struct Desktop {
     login: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     active_room: Mutex<String>,
     downloads: Mutex<HashMap<String, Download>>,
+    pub settings: Settings,
+    tray: AtomicBool,
+    /// Conversation to open once the page is ready (notification click).
+    pending_room: Mutex<String>,
+    /// Content requests sent to the page: id -> (room, waiter).
+    fetches: Mutex<HashMap<String, tokio::sync::oneshot::Sender<Option<Vec<notify::Message>>>>>,
+    /// Latest notification generation per room; older results are dropped.
+    generations: Mutex<HashMap<String, u64>>,
+    serial: AtomicU64,
+}
+
+/// Quick reachability probe for the gateway (no request is sent).
+pub async fn online() -> bool {
+    tokio::time::timeout(Duration::from_millis(1500), tokio::net::TcpStream::connect("chat.yitiao.org:443"))
+        .await.is_ok_and(|r| r.is_ok())
 }
 
 impl Desktop {
@@ -56,11 +74,14 @@ impl Desktop {
         let _ = std::fs::remove_dir_all(&downloads_dir); // abandoned temporary downloads only
         std::fs::create_dir_all(&downloads_dir)?;
         let account = store.get("session").and_then(|s| serde_json::from_str(&s).ok());
+        let settings = Settings::load(app.path().app_config_dir()?.join("settings.json"));
         Ok(Self {
             shell: ShellCache::new(cache.join("web-shell"), http.clone()),
             app, store, http, downloads_dir,
             account: Mutex::new(account), login: Mutex::default(),
             active_room: Mutex::default(), downloads: Mutex::default(),
+            settings, tray: AtomicBool::new(false), pending_room: Mutex::default(),
+            fetches: Mutex::default(), generations: Mutex::default(), serial: AtomicU64::new(0),
         })
     }
 
@@ -143,20 +164,60 @@ impl Desktop {
             "login" => { self.start_login(!args.get("newDevice").and_then(Value::as_bool).unwrap_or(false)); Ok(Value::Null) }
             "lock" => { self.lock(); Ok(Value::Null) }
             "logout" => Ok(json!({ "pending": self.logout().await })),
-            // Phase 2 adds native notifications; until then the UI hides them.
-            "notificationStatus" => Ok(json!({ "enabled": false, "permitted": false, "background_supported": false })),
+            "notificationStatus" => Ok(json!({
+                "enabled": self.settings.get().notifications, "permitted": notify::available(), "background_supported": true,
+            })),
+            "configureNotifications" => {
+                let enabled = args.get("enabled").and_then(Value::as_bool).unwrap_or(false);
+                self.settings.update(|v| v.notifications = enabled);
+                if !enabled { notify::cancel(None); }
+                Ok(Value::Null)
+            }
+            "backgroundSettings" => {
+                self.notice_info(if self.tray_available() {
+                    "关闭窗口后，YiChat 会在系统托盘中保持连接并接收新消息。可在托盘菜单中设置“开机时启动”和“通知显示消息预览”，或选择“退出 YiChat”完全退出。"
+                } else {
+                    "当前桌面环境没有可用的系统托盘，关闭窗口会退出 YiChat，退出后不再接收新消息。"
+                });
+                Ok(Value::Null)
+            }
+            "notificationSettings" => { open_notification_settings(); Ok(Value::Null) }
+            "notifyRoom" => { self.notify_room(args, true); Ok(Value::Null) }
+            "notificationResult" => {
+                let id = s("id");
+                let messages = if args.get("ok").and_then(Value::as_bool) == Some(true) {
+                    args.get("messages").cloned().and_then(|m| serde_json::from_value::<Vec<notify::Message>>(m).ok())
+                } else { None };
+                if let Some(waiter) = self.fetches.lock().unwrap().remove(&id) { let _ = waiter.send(messages); }
+                Ok(Value::Null)
+            }
+            "cancelNotification" => {
+                let room = s("room");
+                if notify::valid_room(&room) { self.generations.lock().unwrap().remove(&room); notify::cancel(Some(&room)); }
+                Ok(Value::Null)
+            }
             "notificationActiveRoom" => {
                 let room = s("room");
                 if !(room.is_empty() || (room.starts_with('!') && room.len() <= 255)) { return fail("会话无效"); }
                 *self.active_room.lock().unwrap() = room; Ok(Value::Null)
             }
-            "notificationNames" | "cancelNotification" => Ok(Value::Null),
-            "pendingNotification" => Ok(json!({ "room": "" })),
+            "notificationNames" => Ok(Value::Null),
+            "pendingNotification" => Ok(json!({ "room": std::mem::take(&mut *self.pending_room.lock().unwrap()) })),
             "saveStart" => self.save_start(&s("name"), args.get("bytes").and_then(Value::as_i64).unwrap_or(-1)),
             "saveChunk" => self.save_chunk(&s("transfer"), &s("data")),
             "saveCancel" => { if let Some(d) = self.downloads.lock().unwrap().remove(&s("transfer")) { let _ = std::fs::remove_file(d.file); } Ok(Value::Null) }
             "saveFinish" => self.save_finish(&s("transfer")).await,
             // Debug builds only: feature probe used by the local smoke test.
+            // Debug builds only: drive the notification pipeline without a session.
+            #[cfg(debug_assertions)]
+            "debugNotify" if std::env::var_os("YICHAT_DESKTOP_PROBE").is_some() => { self.notify_room(args, false); Ok(Value::Null) }
+            #[cfg(debug_assertions)]
+            "debugClose" if std::env::var_os("YICHAT_DESKTOP_PROBE").is_some() => {
+                let w = self.app.get_webview_window(config::MAIN_WINDOW).ok_or(Failure("no window".into()))?;
+                w.close()?;
+                tokio::time::sleep(Duration::from_millis(800)).await;
+                Ok(json!({ "tray": self.tray_available(), "visibleAfterClose": w.is_visible().unwrap_or(true) }))
+            }
             #[cfg(debug_assertions)]
             "debugProbe" if std::env::var_os("YICHAT_DESKTOP_PROBE").is_some() => {
                 eprintln!("YICHAT_PROBE {}", Value::Object(args.clone()));
@@ -167,13 +228,12 @@ impl Desktop {
     }
 
     async fn session(&self) -> Value {
-        let online = tokio::time::timeout(Duration::from_millis(1500), tokio::net::TcpStream::connect("chat.yitiao.org:443"))
-            .await.is_ok_and(|r| r.is_ok());
+        let online = online().await;
         if online { self.complete_pending_logout().await; }
         let account = self.account.lock().unwrap().clone();
         json!({
             "online": online, "version": env!("CARGO_PKG_VERSION"), "bridge": 1, "platform": PLATFORM,
-            "capabilities": { "notifications": false, "backgroundNotifications": false },
+            "capabilities": { "notifications": true, "backgroundNotifications": true },
             "pendingLogout": self.store.get("pending-logout").is_some(),
             "persistent": self.store.persistent(),
             "session": account.map(|a| json!({
@@ -210,6 +270,11 @@ impl Desktop {
     fn lock(&self) {
         self.store.delete("session");
         *self.account.lock().unwrap() = None;
+        // Nothing from the previous session may surface afterwards.
+        self.fetches.lock().unwrap().clear();
+        self.generations.lock().unwrap().clear();
+        self.pending_room.lock().unwrap().clear();
+        notify::cancel(None);
     }
 
     /// Lock locally first, then revoke on the server; retry later if offline.
@@ -236,11 +301,79 @@ impl Desktop {
         }
     }
 
-    pub fn notice(&self, message: &str) {
+    pub fn tray_available(&self) -> bool { self.tray.load(Ordering::Relaxed) }
+    pub fn set_tray(&self, available: bool) { self.tray.store(available, Ordering::Relaxed) }
+
+    fn eval(&self, script: &str) {
+        if let Some(w) = self.app.get_webview_window(config::MAIN_WINDOW) { let _ = w.eval(script); }
+    }
+
+    /// Ask the SDK to retry its sync loop right away (network back / resume).
+    pub fn nudge_sync(&self) { self.eval("window.dispatchEvent(new Event('yc:notification-sync'))"); }
+
+    /// Bring the window forward and open a conversation (notification click).
+    pub fn open_room(&self, room: &str) {
+        if !notify::valid_room(room) { return; }
+        *self.pending_room.lock().unwrap() = room.to_string();
+        crate::tray::show_main(&self.app);
+        self.eval(&format!("window.dispatchEvent(new CustomEvent('yc:open-room',{{detail:{}}}))", Value::from(room)));
+    }
+
+    /// From the shared UI's live timeline (it already skipped muted/archived/
+    /// read-only rooms and the visible conversation).
+    fn notify_room(self: &Arc<Self>, args: &Map<String, Value>, require_session: bool) {
+        let s = |k: &str| args.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+        let (room, event, kind) = (s("room"), s("event"), s("kind"));
+        let settings = self.settings.get();
+        if !settings.notifications || (require_session && self.account.lock().unwrap().is_none()) { return; }
+        if !notify::valid_room(&room) || !notify::valid_event(&event) || !matches!(kind.as_str(), "private" | "group" | "") { return; }
+        let kind = if kind == "group" { "group" } else { "private" }.to_string();
+        // Native foreground check, as on Android: never for the conversation in front of the user.
+        if let Some(w) = self.app.get_webview_window(config::MAIN_WINDOW) {
+            let front = w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false) && !w.is_minimized().unwrap_or(false);
+            if front && *self.active_room.lock().unwrap() == room { return; }
+        }
+        let generation = self.serial.fetch_add(1, Ordering::Relaxed) + 1;
+        self.generations.lock().unwrap().insert(room.clone(), generation);
+        let me = self.clone();
+        let click = { let me = me.clone(); let room = room.clone(); move || { let app = me.app.clone(); let handle = app.clone(); let _ = app.run_on_main_thread(move || {
+            if let Some(d) = handle.try_state::<Arc<Desktop>>() { d.open_room(&room); }
+        }); } };
+        if !settings.preview {
+            notify::show(&room, notify::GENERIC_TITLE, notify::GENERIC_BODY, click);
+            return;
+        }
+        let label = notify::clean(&s("label"), 80);
+        let id = format!("n{generation}");
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.fetches.lock().unwrap().insert(id.clone(), tx);
+        // The page verifies membership/unread/redaction and returns plain message text.
+        let request = json!({ "id": id, "room": room, "kind": kind, "event": event });
+        self.eval(&format!("window.dispatchEvent(new CustomEvent('yc:notification-fetch',{{detail:{request}}}))"));
+        tauri::async_runtime::spawn(async move {
+            let messages = tokio::time::timeout(Duration::from_secs(12), rx).await.ok().and_then(Result::ok).flatten();
+            me.fetches.lock().unwrap().remove(&id);
+            if me.generations.lock().unwrap().get(&room) != Some(&generation) { return; } // superseded, read or locked
+            if !me.settings.get().notifications { return; }
+            let title = if label.is_empty() { notify::GENERIC_TITLE.to_string() } else { label };
+            match messages.as_deref().and_then(|m| notify::preview_body(&kind, m)) {
+                Some(body) if me.settings.get().preview => notify::show(&room, &title, &body, click),
+                Some(_) => notify::show(&room, notify::GENERIC_TITLE, notify::GENERIC_BODY, click),
+                // Unread already cleared or content unavailable: Android keeps a placeholder.
+                None => notify::show(&room, &title, notify::GENERIC_BODY, click),
+            }
+        });
+    }
+
+    fn notice_info(&self, message: &str) { self.dialog(message, rfd::MessageLevel::Info) }
+
+    pub fn notice(&self, message: &str) { self.dialog(message, rfd::MessageLevel::Warning) }
+
+    fn dialog(&self, message: &str, level: rfd::MessageLevel) {
         let message = message.to_string();
         let parent = self.app.get_webview_window(config::MAIN_WINDOW);
         tauri::async_runtime::spawn(async move {
-            let mut dialog = rfd::AsyncMessageDialog::new().set_title("YiChat").set_description(message).set_level(rfd::MessageLevel::Warning);
+            let mut dialog = rfd::AsyncMessageDialog::new().set_title("YiChat").set_description(message).set_level(level);
             if let Some(w) = parent.as_ref() { dialog = dialog.set_parent(w); }
             dialog.show().await;
         });
@@ -286,6 +419,11 @@ impl Desktop {
         let _ = std::fs::remove_file(&d.file);
         result
     }
+}
+
+fn open_notification_settings() {
+    #[cfg(windows)]
+    { let _ = open::that_detached("ms-settings:notifications"); }
 }
 
 /// The only command callable from the page.

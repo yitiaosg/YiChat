@@ -16,6 +16,12 @@ pub const SCHEME: &str = "yichat";
 /// Keyring service name and window label.
 pub const SERVICE: &str = "org.yitiao.yichat.desktop";
 pub const MAIN_WINDOW: &str = "main";
+/// Windows AppUserModelID (toasts, taskbar grouping); equals the bundle identifier.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const AUMID: &str = SERVICE;
+/// OS URL scheme for toast activation: yichat-open://room?id=<room>.
+/// Distinct from SCHEME, which only serves the webview.
+pub const OPEN_SCHEME: &str = "yichat-open";
 
 #[cfg(target_os = "windows")]
 pub const PLATFORM: &str = "windows";
