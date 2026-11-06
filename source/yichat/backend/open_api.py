@@ -9,6 +9,10 @@ Limits (shared by REST, uploads, downloads and WebSocket): 5 requests per
 rolling second per account; at most 3 keys and 3 concurrent WebSocket
 subscriptions per account. There is no per-IP limit.
 
+Permissions: each key is either "read" (default) or "read_write", chosen
+when it is created and changeable later from the Web version. Only
+read_write keys may send; everything else is reading.
+
 Sending: each key gets its own Matrix device ("YiChat API · <name>"), created
 on first use and removed when the key is deleted. Every message passes the
 same gateway checks as the apps (membership, send policy, attachment
@@ -59,12 +63,16 @@ MEDIA={'m.image':('image','图片'),'m.file':('file','文件'),'m.audio':('audio
 SHARES={'card':'卡片','transaction':'YIDT 交易','doudizhu':'斗地主房间','doudizhu_record':'斗地主对局记录','game':'游戏记录'}
 GIFT=re.compile(r'https://chat\.yitiao\.org/gifts/[a-f0-9]{32}')
 NOT_MEMBER={'code':'YICHAT_NOT_MEMBER','error':'你当前不是此会话的成员'}
+SCOPES=('read','read_write')
+READ_ONLY={'code':'YICHAT_API_KEY_READ_ONLY','error':'此 API Key 只有读取权限；请在网页版的开发者 API 设置中改为“读写”'}
 
 
 def migrate(c):
     columns={r[1] for r in c.execute('PRAGMA table_info(api_keys)')}
     for column in ('device','upstream'):
         if column not in columns:c.execute(f'ALTER TABLE api_keys ADD COLUMN {column} TEXT')
+    # Keys created before permissions existed were read-only by design.
+    if 'scope' not in columns:c.execute("ALTER TABLE api_keys ADD COLUMN scope TEXT NOT NULL DEFAULT 'read'")
     c.executescript(api_grants.SCHEMA)
 STREAM_TYPES=MESSAGE_TYPES+('m.room.redaction',)
 SCOPE_ERROR={'code':'YICHAT_WEB_ONLY','error':'API Key 仅可在 YiChat 网页版中申请、查看和删除'}
@@ -85,7 +93,7 @@ def owner(s,token):
     with connect(s.db) as c:identity=c.execute('SELECT mxid FROM identities WHERE subject=?',(row['subject'],)).fetchone()
     if not identity:raise key_error('API Key 所属账户尚未开通 YiChat')
     return {'key_id':row['id'],'key_name':row['name'],'subject':row['subject'],'username':person['username'],'mxid':identity['mxid'],
-            'last_used':row['last_used'],'device':row['device'],'upstream':row['upstream']}
+            'last_used':row['last_used'],'device':row['device'],'upstream':row['upstream'],'scope':row['scope']}
 
 
 def touch(s,who):
@@ -229,7 +237,7 @@ def install(app,s):
         return who
 
     def listing(c,subject):
-        return [{'id':r['id'],'name':r['name'],'prefix':r['prefix'],'created':r['created'],'last_used':r['last_used']}
+        return [{'id':r['id'],'name':r['name'],'prefix':r['prefix'],'created':r['created'],'last_used':r['last_used'],'scope':r['scope']}
                 for r in c.execute('SELECT * FROM api_keys WHERE subject=? ORDER BY created',(subject,))]
 
     @app.get('/api/developer/keys')
@@ -244,14 +252,29 @@ def install(app,s):
         try:data=await request.json()
         except ValueError:fail(400,'JSON 无效')
         name=data.get('name') if isinstance(data,dict) else None
-        if not isinstance(data,dict) or set(data)-{'name'} or not isinstance(name,str) or not NAME.fullmatch(name.strip()):fail(400,'名称需为 1～40 个字符')
+        if not isinstance(data,dict) or set(data)-{'name','scope'} or not isinstance(name,str) or not NAME.fullmatch(name.strip()):fail(400,'名称需为 1～40 个字符')
+        scope=data.get('scope','read')
+        if scope not in SCOPES:fail(400,'权限只能是 read（读）或 read_write（读写）')
         token='yck_'+secrets.token_urlsafe(32);kid=secrets.token_hex(8);now=time.time()
         with transaction(s.db) as c:
             if c.execute('SELECT count(*) FROM api_keys WHERE subject=?',(who['subject'],)).fetchone()[0]>=MAX_KEYS:
                 fail(409,{'code':'YICHAT_API_KEY_LIMIT','error':'每个账户最多 3 个 API Key，请先删除不再使用的 Key'})
-            c.execute('INSERT INTO api_keys(id,subject,name,key_hash,prefix,created) VALUES(?,?,?,?,?,?)',(kid,who['subject'],name.strip(),digest(token),token[:12],now))
+            c.execute('INSERT INTO api_keys(id,subject,name,key_hash,prefix,created,scope) VALUES(?,?,?,?,?,?,?)',(kid,who['subject'],name.strip(),digest(token),token[:12],now,scope))
         # The only response that ever contains the key.
-        return {'id':kid,'name':name.strip(),'prefix':token[:12],'created':now,'key':token,'docs_url':s.api_docs_url}
+        return {'id':kid,'name':name.strip(),'prefix':token[:12],'created':now,'scope':scope,'key':token,'docs_url':s.api_docs_url}
+
+    @app.patch('/api/developer/keys/{kid}')
+    async def update_key(request:Request,kid:str):
+        who=web_session(request)
+        try:data=await request.json()
+        except ValueError:fail(400,'JSON 无效')
+        if not isinstance(data,dict) or set(data)!={'scope'} or data['scope'] not in SCOPES:fail(400,'只能修改权限：read（读）或 read_write（读写）')
+        with transaction(s.db) as c:
+            if not c.execute('UPDATE api_keys SET scope=? WHERE id=? AND subject=?',(data['scope'],kid,who['subject'])).rowcount:fail(404,'API Key 不存在')
+            # Downgrading takes effect at once, including grants already issued.
+            if data['scope']=='read':api_grants.revoke_key(c,kid)
+            row=c.execute('SELECT * FROM api_keys WHERE id=?',(kid,)).fetchone()
+        return {'id':row['id'],'name':row['name'],'prefix':row['prefix'],'created':row['created'],'last_used':row['last_used'],'scope':row['scope']}
 
     @app.delete('/api/developer/keys/{kid}')
     async def delete_key(request:Request,kid:str):
@@ -291,6 +314,7 @@ def install(app,s):
             return who|{'device':auth['device_id'],'upstream':upstream}
 
     def writable(who,room):
+        if who.get('scope')!='read_write':fail(403,READ_ONLY)
         if not ROOM.fullmatch(room):fail(400,'会话 ID 无效')
         if room not in current_rooms(s,who['mxid']):fail(403,NOT_MEMBER)
         info=policy.room(s,room)

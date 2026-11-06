@@ -107,6 +107,7 @@ sudo git -C /root/yitiao show 4951b6c | sudo git -C /root/yitiao apply --cached 
 | 下载附件 | `GET /open/v1/files/{id}`：每次请求下载一个文件，访问规则与网页版下载相同（上传者，或作为成员看到过引用该文件的消息），到期返回 410。 |
 | 发送 | `POST /open/v1/conversations/{id}/messages`（文字，最多 2000 字符）和 `POST /open/v1/conversations/{id}/files`（图片或文件，原始字节，最大 100 MB，一个请求完成上传和发送）。支持 `txn_id` 幂等重试。私聊和群聊都可以；旧版加密会话不可以。 |
 | 限速 | 读取、发送、上传、下载、WebSocket 连接共用同一个账户限额（5 次/秒）。上传另外与网页版和 App 共用账户的上传额度（单文件 100 MB、每天 1 GiB、速度和并发限制）。 |
+| Key 权限 | 每个 Key 为“只读”（默认）或“读写”，在网页版创建时选择、之后随时修改（`PATCH /api/developer/keys/{id}`，仅网页会话），立即生效。只有读写 Key 能发送，只读 Key 调用发送接口返回 `403 YICHAT_API_KEY_READ_ONLY` 且不上传数据。改回只读时作废未使用的发送授权；Synapse 模块的授权检查也要求 Key 仍为读写。迁移时已有的 Key 一律为只读（它们创建时 API 本来就是只读的）。 |
 | WebSocket | `?conversation=<会话ID>` 只订阅一个会话（私聊或群聊）；不是成员时以 `4403` 关闭。并发限制从“每个 Key 1 个”改为“**每个账户 3 个**”，第 4 个以 `4409 YICHAT_STREAM_LIMIT` 关闭。 |
 
 ### 发送的实现与安全模型变化
@@ -125,8 +126,8 @@ sudo git -C /root/yitiao show 4951b6c | sudo git -C /root/yitiao apply --cached 
 | `backend/synapse_module.py` | 无主站会话时接受匹配的一次性授权 |
 | `backend/app.py` | 上传、下载核心提取为 `store_upload`、`serve_file`；API 上传路径加入上传大小例外 |
 | `backend/limits.py` | API 上传路径使用文件大小上限 |
-| `backend/db.py` | 调用 `open_api.migrate()`：`api_keys` 增加 `device`、`upstream` 两列，新增 `api_send_grants` 表 |
-| `client/src/web-tools.tsx` | API Key 说明文字 |
+| `backend/db.py` | 调用 `open_api.migrate()`：`api_keys` 增加 `device`、`upstream`、`scope`（默认 `read`）三列，新增 `api_send_grants` 表 |
+| `client/src/web-tools.tsx` | 创建 Key 时选择权限、在列表中修改权限（改为读写需确认）、说明文字 |
 | `tests/test_open_api.py` | 新增发送、下载、文字转换、授权、订阅限制等测试 |
 | `docs/OPEN-API.md` | 接口文档 |
 
@@ -137,7 +138,7 @@ sudo git -C /root/yitiao show 4951b6c | sudo git -C /root/yitiao apply --cached 
 1. 本次修改了 Synapse 模块，**需要同时重启 `yichat-synapse` 和 `yichat`**（先 Synapse，再网关）。迁移在网关启动时自动执行。
 2. 不需要新依赖，不需要修改 Caddy。
 3. 只读验证：`curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Authorization: Bearer yck_invalid' https://chat.yitiao.org/open/v1/conversations/x/messages` 应返回 `401`（不带 `Authorization` 也不带 `Origin` 的 POST 会先被来源检查拒绝，返回 `403`）；`curl … https://chat.yitiao.org/open/v1/files/0` 应返回 `401`。
-4. 手动验证（自己的账户）：用 API 发送文字、图片、文件到一个私聊和一个群聊，在 App 中确认收到、图片能显示、文件能下载；查询消息时转账和红包显示为文字；在网页版删除 Key 后，设备列表中的“YiChat API”设备消失，再用该 Key 发送返回 401。
+4. 手动验证（自己的账户）：先用只读 Key 调用发送接口，确认返回 403；在网页版把它改为读写后再用 API 发送文字、图片、文件到一个私聊和一个群聊，在 App 中确认收到、图片能显示、文件能下载；查询消息时转账和红包显示为文字；在网页版删除 Key 后，设备列表中的“YiChat API”设备消失，再用该 Key 发送返回 401。
 
 ### 回退
 

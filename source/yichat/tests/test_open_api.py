@@ -25,8 +25,8 @@ def unthrottle(s):
     with connect(s.db) as db:db.execute('DELETE FROM request_hits')
 
 
-def new_key(c,name='bot'):
-    r=c.post('/api/developer/keys',json={'name':name});assert r.status_code==200,r.text
+def new_key(c,name='bot',scope=None):
+    r=c.post('/api/developer/keys',json={'name':name}|({'scope':scope} if scope else {}));assert r.status_code==200,r.text
     return r.json()
 
 
@@ -334,7 +334,7 @@ def test_url_messages_become_text_and_media_show_names(gateway):
         event('$plain','!direct',77,now+7,a,{'msgtype':'m.text','body':'普通文字 https://example.com/x'}),
         event('$packet','!group',78,now+8,a,{'msgtype':'m.text','body':url(t2),'org.yitiao.business':{'kind':'order','id':t2}}),
     ])
-    key=new_key(c)['key'];unthrottle(s)
+    key=new_key(c,scope='read_write')['key'];unthrottle(s)
     got={}
     for room in ('!direct','!group'):
         r=api(app,key).get('/open/v1/conversations/'+room+'/messages',params={'start':now-1000,'end':now+60000})
@@ -388,7 +388,7 @@ def sending(gateway):
 
 def test_send_text_uses_key_device_and_one_time_grant(gateway):
     c,app,s,fake=sending(gateway)
-    created=new_key(c);key=created['key'];unthrottle(s)
+    created=new_key(c,scope='read_write');key=created['key'];unthrottle(s)
     r=api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'你好','txn_id':'t-1'})
     assert r.status_code==200,r.text
     assert r.json()=={'event_id':'$sent1','conversation_id':'!direct','txn_id':'t-1'}
@@ -414,7 +414,7 @@ def test_send_text_uses_key_device_and_one_time_grant(gateway):
 ])
 def test_send_text_validation(gateway,body,headers,code):
     c,app,s,fake=sending(gateway)
-    key=new_key(c)['key'];unthrottle(s)
+    key=new_key(c,scope='read_write')['key'];unthrottle(s)
     client=api(app,key)
     r=client.post('/open/v1/conversations/!direct/messages',content='ok',headers=headers) if body is None else client.post('/open/v1/conversations/!direct/messages',json=body)
     assert r.status_code==code,r.text
@@ -423,7 +423,7 @@ def test_send_text_validation(gateway,body,headers,code):
 
 def test_send_requires_membership_and_plain_room(gateway):
     c,app,s,fake=sending(gateway)
-    key=new_key(other(app,s,'bob-token'))['key'];unthrottle(s)
+    key=new_key(other(app,s,'bob-token'),scope='read_write')['key'];unthrottle(s)
     r=api(app,key).post('/open/v1/conversations/!group/messages',json={'text':'not a member'})
     assert r.status_code==403 and r.json()['code']=='YICHAT_NOT_MEMBER'
     with connect(s.db) as db:db.execute("UPDATE room_modes SET encryption='legacy_encrypted' WHERE room='!direct'")
@@ -435,7 +435,7 @@ def test_send_requires_membership_and_plain_room(gateway):
 
 def test_send_rejection_is_reported_and_dead_device_is_reset(gateway):
     c,app,s,fake=sending(gateway)
-    key=new_key(c)['key'];unthrottle(s)
+    key=new_key(c,scope='read_write')['key'];unthrottle(s)
     fake.reject=(403,{'errcode':'M_FORBIDDEN','error':'对方已拒绝私聊'})
     r=api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'hi'})
     assert r.status_code==403 and r.json()=={'errcode':'M_FORBIDDEN','code':'YICHAT_SEND_REJECTED','error':'对方已拒绝私聊'}
@@ -453,7 +453,7 @@ PNG=b'\x89PNG\r\n\x1a\n'+b'\x00'*32
 
 def test_send_image_and_file_then_download_once_per_request(gateway):
     c,app,s,fake=sending(gateway)
-    key=new_key(c)['key'];unthrottle(s)
+    key=new_key(c,scope='read_write')['key'];unthrottle(s)
     r=api(app,key).post('/open/v1/conversations/!direct/files',params={'name':'cat.png'},content=PNG,headers={'Content-Type':'image/png'})
     assert r.status_code==200,r.text
     image=r.json();fid=image['attachment']['id']
@@ -485,7 +485,7 @@ def test_send_image_and_file_then_download_once_per_request(gateway):
 ])
 def test_send_file_validation(gateway,params,content,headers,code):
     c,app,s,fake=sending(gateway)
-    key=new_key(c)['key'];unthrottle(s)
+    key=new_key(c,scope='read_write')['key'];unthrottle(s)
     r=api(app,key).post('/open/v1/conversations/!direct/files',params=params,content=content,headers=headers)
     assert r.status_code==code,r.text
     assert not fake.sent
@@ -493,7 +493,7 @@ def test_send_file_validation(gateway,params,content,headers,code):
 
 def test_upload_download_and_send_share_the_account_limit(gateway):
     c,app,s,fake=sending(gateway)
-    key=new_key(c)['key'];unthrottle(s)
+    key=new_key(c,scope='read_write')['key'];unthrottle(s)
     client=api(app,key)
     fid=client.post('/open/v1/conversations/!direct/files',params={'name':'a.txt'},content=b'a',headers={'Content-Type':'text/plain'}).json()['attachment']['id']
     assert client.post('/open/v1/conversations/!direct/messages',json={'text':'1'}).status_code==200
@@ -507,7 +507,7 @@ def test_upload_download_and_send_share_the_account_limit(gateway):
 def test_grant_requires_live_key_and_expires(gateway):
     c,app,s=gateway
     from backend import api_grants
-    created=new_key(c);a=mxid(s,'alice');content={'msgtype':'m.text','body':'x'}
+    created=new_key(c,scope='read_write');a=mxid(s,'alice');content={'msgtype':'m.text','body':'x'}
     with connect(s.db) as db:kid=db.execute('SELECT id FROM api_keys').fetchone()[0]
     api_grants.create(s,kid,'!direct',a,'m.room.message',content)
     assert api_grants.granted(s,'!direct',a,'m.room.message',content)
@@ -519,3 +519,74 @@ def test_grant_requires_live_key_and_expires(gateway):
     api_grants.create(s,kid,'!direct',a,'m.room.message',content)
     assert c.delete('/api/developer/keys/'+created['id']).status_code==200
     assert not api_grants.granted(s,'!direct',a,'m.room.message',content)
+
+
+
+# ---------- key permissions: read / read_write ----------
+
+def test_keys_default_to_read_and_list_their_scope(gateway):
+    c,app,s=gateway
+    created=new_key(c,'reader')
+    assert created['scope']=='read'
+    assert new_key(c,'writer','read_write')['scope']=='read_write'
+    assert [k['scope'] for k in c.get('/api/developer/keys').json()['keys']]==['read','read_write']
+    r=c.post('/api/developer/keys',json={'name':'bad','scope':'admin'})
+    assert r.status_code==400
+
+
+def test_read_key_cannot_send_or_upload(gateway):
+    c,app,s,fake=sending(gateway)
+    key=new_key(c)['key'];unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'hi'})
+    assert r.status_code==403 and r.json()['code']=='YICHAT_API_KEY_READ_ONLY'
+    unthrottle(s)
+    with connect(s.db) as db:files=db.execute('SELECT count(*) FROM files').fetchone()[0]
+    r=api(app,key).post('/open/v1/conversations/!direct/files',params={'name':'a.txt'},content=b'a',headers={'Content-Type':'text/plain'})
+    assert r.status_code==403 and r.json()['code']=='YICHAT_API_KEY_READ_ONLY'
+    with connect(s.db) as db:assert db.execute('SELECT count(*) FROM files').fetchone()[0]==files
+    assert not fake.sent and fake.logins==0
+    # Reading still works.
+    unthrottle(s)
+    assert api(app,key).get('/open/v1/conversations').status_code==200
+
+
+def test_scope_change_takes_effect_immediately(gateway):
+    c,app,s,fake=sending(gateway)
+    from backend import api_grants
+    created=new_key(c);key=created['key'];kid=created['id'];unthrottle(s)
+    r=c.patch('/api/developer/keys/'+kid,json={'scope':'read_write'})
+    assert r.status_code==200 and r.json()['scope']=='read_write' and 'key' not in r.json()
+    assert api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'now allowed'}).status_code==200
+    # An outstanding (unused) grant stops working as soon as the key is downgraded.
+    a=mxid(s,'alice');content={'msgtype':'m.text','body':'pending'}
+    api_grants.create(s,kid,'!direct',a,'m.room.message',content)
+    assert api_grants.granted(s,'!direct',a,'m.room.message',content)
+    assert c.patch('/api/developer/keys/'+kid,json={'scope':'read'}).json()['scope']=='read'
+    assert not api_grants.granted(s,'!direct',a,'m.room.message',content)
+    unthrottle(s)
+    r=api(app,key).post('/open/v1/conversations/!direct/messages',json={'text':'blocked again'})
+    assert r.status_code==403 and r.json()['code']=='YICHAT_API_KEY_READ_ONLY'
+    assert len(fake.sent)==1
+
+
+def test_scope_change_is_web_only_and_validated(gateway):
+    c,app,s=gateway
+    created=new_key(c);kid=created['id']
+    for body in ({'scope':'admin'},{'scope':'read','name':'x'},{},{'name':'renamed'}):
+        assert c.patch('/api/developer/keys/'+kid,json=body).status_code==400,body
+    # Another account cannot change it, an API key cannot change it, and an App session cannot.
+    assert other(app,s,'bob-token').patch('/api/developer/keys/'+kid,json={'scope':'read_write'}).status_code==404
+    assert api(app,created['key']).patch('/api/developer/keys/'+kid,json={'scope':'read_write'}).status_code in (401,403)
+    app_style=TestClient(app);app_style.headers['Authorization']='Bearer session-token'
+    r=app_style.patch('/api/developer/keys/'+kid,json={'scope':'read_write'})
+    assert r.status_code==403 and r.json()['code']=='YICHAT_WEB_ONLY'
+    assert c.get('/api/developer/keys').json()['keys'][0]['scope']=='read'
+
+
+def test_existing_keys_migrate_to_read(tmp_path):
+    import sqlite3
+    db=sqlite3.connect(tmp_path/'old.db')
+    db.execute('CREATE TABLE api_keys(id TEXT PRIMARY KEY,subject TEXT NOT NULL,name TEXT NOT NULL,key_hash TEXT UNIQUE NOT NULL,prefix TEXT NOT NULL,created REAL NOT NULL,last_used REAL)')
+    db.execute("INSERT INTO api_keys VALUES('k','sub','old','h','yck_x',1,NULL)")
+    open_api.migrate(db);open_api.migrate(db)
+    assert db.execute('SELECT scope,device,upstream FROM api_keys').fetchone()==('read',None,None)

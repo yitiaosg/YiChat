@@ -115,24 +115,28 @@ export function WebNotifications({close}:{close:()=>void}){
 
 // ---------- Developer API keys ----------
 
-type Key={id:string;name:string;prefix:string;created:number;last_used:number|null};
+type Scope='read'|'read_write';
+type Key={id:string;name:string;prefix:string;created:number;last_used:number|null;scope:Scope};
+const SCOPE_LABEL:Record<Scope,string>={read:'只读',read_write:'读写（可发送消息）'};
 const when=(t:number|null)=>t?new Date(t*1000).toLocaleString():'从未使用';
 
 export function ApiKeys({close}:{close:()=>void}){
- const [keys,setKeys]=useState<Key[]>([]),[limit,setLimit]=useState(3),[docs,setDocs]=useState(''),[name,setName]=useState(''),[created,setCreated]=useState<any>(),[copied,setCopied]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [keys,setKeys]=useState<Key[]>([]),[limit,setLimit]=useState(3),[docs,setDocs]=useState(''),[name,setName]=useState(''),[scope,setScope]=useState<Scope>('read'),[created,setCreated]=useState<any>(),[copied,setCopied]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  async function load(){const r=await requests.api<any>('/api/developer/keys');setKeys(r.keys);setLimit(r.limit);setDocs(r.docs_url)}
  useEffect(()=>{void load().catch(e=>setError(e.message))},[]);
  async function run(task:()=>Promise<void>){setBusy(true);setError('');try{await task();await load()}catch(e:any){setError(e.message)}finally{setBusy(false)}}
- const create=()=>run(async()=>{const r=await requests.api('/api/developer/keys',{name:name.trim()});setCreated(r);setCopied(false);setName('')});
+ const create=()=>run(async()=>{const r=await requests.api('/api/developer/keys',{name:name.trim(),scope});setCreated(r);setCopied(false);setName('');setScope('read')});
+ const change=(k:Key,next:Scope)=>{if(next===k.scope)return;if(next==='read_write'&&!confirm(`允许 API Key “${k.name}”以你的名义发送消息、图片和文件？`))return;void run(async()=>{await requests.api('/api/developer/keys/'+path(k.id),{scope:next},'PATCH')})};
  const remove=(k:Key)=>{if(confirm(`删除 API Key “${k.name}”？使用它的程序将立即无法访问，已建立的 WebSocket 会在 10 秒内断开。`))void run(async()=>{await requests.api('/api/developer/keys/'+path(k.id),undefined,'DELETE')})};
  async function copy(){try{await navigator.clipboard.writeText(created.key);setCopied(true)}catch{setError('无法写入剪贴板，请手动选中复制')}}
  return <Modal title="开发者 API" close={close}>
-  <p class="small muted">API Key 可用于读取你的会话列表（含归档）和服务器保存的消息、下载图片和文件、向私聊和群聊发送文字、图片和文件，并通过 WebSocket 订阅新消息。Key 可以以你的名义发消息，请像密码一样保管。不能管理会话或操作资金。限速：同一账户 5 次/秒（读取、发送、上传、下载合计）；每个账户最多 {limit} 个 Key、3 个同时运行的订阅。只能在网页版申请和管理。</p>
+  <p class="small muted">API Key 可用于读取你的会话列表（含归档）和服务器保存的消息、下载图片和文件、向私聊和群聊发送文字、图片和文件，并通过 WebSocket 订阅新消息。每个 Key 可设为“只读”或“读写”，只有读写 Key 能以你的名义发消息，可随时修改。请像密码一样保管 Key。不能管理会话或操作资金。限速：同一账户 5 次/秒（读取、发送、上传、下载合计）；每个账户最多 {limit} 个 Key、3 个同时运行的订阅。只能在网页版申请和管理。</p>
   {docs&&<p><a href={docs} target="_blank" rel="noopener noreferrer">查看 API 文档（GitHub）</a></p>}
   {created&&<div class="notice" role="status"><p><strong>请立即复制并妥善保存。此 Key 只显示这一次，关闭后无法再次查看。</strong></p><p><code style="word-break:break-all;user-select:all">{created.key}</code></p><div class="actions"><button type="button" onClick={()=>void copy()}>{copied?'已复制':'复制'}</button><button type="button" onClick={()=>setCreated(undefined)}>我已保存</button></div></div>}
   <h3>我的 API Key（{keys.length}/{limit}）</h3>
-  {keys.length?keys.map(k=><div class="actions" key={k.id}><span><strong>{k.name}</strong> <code>{k.prefix}…</code><br/><small class="muted">创建于 {when(k.created)} · 最近使用 {when(k.last_used)}</small></span><button type="button" class="danger" disabled={busy} onClick={()=>remove(k)}>删除</button></div>):<p class="small muted">还没有 API Key。</p>}
+  {keys.length?keys.map(k=><div class="actions" key={k.id}><span><strong>{k.name}</strong> <code>{k.prefix}…</code><br/><small class="muted">创建于 {when(k.created)} · 最近使用 {when(k.last_used)}</small><br/><label class="small">权限 <select value={k.scope} disabled={busy} onChange={e=>change(k,e.currentTarget.value as Scope)}><option value="read">{SCOPE_LABEL.read}</option><option value="read_write">{SCOPE_LABEL.read_write}</option></select></label></span><button type="button" class="danger" disabled={busy} onClick={()=>remove(k)}>删除</button></div>):<p class="small muted">还没有 API Key。</p>}
   {keys.length<limit&&<><label>新 Key 名称<input value={name} maxLength={40} placeholder="例如：我的机器人" onInput={e=>setName(e.currentTarget.value)}/></label>
+  <label>权限<select value={scope} onChange={e=>setScope(e.currentTarget.value as Scope)}><option value="read">只读：查询会话、消息，下载附件，订阅新消息</option><option value="read_write">读写：另外可以发送文字、图片和文件</option></select></label>
   <button type="button" class="primary" disabled={busy||!name.trim()} onClick={()=>void create()}>创建 API Key</button></>}
   {error&&<ErrorText>{error}</ErrorText>}
  </Modal>;

@@ -42,7 +42,7 @@ API 与 YiChat 网页版、Android 版、桌面版的客户端逻辑完全独立
 ## 快速开始
 
 1. 在电脑或手机浏览器打开 <https://chat.yitiao.org> 并登录。
-2. 点击左下角头像，选择 **开发者 API**，输入名称后点击 **创建 API Key**。
+2. 点击左下角头像，选择 **开发者 API**，输入名称，选择权限（**只读**，或需要发送消息时选 **读写**），点击 **创建 API Key**。
 3. **立即复制 Key。** 它只显示这一次，关闭对话框后无法再次查看。
 4. 调用接口：
 
@@ -50,7 +50,7 @@ API 与 YiChat 网页版、Android 版、桌面版的客户端逻辑完全独立
 export YICHAT_KEY='yck_…'   # 你的 Key
 # 会话列表
 curl -H "Authorization: Bearer $YICHAT_KEY" https://chat.yitiao.org/open/v1/conversations
-# 向会话发送一句话（会话 ID 需要 URL 编码：! → %21，: → %3A）
+# 向会话发送一句话（需要“读写”权限的 Key；会话 ID 需要 URL 编码：! → %21，: → %3A）
 curl -H "Authorization: Bearer $YICHAT_KEY" -H 'Content-Type: application/json' \
   -d '{"text":"你好"}' \
   https://chat.yitiao.org/open/v1/conversations/%21AbCdEf123%3Achat.yitiao.org/messages
@@ -69,9 +69,9 @@ curl -H "Authorization: Bearer $YICHAT_KEY" -H 'Content-Type: application/json' 
 | 列表 | 列表中只显示名称、前 12 个字符（例如 `yck_AbCdEfGh…`）、创建时间和最近使用时间（约每分钟更新一次） |
 | 有效期 | 长期有效，直到你删除它。与网页登录状态无关：退出网页登录不影响 Key，**发送消息也不需要你同时在网页或 App 中登录** |
 | 失效 | 删除 Key、主站账户注销或不可用时，Key 立即失效；已建立的 WebSocket 会在 10 秒内收到 `closing` 并断开 |
-| 权限 | 读取：与你本人在 YiChat 中能看到的内容相同。发送：与你本人在 App 中发送消息的规则相同（见[发送规则](#发送规则)） |
+| 权限 | 每个 Key 二选一，创建时选择，之后可在网页版随时修改，**立即生效**：<br>**只读**（默认）：查询会话和消息、下载图片和文件、WebSocket 订阅；<br>**读写**：另外可以发送文字、图片和文件。<br>读取的范围与你本人在 YiChat 中能看到的内容相同；发送的规则与你本人在 App 中发送相同（见[发送规则](#发送规则)） |
 
-**Key 可以以你的名义发消息。** 请像保管密码一样保管它：不要提交到代码仓库，不要放在网页前端或 URL 中，不要发给他人。怀疑泄露时，立即在网页版中删除。
+**“读写”Key 可以以你的名义发消息。** 只需要读取时请使用“只读”Key。请像保管密码一样保管 Key：不要提交到代码仓库，不要放在网页前端或 URL 中，不要发给他人。怀疑泄露时，立即在网页版中删除。
 
 ---
 
@@ -129,6 +129,7 @@ Authorization: Bearer yck_…
 | 400 | `YICHAT_REQUEST_REJECTED` | 参数不合法（见 `error`），例如文字为空或超过 2000 个字符、文件名不合法、文件为空 |
 | 401 | `YICHAT_API_KEY_INVALID` | 缺少 Key、Key 格式错误、已删除，或所属账户不可用 |
 | 403 | `YICHAT_NOT_MEMBER` | 你当前不是该会话的成员 |
+| 403 | `YICHAT_API_KEY_READ_ONLY` | 这个 Key 只有读取权限，不能发送。请在网页版的开发者 API 设置中把它改为“读写” |
 | 403 | `YICHAT_LEGACY_ROOM` | 旧版加密会话已停用，不能发送 |
 | 403 等 | `YICHAT_SEND_REJECTED` | 服务器按会话规则拒绝了这条消息（例如被禁言、对方未开放私聊），HTTP 状态码和 `error` 来自服务器 |
 | 403 | `YICHAT_REQUEST_REJECTED` | 其他发送限制，例如对方已注销、群已解散，见 `error` |
@@ -358,6 +359,7 @@ curl -H "Authorization: Bearer $YICHAT_KEY" -H 'Content-Type: application/pdf' \
 
 API 发送的消息与你在 App 中发送的消息完全相同，接收方看到的就是你本人发的消息：
 
+- 需要**读写**权限的 Key；只读 Key 返回 `403 YICHAT_API_KEY_READ_ONLY`，不会上传任何数据。把 Key 改回只读后立即不能再发送。
 - 你必须当前是该会话的成员；私聊和群聊都可以发送。
 - 旧版加密会话（会话列表中 `encrypted: true`）已停用，不能发送。
 - 其他规则与 App 相同：例如在群里被禁言、群已解散、对方账户已注销、对方的隐私设置不允许时，都会被拒绝。
@@ -663,7 +665,7 @@ websocat -H "Authorization: Bearer $YICHAT_KEY" \
 
 ## 常见问题
 
-**能发送消息吗？** 可以。私聊和群聊都可以发送文字、图片和文件，见[发送](#发送)。不能撤回、编辑消息，也不能发起转账或红包。
+**能发送消息吗？** 可以，需要“读写”权限的 Key。私聊和群聊都可以发送文字、图片和文件，见[发送](#发送)。不能撤回、编辑消息，也不能发起转账或红包。
 
 **为什么转账、红包显示成 `[转账] 0.01 YIDT` 这样的文字？** 这些消息在 YiChat 中本质上是网址，服务器把它们转换成了容易处理的文字。详细信息在 `share` 字段中，原始内容在 `content` 中。
 
@@ -681,4 +683,6 @@ websocat -H "Authorization: Bearer $YICHAT_KEY" \
 
 **Key 丢了怎么办？** 无法找回。请在网页版中删除旧 Key，再创建一个新的。
 
-**在 App 中能申请 Key 吗？** 不能。API Key 只能在网页版申请和管理。
+**在 App 中能申请 Key 吗？** 不能。API Key 只能在网页版申请和管理，包括修改权限。
+
+**怎样修改 Key 的权限？** 在网页版点击左下角头像 → **开发者 API**，在 Key 下方的“权限”中选择“只读”或“读写”。改为读写时会要求确认。修改后立即生效，Key 本身不变，使用它的程序不需要更换 Key。
