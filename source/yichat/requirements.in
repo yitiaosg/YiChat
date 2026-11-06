@@ -1,5 +1,7 @@
 fastapi==0.136.3
 uvicorn==0.51.0
+# WebSocket transport for the developer API stream (/open/v1/stream)
+websockets==17.4
 httpx==0.28.1
 PyJWT[crypto]==2.13.0
 cryptography==46.0.5

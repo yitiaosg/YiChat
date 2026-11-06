@@ -30,9 +30,15 @@ class Settings:
     daily_bytes: int = int(os.getenv('YICHAT_DAILY_UPLOAD_BYTES', '1073741824'))
     packet_ttl: int = int(os.getenv('YICHAT_PACKET_TTL_SECONDS', '86400'))
     transfer_ttl: int = int(os.getenv('YICHAT_TRANSFER_TTL_SECONDS', '86400'))
+    # Web Push VAPID key (P-256 PEM). Created 0600 on first start if absent.
+    webpush_key: str = os.getenv('YICHAT_WEBPUSH_KEY', '')
+    github_repo: str = os.getenv('YICHAT_GITHUB_REPO', 'yitiaosg/YiChat')
+    api_docs_url: str = os.getenv('YICHAT_API_DOCS_URL', 'https://github.com/yitiaosg/YiChat/blob/claude/yichat-desktop-planning-sodnv1/source/yichat/docs/OPEN-API.md')
 
     def __post_init__(self):
         for name in ('root','site','archive_path'):setattr(self,name,Path(getattr(self,name)))
+        if not self.webpush_key:self.webpush_key=str(self.root/'webpush-vapid.pem')
+        if not __import__('re').fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',self.github_repo):raise ValueError('github_repo must be owner/name')
         for name in ('upload_rate','upload_concurrency','max_file','daily_bytes','packet_ttl','transfer_ttl'):
             if getattr(self,name)<=0: raise ValueError(name+' must be positive')
 

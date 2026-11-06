@@ -36,10 +36,19 @@ def create_app(settings=None):
         from .push import FCMSender
         app.state.push=FCMSender(s,app.state.http)
         push_job=asyncio.create_task(app.state.push.run())
+        from .webpush import WebPushSender
+        try:app.state.webpush=WebPushSender(s,app.state.http)
+        except Exception:
+            # Web Push is optional: never block the gateway (or Apps) on it.
+            log.warning('Web Push unavailable: VAPID key could not be loaded');app.state.webpush=None
+        webpush_job=asyncio.create_task(app.state.webpush.run()) if app.state.webpush else None
         job=asyncio.create_task(maintenance(app))
         yield
         push_job.cancel()
         with contextlib.suppress(asyncio.CancelledError): await push_job
+        if webpush_job:
+            webpush_job.cancel()
+            with contextlib.suppress(asyncio.CancelledError): await webpush_job
         job.cancel()
         with contextlib.suppress(asyncio.CancelledError): await job
         await app.state.http.aclose()
@@ -658,6 +667,12 @@ def create_app(settings=None):
     conversations.install(app,s,session)
     from . import push
     push.install(app,s,session)
+    # Web-only browser notifications, the developer API and download links.
+    # None of these change any existing route or App behaviour.
+    from . import webpush,open_api,downloads
+    webpush.install(app,s)
+    open_api.install(app,s)
+    downloads.install(app,s)
     group_avatars.install(app,s,session)
     from .record_audit import install as install_record_audit
     install_record_audit(app,s,session)

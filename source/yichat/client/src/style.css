@@ -46,3 +46,5 @@ html[data-app="android"] .message-body,html[data-app="android"] input,html[data-
 .content-bubble>.actions{padding:0 8px 8px}
 .content-bubble>.media-content .image-preview{background:transparent;border:0;padding:0}
 .content-bubble>.media-content .file-row{padding:8px 3px}
+.welcome-links{display:flex;gap:16px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.welcome-links a{display:inline-flex;gap:7px;align-items:center;font-size:11px;color:var(--muted)}
