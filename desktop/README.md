@@ -63,7 +63,7 @@ rpm 暂不构建。
 
 **自动更新**：
 - 使用 `tauri-plugin-updater`，minisign 签名，开启 `requireSignedVersion`，拒绝降级到旧版本的签名包。Windows 用 passive 模式安装；Linux 的 AppImage 和 .deb 由插件按安装类型选择对应条目。
-- 公钥在编译时从环境变量 `YICHAT_UPDATER_PUBKEY` 写入程序，没有公钥的构建不会自动更新。托盘的“检查更新”在这种构建里改为打开发布页面。
+- 仓库中的 `plugins.updater.pubkey` 留空；CI 构建时用仓库变量 `YICHAT_UPDATER_PUBKEY` 通过 `--config` 写入。Tauri CLI 会用它校验签名私钥是否匹配。没有公钥的构建不会自动更新。托盘的“检查更新”在这种构建里改为打开发布页面。
 - 程序启动 60 秒后检查一次，之后每 6 小时检查一次。发现新版本时弹窗询问，用户同意才下载；签名校验通过后安装并重启。同一次运行中被拒绝的版本不会再次提示。
 - 更新清单固定在 `https://github.com/yitiaosg/YiChat/releases/download/desktop-updater/latest.json`。桌面版的发布**不会**标记为“latest”，“latest”仍然留给 Android。
 

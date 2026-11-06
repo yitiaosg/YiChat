@@ -1,8 +1,8 @@
 //! Signed self-update (tauri-plugin-updater, minisign signatures).
 //!
-//! The public key is compiled in from the build environment
-//! (`YICHAT_UPDATER_PUBKEY`, a GitHub Actions variable); builds without one
-//! never auto-update. The manifest lives on the fixed GitHub release
+//! The public key is injected into `plugins.updater.pubkey` at build time
+//! (CI `--config`, from the `YICHAT_UPDATER_PUBKEY` Actions variable); the
+//! committed config leaves it empty, and builds without one never auto-update. The manifest lives on the fixed GitHub release
 //! `desktop-updater` so it never competes with Android's "latest" release.
 //! `requireSignedVersion` rejects downgrades to older signed artifacts.
 use crate::bridge::Desktop;
@@ -12,15 +12,16 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 pub const RELEASES_URL: &str = "https://github.com/yitiaosg/YiChat/releases";
-const PUBKEY: Option<&str> = option_env!("YICHAT_UPDATER_PUBKEY");
-
-pub fn enabled() -> bool { PUBKEY.is_some_and(|k| !k.trim().is_empty()) }
+pub fn enabled(app: &AppHandle) -> bool {
+    app.config().plugins.0.get("updater").and_then(|u| u.get("pubkey")).and_then(|k| k.as_str())
+        .is_some_and(|k| !k.trim().is_empty())
+}
 
 /// Versions the user already declined this session (no repeated prompts).
 static DECLINED: Mutex<Option<String>> = Mutex::new(None);
 
 pub fn spawn(app: AppHandle) {
-    if !enabled() { return; }
+    if !enabled(&app) { return; }
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(60)).await;
         loop {
@@ -33,11 +34,11 @@ pub fn spawn(app: AppHandle) {
 /// `manual`: from the tray menu, so also report "up to date" and errors.
 pub async fn check(app: &AppHandle, manual: bool) {
     let desktop = app.state::<Arc<Desktop>>().inner().clone();
-    if !enabled() {
+    if !enabled(app) {
         if manual { let _ = open::that_detached(RELEASES_URL); }
         return;
     }
-    let updater = match app.updater_builder().pubkey(PUBKEY.unwrap_or_default().trim()).build() {
+    let updater = match app.updater() {
         Ok(u) => u,
         Err(_) => { if manual { desktop.notice("无法检查更新"); } return; }
     };

@@ -4,7 +4,8 @@ name: Desktop (Windows / Linux)
 # and publishes a GitHub release for tags `desktop-v<version>`.
 #
 # Configuration (Settings → Secrets and variables → Actions):
-#   vars.YICHAT_UPDATER_PUBKEY            updater public key (tauri signer generate); compiled in
+#   vars.YICHAT_UPDATER_PUBKEY            updater public key (tauri signer generate); injected into
+#                                         plugins.updater.pubkey at build time
 #   secrets.TAURI_SIGNING_PRIVATE_KEY     updater private key (never in the repository)
 #   secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 #   vars.WINDOWS_SIGN_COMMAND             optional, reserved: Authenticode sign command with %1,
@@ -15,7 +16,8 @@ name: Desktop (Windows / Linux)
 on:
   push:
     tags: ['desktop-v*']
-    branches: ['**']
+    # Feature branches build through their pull request; avoid duplicate runs.
+    branches: ['main']
     paths: ['desktop/**', 'source/yichat/client/**', '.github/workflows/desktop.yml']
   pull_request:
     paths: ['desktop/**', 'source/yichat/client/**', '.github/workflows/desktop.yml']
@@ -108,9 +110,11 @@ jobs:
             echo "::warning::Updater key not configured: this build will not self-update."
           fi
           config=$(PLATFORM='${{ matrix.platform }}' node -e '
-            const e = process.env, bundle = { createUpdaterArtifacts: !!(e.YICHAT_UPDATER_PUBKEY && e.TAURI_SIGNING_PRIVATE_KEY) };
-            if (e.PLATFORM === "windows" && e.WINDOWS_SIGN_COMMAND) bundle.windows = { signCommand: e.WINDOWS_SIGN_COMMAND };
-            console.log(JSON.stringify({ bundle }));')
+            const e = process.env, signed = !!(e.YICHAT_UPDATER_PUBKEY && e.TAURI_SIGNING_PRIVATE_KEY);
+            const config = { bundle: { createUpdaterArtifacts: signed } };
+            if (signed) config.plugins = { updater: { pubkey: e.YICHAT_UPDATER_PUBKEY.trim() } };
+            if (e.PLATFORM === "windows" && e.WINDOWS_SIGN_COMMAND) config.bundle.windows = { signCommand: e.WINDOWS_SIGN_COMMAND };
+            console.log(JSON.stringify(config));')
           npx tauri build --bundles ${{ matrix.bundles }} --config "$config"
 
       - name: Collect artifacts
