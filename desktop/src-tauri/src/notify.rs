@@ -61,6 +61,20 @@ pub fn room_from_activation(arg: &str) -> Option<String> {
     }
 }
 
+/// `yichat-open://return` (binding done) or `yichat-open://return?order=<32>`
+/// (payment approved/cancelled), produced by the gateway's /app/desktop-return.
+/// Returns Some(None) / Some(Some(order)).
+pub fn return_from_activation(arg: &str) -> Option<Option<String>> {
+    let url = url::Url::parse(arg).ok()?;
+    if url.scheme() != crate::config::OPEN_SCHEME || url.host_str() != Some("return") || !(url.path().is_empty() || url.path() == "/") || url.fragment().is_some() { return None; }
+    let pairs: Vec<_> = url.query_pairs().collect();
+    match pairs.as_slice() {
+        [] if url.query().is_none_or(str::is_empty) => Some(None),
+        [(k, v)] if k == "order" && v.len() == 32 && v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') => Some(Some(v.to_string())),
+        _ => None,
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub use linux::{cancel, show, available};
 #[cfg(windows)]
@@ -223,6 +237,14 @@ mod tests {
             assert!(room_from_activation(bad).is_none(), "{bad}");
         }
         assert_eq!(tag(room).len(), 16);
+        let order = "A".repeat(31) + "_";
+        assert_eq!(return_from_activation("yichat-open://return"), Some(None));
+        assert_eq!(return_from_activation(&format!("yichat-open://return?order={order}")), Some(Some(order.clone())));
+        for bad in [format!("yichat-open://return?order={order}&x=1"), format!("yichat-open://return?order={order}x"),
+                    "yichat-open://return?order=%3Cscript%3E".into(), format!("yichat-open://room?order={order}"),
+                    format!("https://chat.yitiao.org/app/desktop-return?order={order}"), "yichat-open://return?x=1".into()] {
+            assert!(return_from_activation(&bad).is_none(), "{bad}");
+        }
         assert!(valid_event("$e") && !valid_event("e") && !valid_room("!a\n"));
     }
 }

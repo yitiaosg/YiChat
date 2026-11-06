@@ -3,7 +3,7 @@ name = "yichat-desktop"
 version = "0.1.0"
 description = "YiChat desktop shell for Windows and Linux"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.82"
 publish = false
 
 [lib]
@@ -33,6 +33,11 @@ log = "0.4"
 open = "5"
 rfd = "0.15"
 keyring = { version = "3", features = ["windows-native", "sync-secret-service", "crypto-rust"] }
+rusqlite = { version = "0.37", features = ["bundled-sqlcipher-vendored-openssl"] }
+scrypt = { version = "0.11", default-features = false }
+aes-gcm = "0.10"
+zeroize = "1"
+hex = "0.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = "0.9"

@@ -95,8 +95,12 @@ pub fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
 /// Arguments from a second launch (or the first one): open a conversation
 /// from a toast activation URL, otherwise just bring the window forward.
 pub fn activate(app: &AppHandle, args: &[String], startup: bool) {
-    let room = args.iter().find_map(|a| notify::room_from_activation(a));
     let desktop = app.state::<Arc<Desktop>>();
+    if let Some(order) = args.iter().find_map(|a| notify::return_from_activation(a)) {
+        desktop.open_return(order.as_deref());
+        return;
+    }
+    let room = args.iter().find_map(|a| notify::room_from_activation(a));
     match room {
         Some(room) => desktop.open_room(&room),
         None if !startup => show_main(app),

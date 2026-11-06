@@ -1,6 +1,6 @@
 # 网关 + YIDT 升级：桌面端钱包回跳（规格，待实施）
 
-状态：**规格已定，待在服务器实施**。依赖 [DESKTOP-LOOPBACK-LOGIN.md](DESKTOP-LOOPBACK-LOGIN.md)（已部署）。Android 行为不变。桌面客户端的对应部分由 `desktop/` 另行实现，见文末。
+状态：**已于 2026-11-06 部署到生产**（见文末部署记录）。依赖 [DESKTOP-LOOPBACK-LOGIN.md](DESKTOP-LOOPBACK-LOGIN.md)（已部署）。Android 行为不变。桌面客户端的对应部分由 `desktop/` 另行实现，见文末。
 
 ## 现状与问题
 
@@ -53,3 +53,12 @@
 
 - 解析 `yichat-open://return` 和 `yichat-open://return?order=<32 位>`（通过单实例转发或启动参数），把 WebView 导航到 `/` 或 `/?order=<oid>`。共享前端已有 `?order=` 的处理：查询订单、打开会话、显示“返回会话”弹窗、再次确认出资。
 - Linux 的 `.deb` 和 AppImage 注册 `x-scheme-handler/yichat-open`；Windows 由程序启动时和 NSIS 安装包写入 HKCU。
+
+## 部署记录（2026-11-06）
+
+- 网关：`93e066e` → `eb0fec6`；YIDT：`93e066e` → `5eb9f66`（在 `eb0fec6` 之上）。部署分支是 `deploy/yichat-server-v2`。每个提交只含本次改动。
+- 迁移：`native_devices` 新增 `platform` 列。现有 6 行都是 NULL，按 android 处理，回跳行为不变。
+- 测试：只用本机测试库。相关文件补丁前 113 个用例（112 通过，1 失败），补丁后 144 个（143 通过，1 失败）。唯一的失败 `test_metadata_binds_room_device_txn_and_original_ciphertext` 部署前就存在，原因是停用端到端加密后返回 403。回跳脚本用 node 实际执行验证了 16 种情况。
+- 只读 curl：`/app/desktop-return` 和 `.js` 都返回 200，响应带 `no-referrer`，页面不反射参数；`/app/return` 未改动。公网响应末尾有 Cloudflare 插入的检测脚本，网关本机端口的响应就是代码里的固定页面。
+- 实施时与规格有出入的地方：`/app/desktop-return` 放在 `app.py`；`Funds.create` 只接受 `None/'android'/'desktop'`，其他值会抛出 ValueError；`native_auth.migrate()` 遇到还不存在的表会跳过；`test_push.py`、`test_native_transactions.py` 的夹具改成了显式列名。
+- **本仓库 `source/` 尚未同步这次的服务端代码**：生产提交 `eb0fec6`、`5eb9f66` 只在服务器的部署分支上。需要在服务器导出补丁，回填到本仓库。

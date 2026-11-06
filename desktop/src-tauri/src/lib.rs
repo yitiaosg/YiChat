@@ -1,4 +1,7 @@
 mod auth;
+mod backup;
+mod history;
+mod records;
 mod bridge;
 mod config;
 mod notify;
@@ -46,6 +49,8 @@ pub fn run() {
             create_main_window(app.handle(), store.persistent(), !(autostarted && has_tray))?;
             tray::activate(app.handle(), &args, true);
             tray::spawn_reconnect_monitor(desktop.clone());
+            desktop.open_history();
+            desktop.spawn_backup_loop();
             let refresh = desktop.clone();
             tauri::async_runtime::spawn(async move { refresh.refresh_shell().await });
             Ok(())

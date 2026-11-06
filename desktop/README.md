@@ -39,6 +39,16 @@ Rust: bridge.rs（会话/登录/锁定/退出/下载保存） auth.rs（PKCE + R
 - **页面可见性**：共享前端只在 `document.hidden` 时为当前会话发通知。窗口隐藏到托盘后，桌面 shim 会让 `document.hidden` 为 true，Windows 和 Linux 行为一致。
 - **设置**：保存在 `<配置目录>/settings.json`，内容只有通知开关、预览开关和提示是否已显示；默认开启通知并显示预览，与 Android 新版一致。
 
+## 本地加密备份（第 3 阶段）
+
+- **数据库**：每个账户一个 SQLCipher 库 `<数据目录>/accounts/<storage>/history.db`，整库加密，房间 ID、时间等元数据也包含在内。密钥是随机 256 位，只存在系统安全存储中（`db-key.<storage>`）。没有安全存储时数据库只在内存里，不落盘。如果找不到密钥，原有文件会改名留存，不会被静默删除。`storage` 的计算方式与 Android 相同：`sha256(origin|uid|mxid|device)`。
+- **补拉**：移植自 Android 的 `HistoryRepository`。登录时以及之后每分钟，从 `/api/history/updates` 取服务器认证摘要，从 `/api/history/packets` 取原消息包。只有满足以下全部条件才接收：末尾是 LF、大小合规、SHA-256 与摘要一致、事件和房间身份一致、类型一致。撤回的消息记为墓碑。只有当前窗口完整提交、且没有待补的包时，水位才前进。消息 epoch 与 Web/Android 一致，epoch 变化时清空本地库。
+- **成员补齐**：服务器已清理的包，会按原协议请求其他成员补齐，可以接收他们转发的包。**桌面端不会响应其他成员的请求**（不向服务器上传本机保存的明文原包），这一点与 Android 不同。
+- **核验聊天记录**：`recordRooms/recordDays/recordPage` 移植自 Android 的 `RecordAudit`。按 UTC 日计算 `yichat-record-digests-v1` 摘要，规范 JSON 与网关的 `archive.canonical` 逐字节一致（键排序、紧凑格式、`ensure_ascii=False`，有专门测试）。
+- **内部快照**：每 6 小时（或点击“立即保存内部快照”时）用 `sqlcipher_export` 生成同一密钥加密的副本 `history.snapshot.db`，磁盘上不会出现明文。
+- **外部导出**：与 Android 相同的 YCB1 格式（`YCB1 | salt32 | iv12 | AES-256-GCM`，scrypt N=32768/r=8/p=1，固定 AAD），内容是 `yichat-app-packets` v1。已用独立的 Python 实现验证可以互相解密。导出目录、口令和间隔保存在系统安全存储中；第一次导出在设定的间隔之后执行，与 Android 一致。没有安全存储时不能启用导出。
+- **钱包和付款回跳**：网关的 `/app/desktop-return` 转交 `yichat-open://return[?order=<32位>]`，桌面端把页面导航到 `/` 或 `/?order=…`，由共享前端查询订单，并要求再次确认出资。格式不合法的回跳地址会被忽略。
+
 ## 登录流程
 
 1. 前端调用 `appCall('login')`；Rust 在 `127.0.0.1:<随机端口>` 监听，并用系统浏览器打开 `/auth/native/login?...&redirect_uri=http://127.0.0.1:<port>/app/callback&platform=windows|linux`。
@@ -49,7 +59,7 @@ Rust: bridge.rs（会话/登录/锁定/退出/下载保存） auth.rs（PKCE + R
 
 ## 开发与测试
 
-依赖：Node 22+、Rust 1.80+；Linux 还需要 `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libdbus-1-dev`。
+依赖：Node 22+、Rust 1.82+；Linux 还需要 `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libdbus-1-dev`。
 
 ```bash
 cd desktop
@@ -57,7 +67,7 @@ npm install
 npm run web                      # 构建共享前端到 source/yichat/client/dist（内置外壳）
 cd src-tauri
 cargo test                       # 单元测试（代理白名单、回环回调、外壳刷新等）
-cargo test -- --ignored          # 需要已解锁的 Secret Service / Windows：安全存储读写
+cargo test -- --ignored          # 需要已解锁的 Secret Service / Windows：安全存储读写；YCB1 与 Python 互通（PYTHON=带 cryptography 的解释器）
 cargo run                        # 启动开发版
 ```
 
@@ -72,5 +82,5 @@ Windows 交叉检查（需要 mingw-w64）：`rustup target add x86_64-pc-window
 
 1. ✅ 外壳、加载界面、本地协议、反向代理、混合缓存、原生登录、会话/锁定/退出、文件保存
 2. ✅ 托盘与通知（关闭到托盘、Toast/libnotify、点击打开会话、预览开关、单实例、开机自启、断线重连）
-3. ☐ 本地加密备份（SQLCipher + 系统安全存储、历史补拉、记录核验、YCB1 导出）
+3. ✅ 本地加密备份（SQLCipher + 系统安全存储、历史补拉、记录核验、YCB1 导出、钱包回跳）
 4. ☐ 打包与 CI（NSIS 并注册 AppUserModelID、AppImage、.deb、带签名的自动更新、GitHub Actions）

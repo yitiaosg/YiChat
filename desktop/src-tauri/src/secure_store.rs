@@ -14,6 +14,12 @@ pub struct SecureStore {
 }
 
 const KEYS: [&str; 3] = ["session", "device-resume", "pending-logout"];
+/// Per-account entries: `db-key.<storage>` (SQLCipher key) and
+/// `export.<storage>` (export directory, password and interval).
+fn allowed(key: &str) -> bool {
+    KEYS.contains(&key) || key.split_once('.').is_some_and(|(kind, id)|
+        matches!(kind, "db-key" | "export") && id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()))
+}
 
 impl SecureStore {
     /// Blocking: probes the platform store once at startup.
@@ -31,17 +37,17 @@ impl SecureStore {
     pub fn reason(&self) -> Option<&str> { self.reason.as_deref() }
 
     pub fn get(&self, key: &str) -> Option<String> {
-        debug_assert!(KEYS.contains(&key));
+        assert!(allowed(key), "secure store key");
         if !self.persistent { return self.memory.lock().unwrap().get(key).cloned(); }
         Entry::new(SERVICE, key).ok()?.get_password().ok()
     }
     pub fn put(&self, key: &str, value: &str) -> Result<(), String> {
-        debug_assert!(KEYS.contains(&key));
+        assert!(allowed(key), "secure store key");
         if !self.persistent { self.memory.lock().unwrap().insert(key.into(), value.into()); return Ok(()); }
         Entry::new(SERVICE, key).and_then(|e| e.set_password(value)).map_err(|e| describe(&e))
     }
     pub fn delete(&self, key: &str) {
-        debug_assert!(KEYS.contains(&key));
+        assert!(allowed(key), "secure store key");
         if !self.persistent { self.memory.lock().unwrap().remove(key); return; }
         if let Ok(e) = Entry::new(SERVICE, key) { let _ = e.delete_credential(); }
     }
@@ -72,6 +78,12 @@ mod tests {
         assert_eq!(store.get("pending-logout").as_deref(), Some("value-1"));
         store.delete("pending-logout");
         assert_eq!(store.get("pending-logout"), None);
+    }
+
+    #[test]
+    fn key_names_are_restricted() {
+        assert!(allowed("session") && allowed(&format!("db-key.{}", "a".repeat(64))) && allowed(&format!("export.{}", "0".repeat(64))));
+        assert!(!allowed("db-key.") && !allowed(&format!("db-key.{}", "A".repeat(64))) && !allowed("other.x") && !allowed(&format!("x.{}", "a".repeat(64))));
     }
 
     #[test]

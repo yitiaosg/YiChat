@@ -3,6 +3,9 @@
 //! exactly as the Android MainActivity answers. Only this single command is
 //! exposed to the webview (see capabilities/main.json).
 use crate::auth::{self, Account, Attempt, Loopback};
+use crate::backup::{self, ExportConfig};
+use crate::history::{self, HistoryDb};
+use crate::records;
 use crate::config::{self, ORIGIN, PLATFORM};
 use crate::notify;
 use crate::proxy;
@@ -53,6 +56,12 @@ pub struct Desktop {
     /// Latest notification generation per room; older results are dropped.
     generations: Mutex<HashMap<String, u64>>,
     serial: AtomicU64,
+    /// Encrypted packet database of the logged-in account (None when locked).
+    history: Mutex<Option<Arc<HistoryDb>>>,
+    data_dir: PathBuf,
+    /// Serializes catch-up / snapshot / export runs.
+    backup_run: tokio::sync::Mutex<()>,
+    backup_error: Mutex<Option<String>>,
 }
 
 /// Quick reachability probe for the gateway (no request is sent).
@@ -70,6 +79,7 @@ impl Desktop {
             .https_only(true)
             .build()?;
         let cache = app.path().app_cache_dir()?;
+        let data_dir = app.path().app_data_dir()?;
         let downloads_dir = cache.join("downloads");
         let _ = std::fs::remove_dir_all(&downloads_dir); // abandoned temporary downloads only
         std::fs::create_dir_all(&downloads_dir)?;
@@ -82,6 +92,7 @@ impl Desktop {
             active_room: Mutex::default(), downloads: Mutex::default(),
             settings, tray: AtomicBool::new(false), pending_room: Mutex::default(),
             fetches: Mutex::default(), generations: Mutex::default(), serial: AtomicU64::new(0),
+            history: Mutex::default(), data_dir, backup_run: tokio::sync::Mutex::new(()), backup_error: Mutex::default(),
         })
     }
 
@@ -223,6 +234,18 @@ impl Desktop {
                 eprintln!("YICHAT_PROBE {}", Value::Object(args.clone()));
                 Ok(Value::Null)
             }
+            "recordRooms" => self.with_history(records::rooms).await,
+            "recordDays" => { let (r, a, b) = (s("room"), s("start"), s("end")); self.with_history(move |db| records::days(db, &r, &a, &b)).await }
+            "recordPage" => { let (r, d, a) = (s("room"), s("day"), s("after")); self.with_history(move |db| records::page(db, &r, &d, &a)).await }
+            "backupStatus" => Ok(self.backup_status()),
+            "backupNow" => { self.run_backup(true, false).await; Ok(self.backup_status()) }
+            "exportNow" => { self.run_export().await?; Ok(self.backup_status()) }
+            "stopExport" => {
+                let db = self.current_history().ok_or(Failure("请先登录".into()))?;
+                self.store.delete(&format!("export.{}", db.storage));
+                Ok(self.backup_status())
+            }
+            "configureExport" => self.configure_export(args.get("days").and_then(Value::as_i64).unwrap_or(0), &s("password")).await,
             _ => fail("桌面版暂未提供此功能"),
         }
     }
@@ -263,6 +286,7 @@ impl Desktop {
         self.store.put("session", &serde_json::to_string(&account).unwrap()).map_err(auth::LoginError)?;
         self.store.put("device-resume", &proof).map_err(auth::LoginError)?;
         *self.account.lock().unwrap() = Some(account);
+        self.open_history();
         self.reload();
         Ok(())
     }
@@ -270,6 +294,8 @@ impl Desktop {
     fn lock(&self) {
         self.store.delete("session");
         *self.account.lock().unwrap() = None;
+        // Close the packet database; it stays encrypted on disk.
+        *self.history.lock().unwrap() = None;
         // Nothing from the previous session may surface afterwards.
         self.fetches.lock().unwrap().clear();
         self.generations.lock().unwrap().clear();
@@ -299,6 +325,151 @@ impl Desktop {
             if let Ok(url) = format!("{}/", config::app_origin()).parse() { let _ = w.navigate(url); }
             let _ = w.show(); let _ = w.set_focus();
         }
+    }
+
+    // ------------------------------------------------------------ local backup
+
+    fn current_history(&self) -> Option<Arc<HistoryDb>> { self.history.lock().unwrap().clone() }
+
+    /// Open (or create) the logged-in account's SQLCipher database. The random
+    /// key lives in the OS secure store; without one the database is in memory.
+    pub fn open_history(&self) {
+        let Some(account) = self.account.lock().unwrap().clone() else { return };
+        let storage = account.storage();
+        if self.current_history().is_some_and(|h| h.storage == storage) { return; }
+        let result = (|| -> Result<HistoryDb, history::HistoryError> {
+            if !self.store.persistent() {
+                return HistoryDb::open(&storage, None, zeroize::Zeroizing::new(vec![0; 32]));
+            }
+            let name = format!("db-key.{storage}");
+            let path = self.data_dir.join("accounts").join(&storage).join("history.db");
+            let key = match self.store.get(&name).and_then(|k| hex::decode(k).ok()).filter(|k| k.len() == 32) {
+                Some(k) => zeroize::Zeroizing::new(k),
+                None => {
+                    // No key: any existing file is unreadable; keep it aside, never delete silently.
+                    if path.exists() { let _ = std::fs::rename(&path, path.with_extension(format!("unreadable-{}", history::now_ms()))); }
+                    let mut k = zeroize::Zeroizing::new(vec![0u8; 32]);
+                    rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut k);
+                    self.store.put(&name, &hex::encode(&*k)).map_err(history::HistoryError)?;
+                    k
+                }
+            };
+            HistoryDb::open(&storage, Some(&path), key)
+        })();
+        match result {
+            Ok(db) => { *self.history.lock().unwrap() = Some(Arc::new(db)); }
+            Err(_) => { *self.backup_error.lock().unwrap() = Some("本地加密数据库无法打开".into()); }
+        }
+    }
+
+    async fn with_history<F>(&self, f: F) -> Result<Value, Failure>
+    where F: FnOnce(&HistoryDb) -> Result<Value, history::HistoryError> + Send + 'static {
+        let db = self.current_history().ok_or(Failure("请先登录".into()))?;
+        let storage = db.storage.clone();
+        let value = tauri::async_runtime::spawn_blocking(move || f(&db)).await
+            .map_err(|_| Failure("操作未完成".into()))?
+            .map_err(|e| Failure(if !e.0.is_ascii() { e.0 } else { "本地记录读取失败".into() }))?;
+        // The account must not have changed while reading.
+        if self.current_history().map(|h| h.storage.clone()) != Some(storage) { return fail("会话已锁定"); }
+        Ok(value)
+    }
+
+    fn export_config(&self, storage: &str) -> Option<ExportConfig> {
+        self.store.get(&format!("export.{storage}")).and_then(|v| serde_json::from_str(&v).ok())
+    }
+
+    fn backup_status(&self) -> Value {
+        let db = self.current_history();
+        let export = db.as_ref().and_then(|d| self.export_config(&d.storage));
+        let mut v = backup::status_value(db.as_deref(), export.as_ref());
+        if let Some(e) = self.backup_error.lock().unwrap().clone() {
+            v["status"] = Value::from(format!("{}；{e}，已保存的数据保留", v["status"].as_str().unwrap_or("")));
+        }
+        v
+    }
+
+    /// Catch up packets, request missing ones, refresh the encrypted snapshot.
+    pub async fn run_backup(&self, force: bool, relogin: bool) {
+        let _guard = self.backup_run.lock().await;
+        let (Some(db), Some(token)) = (self.current_history(), self.account.lock().unwrap().as_ref().map(|a| a.token.clone())) else { return };
+        if !online().await { return; }
+        let gateway = history::Gateway { http: &self.http, token: &token };
+        let result = async {
+            gateway.catch_up(&db, relogin).await?;
+            gateway.recover(&db).await
+        }.await;
+        *self.backup_error.lock().unwrap() = match result {
+            Ok(()) => None,
+            Err(history::CallError::Unauthorized) => Some("登录已失效，请重新登录".into()),
+            Err(history::CallError::Failed(_)) => Some("本次同步未完成，将自动重试".into()),
+        };
+        let last: i64 = db.meta("snapshot-last").and_then(|v| v.parse().ok()).unwrap_or(0);
+        if db.persistent && (force || history::now_ms() - last >= backup::SNAPSHOT_INTERVAL_MS) {
+            let target = self.data_dir.join("accounts").join(&db.storage).join("history.snapshot.db");
+            let snap = db.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || backup::snapshot(&snap, &target)).await;
+        }
+    }
+
+    async fn configure_export(&self, days: i64, password: &str) -> Result<Value, Failure> {
+        if !(1..=3650).contains(&days) || !(12..=1024).contains(&password.chars().count()) {
+            return fail("请输入1至3650个整天和至少12字符的独立口令");
+        }
+        if !self.store.persistent() { return fail("未检测到系统安全存储，无法保存导出口令和目录"); }
+        let db = self.current_history().ok_or(Failure("请先登录".into()))?;
+        let mut dialog = rfd::AsyncFileDialog::new().set_title("选择 YiChat 备份导出目录");
+        if let Some(w) = self.app.get_webview_window(config::MAIN_WINDOW) { dialog = dialog.set_parent(&w); }
+        let Some(dir) = dialog.pick_folder().await else { return Ok(json!({ "cancelled": true })) };
+        if self.current_history().map(|h| h.storage.clone()) != Some(db.storage.clone()) { return fail("账号已锁定或改变，请重新配置导出"); }
+        // As on Android, the first export runs after the chosen interval.
+        let config = ExportConfig { dir: dir.path().display().to_string(), password: password.to_string(), days: days as u32, last: history::now_ms() };
+        self.store.put(&format!("export.{}", db.storage), &serde_json::to_string(&config)?).map_err(Failure)?;
+        Ok(self.backup_status())
+    }
+
+    async fn run_export(&self) -> Result<(), Failure> {
+        let _guard = self.backup_run.lock().await;
+        let db = self.current_history().ok_or(Failure("请先登录".into()))?;
+        let account = self.account.lock().unwrap().clone().ok_or(Failure("请先登录".into()))?;
+        let mut config = self.export_config(&db.storage).ok_or(Failure("请先选择备份目录".into()))?;
+        let (dir, password) = (PathBuf::from(&config.dir), zeroize::Zeroizing::new(config.password.clone().into_bytes()));
+        let snap = db.clone();
+        tauri::async_runtime::spawn_blocking(move || backup::export(&snap, &account.uid, &account.mxid, &dir, &password)).await
+            .map_err(|_| Failure("导出未完成".into()))?
+            .map_err(|_| Failure("外部导出未完成，请检查目录权限和存储空间；内部数据保留".into()))?;
+        config.last = history::now_ms();
+        self.store.put(&format!("export.{}", db.storage), &serde_json::to_string(&config)?).map_err(Failure)?;
+        Ok(())
+    }
+
+    /// Periodic work while logged in: packet catch-up every minute, snapshot
+    /// every 6 h, scheduled export when due.
+    pub fn spawn_backup_loop(self: &Arc<Self>) {
+        let me = self.clone();
+        tauri::async_runtime::spawn(async move {
+            let mut first = true;
+            loop {
+                if me.current_history().is_some() {
+                    me.run_backup(false, first).await;
+                    first = false;
+                    if let Some(db) = me.current_history() {
+                        if let Some(c) = me.export_config(&db.storage) {
+                            if history::now_ms() - c.last >= i64::from(c.days) * 86_400_000 { let _ = me.run_export().await; }
+                        }
+                    }
+                }
+                tokio::time::sleep(Duration::from_secs(60)).await;
+            }
+        });
+    }
+
+    /// `yichat-open://return[?order=…]` after a YIDT binding or payment.
+    pub fn open_return(&self, order: Option<&str>) {
+        let path = match order { Some(o) => format!("/?order={o}"), None => "/".to_string() };
+        if let Some(w) = self.app.get_webview_window(config::MAIN_WINDOW) {
+            if let Ok(url) = format!("{}{path}", config::app_origin()).parse() { let _ = w.navigate(url); }
+        }
+        crate::tray::show_main(&self.app);
     }
 
     pub fn tray_available(&self) -> bool { self.tray.load(Ordering::Relaxed) }

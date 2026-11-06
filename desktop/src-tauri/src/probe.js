@@ -41,3 +41,13 @@ setTimeout(() => {
     port.postMessage(JSON.stringify({ id: 'p2close', method: 'debugProbe', args: { stage: 'close', ...r.value, hiddenAfterClose: document.hidden } })); } else if (prev) prev(e) };
   port.postMessage(JSON.stringify({ id: 'close', method: 'debugClose', args: {} }));
 }, 12000);
+// Phase 3 probe: return activation lands on /?order=…; backup methods answer.
+setTimeout(() => {
+  const port = window.YiChatApp, prev = port.onmessage, out = { stage: 'backup', search: location.search };
+  port.onmessage = e => { const r = JSON.parse(e.data);
+    if (r.id === 'bs') { out.backupStatus = r.ok ? r.value : r.error; port.postMessage(JSON.stringify({ id: 'rr', method: 'recordRooms', args: {} })); }
+    else if (r.id === 'rr') { out.recordRooms = r.ok ? r.value : r.error; port.onmessage = prev;
+      port.postMessage(JSON.stringify({ id: 'p3', method: 'debugProbe', args: out })); }
+    else if (prev) prev(e) };
+  port.postMessage(JSON.stringify({ id: 'bs', method: 'backupStatus', args: {} }));
+}, 3000);

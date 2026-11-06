@@ -28,6 +28,13 @@ pub struct Account {
     pub new_device: bool,
 }
 
+impl Account {
+    /// Per-account storage id, same construction as Android `Account.storage`.
+    pub fn storage(&self) -> String {
+        crate::shell::hex(&Sha256::digest(format!("{ORIGIN}|{}|{}|{}", self.uid, self.mxid, self.device).as_bytes()))
+    }
+}
+
 pub struct Attempt {
     pub state: String,
     pub nonce: String,
