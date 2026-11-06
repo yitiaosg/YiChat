@@ -6,7 +6,7 @@ deleted only from a browser session of the Web version. A key is shown once;
 only its SHA-256 digest is stored.
 
 Limits (shared by REST and WebSocket): 5 requests per rolling second per
-account and 5 per client IP; at most 3 keys per account.
+account; at most 3 keys per account. There is no per-IP limit.
 """
 import asyncio
 import hashlib
@@ -26,7 +26,7 @@ SCHEMA='''CREATE TABLE IF NOT EXISTS api_keys(id TEXT PRIMARY KEY,subject TEXT N
 CREATE INDEX IF NOT EXISTS api_keys_subject ON api_keys(subject);'''
 
 MAX_KEYS=3
-RATE=5                    # per rolling second, per account and per IP
+RATE=5                    # per rolling second, per account
 MAX_SPAN_MS=86400000      # one message query may span at most 24 hours
 PAGE_DEFAULT=100
 PAGE_MAX=200
@@ -40,14 +40,6 @@ NAME=re.compile(r'[^\x00-\x1f\x7f]{1,40}\Z')
 MESSAGE_TYPES=('m.room.message','m.room.encrypted')
 STREAM_TYPES=MESSAGE_TYPES+('m.room.redaction',)
 SCOPE_ERROR={'code':'YICHAT_WEB_ONLY','error':'API Key 仅可在 YiChat 网页版中申请、查看和删除'}
-
-
-def client_ip(client,headers):
-    # Same derivation as the gateway middleware: behind the local proxy, the
-    # last X-Forwarded-For hop is the address the proxy saw.
-    host=client.host if client else 'unknown'
-    if host in ('127.0.0.1','::1'):host=headers.get('x-forwarded-for',host).split(',')[-1].strip()
-    return host or 'unknown'
 
 
 def key_error(message='API Key 无效或已删除'):
@@ -72,11 +64,6 @@ def touch(s,who):
     now=time.time()
     if (who.get('last_used') or 0)<now-60:
         with transaction(s.db) as c:c.execute('UPDATE api_keys SET last_used=? WHERE id=?',(now,who['key_id']))
-
-
-def limited(s,ip,subject=None):
-    request_limit(s,'api-ip:'+ip,limit=RATE)
-    if subject:request_limit(s,'api-user:'+subject,limit=RATE)
 
 
 def current_rooms(s,mxid):
@@ -188,7 +175,6 @@ def install(app,s):
         return {'ok':True}
 
     def api_owner(request):
-        limited(s,client_ip(request.client,request.headers))
         auth=request.headers.get('authorization','')
         if not auth.startswith('Bearer '):raise key_error('需要 Authorization: Bearer <API Key>')
         who=owner(s,auth.removeprefix('Bearer '))
@@ -263,10 +249,8 @@ def install(app,s):
 
     @app.websocket('/open/v1/stream')
     async def stream(ws:WebSocket):
-        ip=client_ip(ws.client,ws.headers)
         auth=ws.headers.get('authorization','')
         try:
-            request_limit(s,'api-ip:'+ip,limit=RATE)
             if not auth.startswith('Bearer '):raise key_error('需要 Authorization: Bearer <API Key>')
             who=owner(s,auth.removeprefix('Bearer '))
             request_limit(s,'api-user:'+who['subject'],limit=RATE)

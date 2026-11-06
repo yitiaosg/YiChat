@@ -10,7 +10,7 @@
 | --- | --- |
 | 下载链接 | 网页版根据浏览器 User-Agent 推荐对应的 GitHub 下载：Android 指向最新 APK，Windows 指向 `-setup.exe`，Linux 指向 `.AppImage`（没有时用 `.deb`），iOS / macOS 等其他系统指向 Releases 页面。网关从公开的 GitHub API 读取 Releases 并缓存 1 小时；读取失败时退回 Releases 页面。桌面版还没有发布时，Windows / Linux 也指向 Releases 页面。登录页和账户菜单都显示。 |
 | 浏览器通知 | 标准 Web Push（RFC 8030 / 8291 / 8292），内容为发送者和消息预览，预览规则与 Android 相同；旧版加密会话只显示“你有新的消息”。归档、免打扰的会话和自己发送的消息不推送。点击通知回到对应会话。订阅绑定在网页登录会话上：退出登录即停止推送，重新登录后自动恢复。 |
-| 开发者 API | 网页版申请 API Key（每个账户最多 3 个，只显示一次）；只读 REST 接口查询会话列表（含归档）和服务器保存的消息（单次最多 24 小时）；WebSocket 订阅新消息，空闲 30 秒发送一次 ping。限速：同账户 5 次/秒，同 IP 5 次/秒。 |
+| 开发者 API | 网页版申请 API Key（每个账户最多 3 个，只显示一次）；只读 REST 接口查询会话列表（含归档）和服务器保存的消息（单次最多 24 小时）；WebSocket 订阅新消息，空闲 30 秒发送一次 ping。限速：同账户 5 次/秒（不按 IP 限速）。 |
 
 ## 不影响非网页版本
 
@@ -63,6 +63,6 @@ Caddy 不需要修改：`chat.yitiao.org` 会把所有路径（包括 WebSocket 
 
 ## 已知限制
 
-- 按 IP 限速使用网关已有的来源地址判断方式（本机代理时取 `X-Forwarded-For` 的最后一跳）。如果 Caddy 前面还有 Cloudflare，这个地址是 Cloudflare 边缘节点的地址，同一个边缘节点后面的多个用户会共用这个 IP 限额。如果需要按真实客户端 IP 限速，需要另外配置 Caddy 的 `trusted_proxies` 或改用 `CF-Connecting-IP`，本次没有修改。
+- 不按 IP 限速（2026-11-06 按要求取消）。认证失败的请求直接返回 401，不计数；Key 为 256 位随机值，无法猜测。
 - API 文档链接默认指向 `claude/yichat-desktop-planning-sodnv1` 分支；合并到 `main` 后，请修改 `YICHAT_API_DOCS_URL`，或者把默认值改为 `main`。
 - iOS / iPadOS 上的网页通知需要 16.4 以上系统，并且要先把网站添加到主屏幕。

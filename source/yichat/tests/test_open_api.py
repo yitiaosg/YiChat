@@ -112,16 +112,17 @@ def test_account_limit_is_shared_across_keys_and_ips(gateway):
     assert r.status_code==429 and r.json()['code']=='YICHAT_RATE_LIMITED' and 'Retry-After' in r.headers
 
 
-def test_ip_limit_is_shared_across_accounts(gateway):
+def test_no_ip_limit_accounts_on_one_ip_are_independent(gateway):
     c,app,s=gateway;app.state.matrix.call=AsyncMock(return_value={})
     alice=new_key(c)['key'];bob=new_key(other(app,s,'bob-token'))['key'];unthrottle(s)
-    for key in (alice,alice,alice,bob,bob):assert api(app,key,'203.0.113.9').get('/open/v1/conversations').status_code==200
+    # Ten requests from one IP: five per account, so neither account is limited.
+    for key in (alice,bob)*5:assert api(app,key,'203.0.113.9').get('/open/v1/conversations').status_code==200
     assert api(app,bob,'203.0.113.9').get('/open/v1/conversations').status_code==429
-    assert api(app,bob,'203.0.113.10').get('/open/v1/conversations').status_code==200
-    # Invalid keys are throttled per IP as well (no free guessing).
+    # Invalid keys from one IP are rejected as 401, never rate limited by IP.
     unthrottle(s)
-    codes=[api(app,'yck_'+'x'*43,'203.0.113.11').get('/open/v1/conversations').status_code for _ in range(6)]
-    assert codes==[401]*5+[429]
+    codes=[api(app,'yck_'+'x'*43,'203.0.113.11').get('/open/v1/conversations').status_code for _ in range(8)]
+    assert codes==[401]*8
+    with connect(s.db) as db:assert db.execute("SELECT count(*) FROM request_hits WHERE subject LIKE 'api-ip:%'").fetchone()[0]==0
 
 
 # ---------- REST reads ----------
@@ -260,10 +261,11 @@ def test_stream_rejects_missing_or_invalid_key(gateway):
             assert e.value.code==4401
 
 
-def test_stream_handshake_ip_limit_closes_with_4429(gateway):
-    c,app,s=gateway
+def test_stream_handshake_account_limit_closes_with_4429(gateway):
+    c,app,s=gateway;app.state.matrix.call=AsyncMock(return_value={})
     key=new_key(c)['key'];unthrottle(s)
-    for _ in range(5):api(app,'yck_'+'z'*43,'203.0.113.77').get('/open/v1/conversations')
+    # Five REST calls from other IPs use up the account's budget for this second.
+    for i in range(5):assert api(app,key,'203.0.113.'+str(70+i)).get('/open/v1/conversations').status_code==200
     with api(app,key,'203.0.113.77').websocket_connect('/open/v1/stream') as ws:
         assert ws.receive_json()['code']=='YICHAT_RATE_LIMITED'
         with pytest.raises(WebSocketDisconnect) as e:ws.receive_json()
