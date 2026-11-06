@@ -52,9 +52,9 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       WINDOWS_SIGN_COMMAND: ${{ vars.WINDOWS_SIGN_COMMAND }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -73,6 +73,12 @@ jobs:
       - name: NASM for vendored OpenSSL (SQLCipher)
         if: matrix.platform == 'windows'
         uses: ilammy/setup-nasm@v1
+
+      - name: Strawberry Perl for vendored OpenSSL (Git Bash's perl lacks required modules)
+        if: matrix.platform == 'windows'
+        run: |
+          echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
+          echo 'PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
 
       - name: Linux build dependencies
         if: matrix.platform == 'linux'
@@ -128,7 +134,7 @@ jobs:
           [ -n "$(ls out)" ] || { echo "no installers produced"; exit 1; }
           (cd out && sha256sum * > SHA256SUMS-${{ matrix.platform }}.txt)
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: yichat-desktop-${{ matrix.platform }}
           path: out/
@@ -144,7 +150,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.ref_name }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: dist
           merge-multiple: true
