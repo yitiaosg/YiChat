@@ -24,9 +24,10 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
     let preview = CheckMenuItem::with_id(app, "preview", "通知显示消息预览", true, settings.preview, None::<&str>)?;
     let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(app, "autostart", "开机时启动", true, autostart_on, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", format!("检查更新（当前 {}）", env!("CARGO_PKG_VERSION")), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出 YiChat", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &PredefinedMenuItem::separator(app)?, &preview, &autostart,
-        &PredefinedMenuItem::separator(app)?, &quit])?;
+        &PredefinedMenuItem::separator(app)?, &update, &quit])?;
     let (preview_item, autostart_item) = (preview.clone(), autostart.clone());
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().cloned().ok_or(tauri::Error::InvalidIcon(std::io::Error::other("icon")))?)
@@ -46,6 +47,7 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
                 let _ = if enabled { launcher.disable() } else { launcher.enable() };
                 let _ = autostart_item.set_checked(launcher.is_enabled().unwrap_or(false));
             }
+            "update" => { let app = app.clone(); tauri::async_runtime::spawn(async move { crate::updater::check(&app, true).await }); }
             "quit" => app.exit(0),
             _ => {}
         })
@@ -127,3 +129,22 @@ pub fn spawn_reconnect_monitor(desktop: Arc<Desktop>) {
         }
     });
 }
+
+/// AppImage has no installer: register `yichat-open:` for this user so
+/// payment returns and links reach the running AppImage. The .deb ships the
+/// same MimeType in its desktop file. Best effort; never fatal.
+#[cfg(target_os = "linux")]
+pub fn register_appimage_scheme() {
+    let Some(appimage) = std::env::var_os("APPIMAGE") else { return };
+    let Some(home) = std::env::var_os("HOME") else { return };
+    let dir = std::path::Path::new(&home).join(".local/share/applications");
+    let exec = appimage.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
+    let entry = format!("[Desktop Entry]\nType=Application\nName=YiChat\nIcon=yichat-desktop\nExec=\"{exec}\" %u\nTerminal=false\nNoDisplay=true\nMimeType=x-scheme-handler/{};\n", crate::config::OPEN_SCHEME);
+    let file = dir.join("yichat-desktop-appimage.desktop");
+    if std::fs::read_to_string(&file).ok().as_deref() == Some(entry.as_str()) { return; }
+    if std::fs::create_dir_all(&dir).is_err() || std::fs::write(&file, entry).is_err() { return; }
+    let _ = std::process::Command::new("xdg-mime").args(["default", "yichat-desktop-appimage.desktop", &format!("x-scheme-handler/{}", crate::config::OPEN_SCHEME)]).status();
+    let _ = std::process::Command::new("update-desktop-database").arg(&dir).status();
+}
+#[cfg(not(target_os = "linux"))]
+pub fn register_appimage_scheme() {}

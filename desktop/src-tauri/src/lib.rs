@@ -10,6 +10,7 @@ mod secure_store;
 mod settings;
 mod shell;
 mod tray;
+mod updater;
 
 use bridge::Desktop;
 use std::sync::Arc;
@@ -28,6 +29,7 @@ pub fn run() {
     tauri::Builder::default()
         // Must be first: a second launch (or a toast activation) is forwarded here.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| tray::activate(app, &argv, false)))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec![tray::AUTOSTART_ARG])))
         .register_asynchronous_uri_scheme_protocol(config::SCHEME, |ctx, request, responder| {
             let app = ctx.app_handle().clone();
@@ -51,6 +53,8 @@ pub fn run() {
             tray::spawn_reconnect_monitor(desktop.clone());
             desktop.open_history();
             desktop.spawn_backup_loop();
+            tray::register_appimage_scheme();
+            updater::spawn(app.handle().clone());
             let refresh = desktop.clone();
             tauri::async_runtime::spawn(async move { refresh.refresh_shell().await });
             Ok(())

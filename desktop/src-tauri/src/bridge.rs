@@ -537,6 +537,7 @@ impl Desktop {
     }
 
     fn notice_info(&self, message: &str) { self.dialog(message, rfd::MessageLevel::Info) }
+    pub fn inform(&self, message: &str) { self.notice_info(message) }
 
     pub fn notice(&self, message: &str) { self.dialog(message, rfd::MessageLevel::Warning) }
 

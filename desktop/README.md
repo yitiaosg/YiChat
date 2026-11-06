@@ -49,6 +49,46 @@ Rust: bridge.rs（会话/登录/锁定/退出/下载保存） auth.rs（PKCE + R
 - **外部导出**：与 Android 相同的 YCB1 格式（`YCB1 | salt32 | iv12 | AES-256-GCM`，scrypt N=32768/r=8/p=1，固定 AAD），内容是 `yichat-app-packets` v1。已用独立的 Python 实现验证可以互相解密。导出目录、口令和间隔保存在系统安全存储中；第一次导出在设定的间隔之后执行，与 Android 一致。没有安全存储时不能启用导出。
 - **钱包和付款回跳**：网关的 `/app/desktop-return` 转交 `yichat-open://return[?order=<32位>]`，桌面端把页面导航到 `/` 或 `/?order=…`，由共享前端查询订单，并要求再次确认出资。格式不合法的回跳地址会被忽略。
 
+## 打包、发布与自动更新（第 4 阶段）
+
+| 平台 | 产物 | 说明 |
+| --- | --- | --- |
+| Windows | `YiChat_<版本>_x64-setup.exe`（NSIS） | 为当前用户安装，不需要管理员权限，安装界面支持简体中文和英文。开始菜单和桌面快捷方式的 AppUserModelID 是 `org.yitiao.yichat.desktop`（Tauri 模板设置）。安装钩子 `windows/hooks.nsh` 会在 HKCU 登记 AppUserModelId 的 DisplayName 和 IconUri（`toast-icon.png`），所以 Toast 即使没有快捷方式也能显示名称和图标。`yichat-open:` 协议来自 `plugins.deep-link.desktop.schemes`。卸载时清理 AppUserModelId、协议和开机自启项。 |
+| Linux | `YiChat_<版本>_amd64.AppImage` | 首次运行时为当前用户写入 `~/.local/share/applications/yichat-desktop-appimage.desktop`，注册 `x-scheme-handler/yichat-open`。 |
+| Linux | `yichat-desktop_<版本>_amd64.deb` | 桌面文件使用自定义模板 `linux/yichat-desktop.desktop`，`Exec` 带 `%u`，`MimeType` 包含 `x-scheme-handler/yichat-open`；依赖 `libayatana-appindicator3-1`（托盘）。 |
+
+rpm 暂不构建。
+
+**Windows 代码签名（预留，未启用）**：`bundle.windows.certificateThumbprint`、`digestAlgorithm` 和 `timestampUrl` 都在 `tauri.conf.json` 里。CI 检测到仓库变量 `WINDOWS_SIGN_COMMAND`（带 `%1` 的签名命令，例如 signtool 或 Azure Trusted Signing）时，会把它写进 `bundle.windows.signCommand`；未设置时不签名。
+
+**自动更新**：
+- 使用 `tauri-plugin-updater`，minisign 签名，开启 `requireSignedVersion`，拒绝降级到旧版本的签名包。Windows 用 passive 模式安装；Linux 的 AppImage 和 .deb 由插件按安装类型选择对应条目。
+- 公钥在编译时从环境变量 `YICHAT_UPDATER_PUBKEY` 写入程序，没有公钥的构建不会自动更新。托盘的“检查更新”在这种构建里改为打开发布页面。
+- 程序启动 60 秒后检查一次，之后每 6 小时检查一次。发现新版本时弹窗询问，用户同意才下载；签名校验通过后安装并重启。同一次运行中被拒绝的版本不会再次提示。
+- 更新清单固定在 `https://github.com/yitiaosg/YiChat/releases/download/desktop-updater/latest.json`。桌面版的发布**不会**标记为“latest”，“latest”仍然留给 Android。
+
+**首次配置**（只需一次，私钥不进仓库）：
+
+```bash
+cd desktop && npx tauri signer generate -w ~/.tauri/yichat-desktop.key   # 按提示设置密码
+```
+
+把以下三项加到 GitHub 仓库的 Settings → Secrets and variables → Actions：
+- Variables：`YICHAT_UPDATER_PUBKEY`，值为生成的 `.key.pub` 文件内容。
+- Secrets：`TAURI_SIGNING_PRIVATE_KEY`，值为 `.key` 文件内容。
+- Secrets：`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`，值为上面设置的密码。
+
+私钥丢失后，已安装的客户端就无法再接收自动更新，只能手动安装新版本。请离线备份私钥。
+
+**CI**（`.github/workflows/desktop.yml`）：
+- 推送或 PR 改动 `desktop/`、共享前端或这个工作流文件时，在 Windows 和 Ubuntu 22.04 上执行 clippy（警告视为错误）、单元测试和打包，安装包作为 artifact 上传。
+- 推送 `desktop-v<版本>` 标签时，先检查标签与 `tauri.conf.json`、`Cargo.toml` 的版本是否一致，并要求更新密钥已配置；然后发布 GitHub Release（包含安装包、`.sig`、`SHA256SUMS.txt` 和 `latest.json`），并刷新 `desktop-updater` 发布中的 `latest.json`。
+
+**发版步骤**：
+1. 把 `src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 的版本号改成新版本。
+2. 运行 `cargo update -p yichat-desktop`，然后提交。
+3. 执行 `git tag desktop-v<版本> && git push origin desktop-v<版本>`。
+
 ## 登录流程
 
 1. 前端调用 `appCall('login')`；Rust 在 `127.0.0.1:<随机端口>` 监听，并用系统浏览器打开 `/auth/native/login?...&redirect_uri=http://127.0.0.1:<port>/app/callback&platform=windows|linux`。
@@ -83,4 +123,4 @@ Windows 交叉检查（需要 mingw-w64）：`rustup target add x86_64-pc-window
 1. ✅ 外壳、加载界面、本地协议、反向代理、混合缓存、原生登录、会话/锁定/退出、文件保存
 2. ✅ 托盘与通知（关闭到托盘、Toast/libnotify、点击打开会话、预览开关、单实例、开机自启、断线重连）
 3. ✅ 本地加密备份（SQLCipher + 系统安全存储、历史补拉、记录核验、YCB1 导出、钱包回跳）
-4. ☐ 打包与 CI（NSIS 并注册 AppUserModelID、AppImage、.deb、带签名的自动更新、GitHub Actions）
+4. ✅ 打包与 CI（NSIS 并注册 AppUserModelID、AppImage、.deb、带签名的自动更新、GitHub Actions）

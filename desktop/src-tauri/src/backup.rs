@@ -101,10 +101,11 @@ pub fn export(db: &HistoryDb, uid: &str, mxid: &str, dir: &Path, password: &[u8]
 pub struct ExportConfig { pub dir: String, pub password: String, pub days: u32, pub last: i64 }
 
 pub fn local_time(ms: i64) -> String {
-    // Local wall time without extra deps: UTC is unambiguous for status lines.
-    let day = crate::records::day_string(ms);
-    let rem = ms.rem_euclid(86_400_000) / 60_000;
-    format!("{day} {:02}:{:02} UTC", rem / 60, rem % 60)
+    use chrono::TimeZone;
+    match chrono::Local.timestamp_millis_opt(ms).single() {
+        Some(t) => t.format("%Y-%m-%d %H:%M").to_string(),
+        None => String::new(),
+    }
 }
 
 pub fn status_value(db: Option<&HistoryDb>, export: Option<&ExportConfig>) -> Value {
