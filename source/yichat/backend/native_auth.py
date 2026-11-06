@@ -27,13 +27,21 @@ LOOPBACK=re.compile(r'http://127\.0\.0\.1:([1-9][0-9]{0,4})/app/callback\Z')
 PLATFORMS={'android':'YiChat Android','windows':'YiChat Windows','linux':'YiChat Linux'}
 DESKTOP={'windows','linux'}
 
-SCHEMA_COLUMNS=(('native_logins','redirect_uri'),('native_logins','platform'),('native_codes','redirect_uri'),('native_codes','platform'))
+SCHEMA_COLUMNS=(('native_logins','redirect_uri'),('native_logins','platform'),('native_codes','redirect_uri'),('native_codes','platform'),('native_devices','platform'))
 
 def migrate(c):
     """Add nullable columns; NULL means the pre-existing Android HTTPS flow."""
     for table,column in SCHEMA_COLUMNS:
-        if column not in {r[1] for r in c.execute(f'PRAGMA table_info({table})')}:
+        columns={r[1] for r in c.execute(f'PRAGMA table_info({table})')}
+        if columns and column not in columns:
             c.execute(f'ALTER TABLE {table} ADD COLUMN {column} TEXT')
+
+def native_platform(c,subject,device):
+    """None for a web session, else 'android'/'windows'/'linux'.
+    Devices registered before the platform column (NULL) are Android."""
+    row=c.execute('SELECT platform FROM native_devices WHERE subject=? AND device=? LIMIT 1',(subject,device)).fetchone()
+    if row is None:return None
+    return row[0] if row[0] in PLATFORMS else 'android'
 
 def redirect_kind(s,uri):
     """Return 'app_link', 'loopback' or None for an exact redirect string."""
@@ -126,7 +134,11 @@ def install(app,s):
         with transaction(s.db) as c:
             if not valid_sid(s,row['sid'],username):fail(401,'主站会话已退出')
             c.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0,0)',(digest(token),subject,username,row['sid'],mxid,auth['device_id'],cipher.encrypt(auth['access_token'].encode()).decode(),expires))
-            if not resume:c.execute('INSERT INTO native_devices VALUES(?,?,?,?,?)',(digest(proof),subject,mxid,auth['device_id'],time.time()))
+            platform=row['platform'] if row['platform'] in PLATFORMS else 'android'
+            if not resume:c.execute('INSERT INTO native_devices(proof_hash,subject,mxid,device,created,platform) VALUES(?,?,?,?,?,?)',(digest(proof),subject,mxid,auth['device_id'],time.time(),platform))
+            # A resumed device keeps its platform; a legacy NULL row may be filled once by a desktop login.
+            elif resume['platform'] is None and platform in DESKTOP:
+                c.execute('UPDATE native_devices SET platform=? WHERE proof_hash=? AND platform IS NULL',(platform,resume['proof_hash']))
         return {'uid':subject,'user':username,'mxid':mxid,'device_id':auth['device_id'],'token':token,'expires':expires,
                 'device_proof':proof,'new_device':not bool(resume),'homeserver':s.origin}
 

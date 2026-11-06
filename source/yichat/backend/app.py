@@ -15,6 +15,7 @@ from . import previews
 from .limits import BodyLimitMiddleware
 from . import policy, archive, direct, group_avatars,lifecycle,conversations
 from .security import request_limit
+from .native_auth import native_platform, DESKTOP
 
 log=logging.getLogger('yichat')
 
@@ -476,8 +477,9 @@ def create_app(settings=None):
     async def wallet(request:Request):
         who=session(request)
         with connect(s.ledger) as c:b=app.state.funds.y.binding(c,who['username'],'yichat')
-        with connect(s.db) as c:native=bool(c.execute('SELECT 1 FROM native_devices WHERE subject=? AND device=? LIMIT 1',(who['subject'],who['device'])).fetchone())
-        return {'enabled':app.state.funds.enabled(),'binding':b['address'] if b else None,'bind_url':'https://yidt.yitiao.org/services/yichat/'+('?client=android' if native else ''),'fees':{'incoming':app.state.funds.y.fmt(app.state.funds.y.GAS),'outgoing_per_share':app.state.funds.y.fmt(app.state.funds.y.GAS)}}
+        with connect(s.db) as c:platform=native_platform(c,who['subject'],who['device'])
+        client='' if platform is None else '?client=desktop' if platform in DESKTOP else '?client=android'
+        return {'enabled':app.state.funds.enabled(),'binding':b['address'] if b else None,'bind_url':'https://yidt.yitiao.org/services/yichat/'+client,'fees':{'incoming':app.state.funds.y.fmt(app.state.funds.y.GAS),'outgoing_per_share':app.state.funds.y.fmt(app.state.funds.y.GAS)}}
 
     @app.post('/api/orders')
     async def order_create(request:Request):
@@ -488,9 +490,9 @@ def create_app(settings=None):
             with connect(s.db) as c:r=c.execute('SELECT subject FROM identities WHERE mxid=?',(target,)).fetchone()
             if not r:fail(409,'接收用户尚不可用')
             recipient=policy.username(s,r['subject'])
-        with connect(s.db) as c:
-            native=bool(c.execute('SELECT 1 FROM native_devices WHERE subject=? AND device=? LIMIT 1',(who['subject'],who['device'])).fetchone())
-        return app.state.funds.create(who,info,data,recipient,native_return=native)
+        with connect(s.db) as c:platform=native_platform(c,who['subject'],who['device'])
+        native_return=None if platform is None else 'desktop' if platform in DESKTOP else 'android'
+        return app.state.funds.create(who,info,data,recipient,native_return=native_return)
 
     async def order_access(request,oid):
         with connect(s.ledger) as c:o=c.execute('SELECT * FROM yichat_orders WHERE id=?',(oid,)).fetchone()
@@ -701,6 +703,15 @@ def create_app(settings=None):
         # Existing YIDT intents retain this return URL. Resolve the room through
         # the authenticated API in the client; visiting it never funds an order.
         return RedirectResponse('/?order='+oid,status_code=303)
+    @app.get('/app/desktop-return')
+    async def desktop_return():
+        # Desktop counterpart of /app/return. Static: the query string is never
+        # reflected. The first-party script validates it locally and hands only
+        # a fixed-format order id to the yichat-open: protocol; no intent/token.
+        return Response(DESKTOP_RETURN_PAGE,media_type='text/html; charset=utf-8',headers={'Referrer-Policy':'no-referrer'})
+    @app.get('/app/desktop-return.js')
+    async def desktop_return_script():
+        return Response(DESKTOP_RETURN_SCRIPT,media_type='application/javascript',headers={'Referrer-Policy':'no-referrer'})
     @app.get('/tools/{name}')
     async def local_tool(name:str):
         if name not in ('verify_archive.py',):fail(404,'工具不存在')
@@ -711,6 +722,36 @@ def create_app(settings=None):
         return FileResponse(Path(__file__).parent.parent/'web'/name)
 
     return app
+
+DESKTOP_RETURN_PAGE='''<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>返回 YiChat 桌面版</title>
+<style>body{font:17px system-ui,sans-serif;max-width:30rem;margin:12vh auto;padding:24px;color:#17202a}a{display:block;margin:24px 0;padding:16px;border-radius:12px;text-align:center;background:#2563eb;color:white;text-decoration:none}a[hidden]{display:none}p{line-height:1.7}</style>
+<h1>返回 YiChat 桌面版</h1><p id="status">正在打开 YiChat 桌面版。若浏览器没有自动打开，请点击下面的按钮。</p>
+<a id="return-app" hidden>打开 YiChat 桌面版</a>
+<p>如果没有安装桌面版，或浏览器拦截了打开请求，可以手动打开 YiChat 桌面版，App 会在聊天中显示最近的订单。出资仍需在 App 内再次确认。</p>
+<script src="/app/desktop-return.js" defer></script></html>'''
+
+DESKTOP_RETURN_SCRIPT='''"use strict";
+(() => {
+  const q = new URLSearchParams(location.search);
+  const keys = [...q.keys()];
+  const status = document.getElementById("status");
+  let target = null;
+  // Only two shapes: no query (binding finished) or exactly one order id.
+  if (location.origin === "https://chat.yitiao.org") {
+    if (keys.length === 0) target = "yichat-open://return";
+    else if (keys.length === 1 && keys[0] === "order" && /^[A-Za-z0-9_-]{32}$/.test(q.get("order")))
+      target = "yichat-open://return?order=" + q.get("order");
+  }
+  if (!target) {
+    status.textContent = "回跳无效，请返回 YiChat。";
+    return;
+  }
+  const button = document.getElementById("return-app");
+  button.href = target;
+  button.hidden = false;
+  location.replace(target);
+})();
+'''
 
 async def revoke_sessions(app):
     s=app.state.settings

@@ -1,5 +1,5 @@
 """Signed isolated IDP transport; never contacts real accounts or Synapse."""
-import base64,hashlib,json,secrets,time
+import base64,hashlib,json,secrets,shutil,subprocess,time
 from urllib.parse import urlsplit,parse_qs
 from unittest.mock import AsyncMock
 import httpx,jwt,pytest
@@ -149,6 +149,10 @@ async def test_desktop_loopback_flow_binds_redirect_and_device_name(native,platf
     assert c.post('/auth/native/exchange',json=data|{'redirect_uri':s.origin+'/app/callback'}).status_code==400
     result=c.post('/auth/native/exchange',json=data);assert result.status_code==200,result.text
     assert app.state.matrix.login.call_args.kwargs['device_name']==name
+    auth=result.json()
+    with connect(s.db) as db:assert db.execute('SELECT platform FROM native_devices WHERE device=?',(auth['device_id'],)).fetchone()[0]==platform
+    wallet=c.get('/api/wallet',headers={'Authorization':'Bearer '+auth['token']}).json()
+    assert wallet['bind_url']=='https://yidt.yitiao.org/services/yichat/?client=desktop'
 
 @pytest.mark.asyncio
 async def test_android_default_and_explicit_platform_keep_app_link(native):
@@ -159,8 +163,10 @@ async def test_android_default_and_explicit_platform_keep_app_link(native):
         assert r.headers['location'].startswith(s.origin+'/app/callback?')
         data=exchange_data(native,r);c.cookies.clear()
         assert c.post('/auth/native/exchange',json=data|{'redirect_uri':LOOP}).status_code==400
-        assert c.post('/auth/native/exchange',json=data).status_code==200
+        result=c.post('/auth/native/exchange',json=data);assert result.status_code==200
         assert app.state.matrix.login.call_args.kwargs['device_name']=='YiChat Android'
+        assert c.get('/api/wallet',headers={'Authorization':'Bearer '+result.json()['token']}).json()['bind_url'].endswith('/services/yichat/?client=android')
+    with connect(s.db) as db:assert [r[0] for r in db.execute('SELECT platform FROM native_devices')]==['android','android']
 
 @pytest.mark.parametrize('redirect,platform',[
     (LOOP,'android'),(LOOP,None),(LOOP,'macos'),(LOOP,'Windows'),
@@ -192,6 +198,102 @@ def test_native_columns_migrate_idempotently(tmp_path):
     db.execute('CREATE TABLE native_logins(state TEXT PRIMARY KEY,app_state TEXT NOT NULL,app_nonce TEXT NOT NULL,challenge TEXT NOT NULL)')
     db.execute('CREATE TABLE native_codes(code_hash TEXT PRIMARY KEY,app_state TEXT NOT NULL,app_nonce TEXT NOT NULL,challenge TEXT NOT NULL,subject TEXT NOT NULL,username TEXT NOT NULL,sid TEXT NOT NULL,expires REAL NOT NULL)')
     db.execute("INSERT INTO native_codes VALUES('h','s','n','c','sub','u','sid',1)")
+    db.execute('CREATE TABLE native_devices(proof_hash TEXT PRIMARY KEY,subject TEXT NOT NULL,mxid TEXT NOT NULL,device TEXT NOT NULL,created REAL NOT NULL)')
+    db.execute("INSERT INTO native_devices VALUES('p','sub','@m:x','DEV',1)")
     native_migrate(db);native_migrate(db)
     row=db.execute('SELECT redirect_uri,platform FROM native_codes').fetchone()
     assert row==(None,None)
+    from backend.native_auth import native_platform
+    assert db.execute('SELECT platform FROM native_devices').fetchone()==(None,)
+    assert native_platform(db,'sub','DEV')=='android' and native_platform(db,'sub','OTHER') is None
+
+
+def native_platforms(s):
+    with connect(s.db) as db:return [r[0] for r in db.execute('SELECT platform FROM native_devices')]
+
+async def login(native,device_proof=None):
+    """One full native login; clears the fixture's anonymous rate window so the
+    10/s guard (exercised elsewhere) does not interfere with multi-login tests."""
+    c,app,s,p,v,authorize=native
+    with connect(s.db) as db:db.execute('DELETE FROM request_hits')
+    r=await authorize();assert r.status_code==303,r.text
+    data=exchange_data(native,r);c.cookies.clear()
+    result=c.post('/auth/native/exchange',json=data|({'device_proof':device_proof} if device_proof else {}))
+    assert result.status_code==200,result.text
+    return result.json()
+
+def bind_url(c,auth):
+    return c.get('/api/wallet',headers={'Authorization':'Bearer '+auth['token']}).json()['bind_url']
+
+@pytest.mark.asyncio
+async def test_resumed_device_keeps_platform(native):
+    c,app,s,p,v,authorize=native
+    first=await login(native);assert native_platforms(s)==['android']
+    # An Android device resumed from a desktop login keeps its platform.
+    p.update(redirect_uri=LOOP,platform='linux')
+    resumed=await login(native,first['device_proof'])
+    assert native_platforms(s)==['android'] and bind_url(c,resumed).endswith('?client=android')
+
+@pytest.mark.asyncio
+async def test_legacy_null_device_is_android_until_desktop_fills_it_once(native):
+    c,app,s,p,v,authorize=native
+    first=await login(native)
+    with connect(s.db) as db:db.execute('UPDATE native_devices SET platform=NULL')
+    assert bind_url(c,first).endswith('?client=android')
+    p.update(redirect_uri=LOOP,platform='linux')
+    resumed=await login(native,first['device_proof'])
+    assert native_platforms(s)==['linux'] and bind_url(c,resumed).endswith('?client=desktop')
+    p.update(platform='windows')
+    await login(native,first['device_proof'])
+    assert native_platforms(s)==['linux']
+
+@pytest.mark.parametrize('query',['','?order='+'A'*32,'?order=%3Cscript%3Ealert(1)%3C/script%3E','?order=x&evil=%22onload%3Dx','?yidt_intent=leak-check-value'])
+def test_desktop_return_page_is_static_and_no_referrer(native,query):
+    c,*_=native
+    page=c.get('/app/desktop-return'+query)
+    assert page.status_code==200 and page.headers['content-type'].startswith('text/html')
+    assert page.headers['Referrer-Policy']=='no-referrer' and '<meta name="referrer" content="no-referrer">' in page.text
+    # Identical bytes for every query: nothing is reflected, and no third-party resource.
+    assert page.text==c.get('/app/desktop-return').text
+    assert 'alert(1)' not in page.text and 'onload' not in page.text and 'leak-check-value' not in page.text and 'A'*32 not in page.text
+    assert '://' not in page.text and '<script src="/app/desktop-return.js" defer></script>' in page.text
+    script=c.get('/app/desktop-return.js'+query)
+    assert script.status_code==200 and script.headers['content-type'].startswith('application/javascript')
+    assert script.headers['Referrer-Policy']=='no-referrer' and 'alert(1)' not in script.text
+
+NODE_RUNNER=r"""
+const vm=require('vm');let input='';process.stdin.on('data',d=>input+=d).on('end',()=>{
+  const {script,cases}=JSON.parse(input);const out=[];
+  for (const [origin,search] of cases){
+    const els={status:{textContent:''},'return-app':{href:'',hidden:true}};let replaced=null;
+    vm.runInNewContext(script,{URLSearchParams,document:{getElementById:id=>els[id]},
+      location:{origin,search,replace:u=>{replaced=u}}});
+    out.push({replaced,href:els['return-app'].href,hidden:els['return-app'].hidden,status:els.status.textContent});
+  }
+  process.stdout.write(JSON.stringify(out));
+});
+"""
+ORIGIN='https://chat.yitiao.org';OID='Ab3_-'+'x'*27
+SCRIPT_CASES=[
+    (ORIGIN,'','yichat-open://return'),
+    (ORIGIN,'?','yichat-open://return'),
+    (ORIGIN,'?order='+OID,'yichat-open://return?order='+OID),
+    (ORIGIN,'?order=%3Cscript%3E',None),
+    (ORIGIN,'?order='+'A'*31,None),(ORIGIN,'?order='+'A'*33,None),
+    (ORIGIN,'?order='+OID+'&order='+OID,None),(ORIGIN,'?order='+OID+'&x=1',None),
+    (ORIGIN,'?x='+OID,None),(ORIGIN,'?order='+'A'*31+'%0A',None),(ORIGIN,'?order='+'A'*31+'%23',None),
+    (ORIGIN,'?order='+'A'*31+'.',None),(ORIGIN,'?yidt_intent='+OID,None),
+    ('https://evil.example','?order='+OID,None),('http://chat.yitiao.org','',None),('https://chat.yitiao.org:8443','',None),
+]
+
+@pytest.mark.skipif(shutil.which('node') is None,reason='node not installed')
+def test_desktop_return_script_accepts_only_fixed_shapes(native):
+    c,*_=native
+    script=c.get('/app/desktop-return.js').text
+    run=subprocess.run([shutil.which('node'),'-e',NODE_RUNNER],input=json.dumps({'script':script,'cases':[[o,q] for o,q,_ in SCRIPT_CASES]}),
+                       capture_output=True,text=True,timeout=30,check=True)
+    for (origin,query,target),result in zip(SCRIPT_CASES,json.loads(run.stdout),strict=True):
+        if target:
+            assert result=={'replaced':target,'href':target,'hidden':False,'status':''},(origin,query,result)
+        else:
+            assert result['replaced'] is None and result['href']=='' and result['hidden'] and '回跳无效' in result['status'],(origin,query,result)

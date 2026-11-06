@@ -67,7 +67,9 @@ class Funds:
                 **({} if recipient else {'bind_url':self.y.ORIGIN+'/services/yichat/'}),
             })
         return b
-    def create(self,s,room,data,recipient=None,native_return=False):
+    def create(self,s,room,data,recipient=None,native_return=None):
+        # native_return: None (web), 'android' (App Link) or 'desktop' (yichat-open: handoff page).
+        if native_return not in (None,'android','desktop'): raise ValueError('native_return must be None, android or desktop')
         self.require(); y=self.y
         key=str(data.get('key',''))
         if not re.fullmatch('[A-Za-z0-9_-]{16,100}',key): fail(400,'需要有效的幂等键')
@@ -102,7 +104,7 @@ class Funds:
             oid=secrets.token_urlsafe(24); intent=secrets.token_urlsafe(32); now=time.time()
             path=f'/api/orders/{oid}/fund'; body={}
             reason=f'YiChat 本金 {y.fmt(principal)}；付款钱包 {source["address"]}；收款钱包 {dest or "群成员领取时验证绑定钱包"}；出金手续费预留 {y.fmt(fees)}；入金 gas {y.fmt(y.GAS)}'
-            return_url=self.s.origin+('/app/return?order=' if native_return else '/orders/')+oid
+            return_url=self.s.origin+{None:'/orders/','android':'/app/return?order=','desktop':'/app/desktop-return?order='}[native_return]+oid
             c.execute('INSERT INTO yidt_intents VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(intent,s['username'],s['sid'],'yichat',y.payload_hash(path,body),str(gross),reason,return_url,source['address'],'pending',now,now+900,None,source['created']))
             c.execute('INSERT INTO yichat_orders(id,user,sid,room,kind,request_key,payload,source,recipient,destination,title,principal,remaining,count,left_count,fees,state,intent,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(oid,s['username'],s['sid'],room['room'],kind,key,payload,source['address'],recipient,dest,title,str(principal),str(principal),count,count,str(fees),'awaiting_deposit',intent,now))
             c.execute('INSERT INTO yichat_order_participants VALUES(?,?,?,?)',(oid,s['subject'],recipient_uid,key))
