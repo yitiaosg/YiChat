@@ -358,18 +358,27 @@ def test_url_messages_become_text_and_media_show_names(gateway):
 
 class FakeSynapse:
     """Stands in for Synapse: the send succeeds only if the module's grant check would pass."""
-    def __init__(self,s):self.s=s;self.sent=[];self.deleted=[];self.reject=None;self.logins=0
+    def __init__(self,s,user='alice'):self.s=s;self.user=user;self.sent=[];self.redacted=[];self.deleted=[];self.reject=None;self.logins=0
     async def call(self,method,path,token=None,data=None,params=None):
         from fastapi import HTTPException
         from backend import api_grants
         if method=='PUT' and '/send/m.room.message/' in path:
             if self.reject:raise HTTPException(*self.reject)
             room=path.split('/rooms/')[1].split('/')[0].replace('%21','!')
-            sender=mxid(self.s,'alice')
+            sender=mxid(self.s,self.user)
             assert api_grants.granted(self.s,room,sender,'m.room.message',data),'Synapse module would reject: no grant'
             assert token=='api-device-token'
             self.sent.append((room,path.rsplit('/',1)[1],data))
             return {'event_id':'$sent'+str(len(self.sent))}
+        if method=='PUT' and '/redact/' in path:
+            if self.reject:raise HTTPException(*self.reject)
+            from urllib.parse import unquote
+            room,rest=path.split('/rooms/')[1].split('/redact/')
+            room=unquote(room);target,txn=rest.rsplit('/',1);target=unquote(target)
+            assert api_grants.granted(self.s,room,mxid(self.s,self.user),'m.room.redaction',{'redacts':target}),'Synapse module would reject: no grant'
+            assert token=='api-device-token'
+            self.redacted.append((room,target,txn,data))
+            return {'event_id':'$recall'+str(len(self.redacted))}
         if method=='DELETE' and '/devices/' in path:self.deleted.append(path);return {}
         return {}
     async def login(self,mxid,password,device_id=None,device_name=''):
@@ -377,11 +386,11 @@ class FakeSynapse:
         return {'access_token':'api-device-token','device_id':'APIDEVICE'}
 
 
-def sending(gateway):
+def sending(gateway,user='alice'):
     c,app,s=gateway
     # New conversations are plain; the fixture DM uses the legacy 'direct' mode.
     with connect(s.db) as db:db.execute("UPDATE room_modes SET encryption='plain' WHERE room='!direct'")
-    fake=FakeSynapse(s);m=app.state.matrix
+    fake=FakeSynapse(s,user);m=app.state.matrix
     m.call=fake.call;m.login=fake.login;m.provision=AsyncMock()
     return c,app,s,fake
 
@@ -590,3 +599,91 @@ def test_existing_keys_migrate_to_read(tmp_path):
     db.execute("INSERT INTO api_keys VALUES('k','sub','old','h','yck_x',1,NULL)")
     open_api.migrate(db);open_api.migrate(db)
     assert db.execute('SELECT scope,device,upstream FROM api_keys').fetchone()==('read',None,None)
+
+
+
+# ---------- recall (same rules as the Web version) ----------
+
+from urllib.parse import quote as _q
+
+def recall(app,key,room,event):
+    return api(app,key).delete('/open/v1/conversations/'+_q(room,safe='')+'/messages/'+_q(event,safe=''))
+
+
+def join_group(s,name,admin=False):
+    who=mxid(s,name)
+    with connect(s.ledger) as db:db.execute("INSERT OR IGNORE INTO yichat_memberships(room,mxid,membership,event_id) VALUES('!group',?,'join','$fixture-'||?)",(who,name))
+    with connect(s.db) as db:db.execute('INSERT OR REPLACE INTO group_members(room,mxid,admin) VALUES(?,?,?)',('!group',who,int(admin)))
+
+
+def test_recall_own_message_is_idempotent_and_needs_write(gateway):
+    c,app,s,fake=sending(gateway)
+    now=int(time.time()*1000);a=mxid(s,'alice')
+    put(s,[text('$mine','!direct',90,now,a,'oops')])
+    reader=new_key(c,'reader')['key'];unthrottle(s)
+    r=recall(app,reader,'!direct','$mine')
+    assert r.status_code==403 and r.json()['code']=='YICHAT_API_KEY_READ_ONLY' and not fake.redacted
+    key=new_key(c,'writer','read_write')['key'];unthrottle(s)
+    r=recall(app,key,'!direct','$mine')
+    assert r.status_code==200,r.text
+    assert r.json()=={'conversation_id':'!direct','message_id':'$mine','event_id':'$recall1','already_recalled':False}
+    room,target,txn,body=fake.redacted[0]
+    assert (room,target,body)==('!direct','$mine',{}) and txn.startswith('api-recall-')
+    # A retry before the recall is recorded reuses the same Matrix transaction ID.
+    unthrottle(s);assert recall(app,key,'!direct','$mine').status_code==200 and fake.redacted[1][2]==txn
+    # Once recorded, the API reports it without sending another redaction.
+    put(s,[('$rec','!direct',91,now+1,json.dumps({'type':'m.room.redaction','sender':a,'redacts':'$mine','content':{'redacts':'$mine'}}))])
+    unthrottle(s);r=recall(app,key,'!direct','$mine')
+    assert r.json()=={'conversation_id':'!direct','message_id':'$mine','event_id':'$rec','already_recalled':True} and len(fake.redacted)==2
+
+
+def test_owner_recalls_member_message_admin_cannot(gateway):
+    c,app,s,fake=sending(gateway)
+    now=int(time.time()*1000)
+    join_group(s,'bob',admin=True);join_group(s,'carol')
+    put(s,[text('$bobs','!group',100,now,mxid(s,'bob'),'from bob'),text('$carols','!group',101,now,mxid(s,'carol'),'from carol')])
+    owner=new_key(c,'owner','read_write')['key'];unthrottle(s)
+    r=recall(app,owner,'!group','$bobs')
+    assert r.status_code==200,r.text
+    assert fake.redacted[0][3]=={'reason':'群主撤回成员消息'}
+    # Admins cannot recall other members' messages (same as the Web version).
+    c2,app2,s2,fake_bob=sending(gateway,'bob')
+    admin=new_key(other(app,s,'bob-token'),'admin','read_write')['key'];unthrottle(s)
+    r=recall(app,admin,'!group','$carols')
+    assert r.status_code==403 and r.json()['code']=='YICHAT_RECALL_FORBIDDEN' and not fake_bob.redacted
+    # ...but can recall their own.
+    unthrottle(s);assert recall(app,admin,'!group','$bobs').status_code==200 and fake_bob.redacted[0][3]=={}
+
+
+def test_recall_rules_direct_window_business_and_unknown(gateway):
+    c,app,s,fake=sending(gateway)
+    now=int(time.time()*1000);a,b=mxid(s,'alice'),mxid(s,'bob')
+    put(s,[text('$peer','!direct',110,now,b,'from bob'),
+           text('$old','!direct',111,now-301000,a,'too old'),
+           event('$money','!direct',112,now,a,{'msgtype':'m.text','body':'https://chat.yitiao.org/orders/'+'M'*32,'org.yitiao.business':{'kind':'order','id':'M'*32}}),
+           text('$grp','!group',113,now,a,'group msg')])
+    key=new_key(c,scope='read_write')['key']
+    for target,room,code,status in [('$peer','!direct','YICHAT_RECALL_FORBIDDEN',403),('$old','!direct','YICHAT_REDACTION_WINDOW',403),
+                                     ('$money','!direct','YICHAT_BUSINESS_IMMUTABLE',403),('$nope','!direct','YICHAT_MESSAGE_NOT_FOUND',404),
+                                     ('$grp','!direct','YICHAT_MESSAGE_NOT_FOUND',404),('not-an-id','!direct','YICHAT_MESSAGE_NOT_FOUND',404)]:
+        unthrottle(s);r=recall(app,key,room,target)
+        assert (r.status_code,r.json().get('code'))==(status,code),(target,r.text)
+    assert not fake.redacted
+    # The Synapse module stays authoritative; its own code is passed through.
+    put(s,[text('$fresh','!direct',114,now,a,'fresh')])
+    fake.reject=(403,{'errcode':'M_FORBIDDEN','error':'消息只能在发送后5分钟内撤回','code':'YICHAT_REDACTION_WINDOW'});unthrottle(s)
+    r=recall(app,key,'!direct','$fresh')
+    assert r.status_code==403 and r.json()['code']=='YICHAT_REDACTION_WINDOW'
+
+
+def test_recall_grant_is_bound_to_target_and_key(gateway):
+    c,app,s=gateway
+    from backend import api_grants
+    created=new_key(c,scope='read_write');a=mxid(s,'alice')
+    with connect(s.db) as db:kid=db.execute('SELECT id FROM api_keys').fetchone()[0]
+    api_grants.create(s,kid,'!direct',a,'m.room.redaction',{'redacts':'$one'})
+    assert api_grants.granted(s,'!direct',a,'m.room.redaction',{'redacts':'$one'})
+    assert not api_grants.granted(s,'!direct',a,'m.room.redaction',{'redacts':'$two'})
+    assert not api_grants.granted(s,'!direct',a,'m.room.message',{'redacts':'$one'})
+    assert c.delete('/api/developer/keys/'+created['id']).status_code==200
+    assert not api_grants.granted(s,'!direct',a,'m.room.redaction',{'redacts':'$one'})

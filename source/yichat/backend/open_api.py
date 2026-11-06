@@ -13,6 +13,12 @@ Permissions: each key is either "read" (default) or "read_write", chosen
 when it is created and changeable later from the Web version. Only
 read_write keys may send; everything else is reading.
 
+Recall: read_write keys can recall (redact) messages with the same rules as
+the Web version: your own messages in private and group chats within 5
+minutes; only the group owner may recall other members' messages; transfers,
+red packets and gift cards cannot be recalled. The Synapse module remains
+the authority for every rule.
+
 Sending: each key gets its own Matrix device ("YiChat API · <name>"), created
 on first use and removed when the key is deleted. Every message passes the
 same gateway checks as the apps (membership, send policy, attachment
@@ -64,6 +70,9 @@ SHARES={'card':'卡片','transaction':'YIDT 交易','doudizhu':'斗地主房间'
 GIFT=re.compile(r'https://chat\.yitiao\.org/gifts/[a-f0-9]{32}')
 NOT_MEMBER={'code':'YICHAT_NOT_MEMBER','error':'你当前不是此会话的成员'}
 SCOPES=('read','read_write')
+EVENT_ID=re.compile(r'\$[A-Za-z0-9._~:/+=-]{1,255}\Z')
+RECALL_WINDOW_MS=300000  # mirrors the Synapse module (validate_redaction)
+OWNER_RECALL_REASON='群主撤回成员消息'  # same reason as the Web version's owner recall
 READ_ONLY={'code':'YICHAT_API_KEY_READ_ONLY','error':'此 API Key 只有读取权限；请在网页版的开发者 API 设置中改为“读写”'}
 
 
@@ -335,11 +344,59 @@ def install(app,s):
                 # The key's device was logged out elsewhere; a retry creates a new one.
                 with transaction(s.db) as c:c.execute('UPDATE api_keys SET device=NULL,upstream=NULL WHERE id=?',(who['key_id'],))
                 raise HTTPException(503,{'code':'YICHAT_API_DEVICE_RESET','error':'API 设备已失效并已重置，请重试'},headers={'Retry-After':'1'})
-            raise HTTPException(e.status_code,{'errcode':detail.get('errcode','M_UNKNOWN'),'code':'YICHAT_SEND_REJECTED','error':detail.get('error') or '服务器拒绝了这条消息'},headers=e.headers)
+            # The Synapse module reports its own YICHAT_* code (for example the
+            # recall window); keep it so API clients can tell rules apart.
+            code=detail.get('code') if isinstance(detail.get('code'),str) and detail.get('code').startswith('YICHAT_') and detail.get('code')!='YICHAT_POLICY_REJECTED' else 'YICHAT_SEND_REJECTED'
+            raise HTTPException(e.status_code,{'errcode':detail.get('errcode','M_UNKNOWN'),'code':code,'error':detail.get('error') or '服务器拒绝了这条消息'},headers=e.headers)
         event_id=result.get('event_id')
         if not isinstance(event_id,str):fail(502,'服务器未返回消息 ID')
         api_grants.consume(s,gid,event_id)
         return event_id
+
+    async def recall(who,info,target,reason):
+        room=info['room']
+        who=await matrix_session(who)
+        gid=api_grants.create(s,who['key_id'],room,who['mxid'],'m.room.redaction',{'redacts':target})
+        # Deterministic transaction ID: retrying the same recall with the same
+        # key is idempotent at the Matrix layer.
+        txn='api-recall-'+hashlib.sha256((who['key_id']+'|'+target).encode()).hexdigest()[:32]
+        path='/_matrix/client/v3/rooms/'+quote(room,safe='')+'/redact/'+quote(target,safe='')+'/'+txn
+        try:result=await app.state.matrix.call('PUT',path,app.state.matrix.token(who),{'reason':reason} if reason else {})
+        except HTTPException as e:
+            detail=e.detail if isinstance(e.detail,dict) else {}
+            if e.status_code==401 and detail.get('errcode')=='M_UNKNOWN_TOKEN':
+                with transaction(s.db) as c:c.execute('UPDATE api_keys SET device=NULL,upstream=NULL WHERE id=?',(who['key_id'],))
+                raise HTTPException(503,{'code':'YICHAT_API_DEVICE_RESET','error':'API 设备已失效并已重置，请重试'},headers={'Retry-After':'1'})
+            code=detail.get('code') if isinstance(detail.get('code'),str) and detail.get('code').startswith('YICHAT_') and detail.get('code')!='YICHAT_POLICY_REJECTED' else 'YICHAT_RECALL_REJECTED'
+            raise HTTPException(e.status_code,{'errcode':detail.get('errcode','M_UNKNOWN'),'code':code,'error':detail.get('error') or '服务器拒绝了撤回'},headers=e.headers)
+        event_id=result.get('event_id')
+        if not isinstance(event_id,str):fail(502,'服务器未返回撤回事件 ID')
+        api_grants.consume(s,gid,event_id)
+        return event_id
+
+    @app.delete('/open/v1/conversations/{room}/messages/{message_id}')
+    async def recall_message(request:Request,room:str,message_id:str):
+        who=api_owner(request)
+        info=writable(who,room)
+        if not EVENT_ID.fullmatch(message_id):fail(404,{'code':'YICHAT_MESSAGE_NOT_FOUND','error':'消息不存在'})
+        with connect(s.db) as c:
+            row=c.execute("SELECT sender,type,received_ms,business FROM history_receipts WHERE room=? AND event_id=?",(room,message_id)).fetchone()
+            done=c.execute("SELECT event_id FROM history_receipts WHERE room=? AND redacts=? ORDER BY sequence LIMIT 1",(room,message_id)).fetchone()
+        if not row or row['type'] not in MESSAGE_TYPES:fail(404,{'code':'YICHAT_MESSAGE_NOT_FOUND','error':'消息不存在或尚未同步'})
+        if done:return {'conversation_id':room,'message_id':message_id,'event_id':done['event_id'],'already_recalled':True}
+        own=row['sender']==who['mxid']
+        if not own:
+            # Same as the Web version: only the group owner recalls others' messages.
+            if info['kind']!='group':fail(403,{'code':'YICHAT_RECALL_FORBIDDEN','error':'只能撤回自己的私聊消息'})
+            from . import groups
+            with connect(s.db) as c:
+                try:groups.permission(c,room,who['mxid'],'redact',row['sender'])
+                except HTTPException:fail(403,{'code':'YICHAT_RECALL_FORBIDDEN','error':'只有群主可以撤回其他成员的消息'})
+        if row['business']:fail(403,{'code':'YICHAT_BUSINESS_IMMUTABLE','error':'转账、红包和赠卡消息不允许撤回'})
+        if not 0<=int(time.time()*1000)-row['received_ms']<=RECALL_WINDOW_MS:
+            fail(403,{'code':'YICHAT_REDACTION_WINDOW','error':'消息只能在发送后5分钟内撤回'})
+        event_id=await recall(who,info,message_id,None if own else OWNER_RECALL_REASON)
+        return {'conversation_id':room,'message_id':message_id,'event_id':event_id,'already_recalled':False}
 
     def txn_of(value):
         txn=value or secrets.token_hex(16)

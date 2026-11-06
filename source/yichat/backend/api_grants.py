@@ -3,7 +3,10 @@
 The Synapse module normally admits an event only while its sender has a live
 main-site session. A message sent with an API key has no such session, so the
 gateway registers a short-lived grant for exactly that event (room, sender,
-type and a digest of the full content) just before sending it. The module
+type and a digest of the full content) just before sending it. A recall
+(m.room.redaction) is granted for its target only: the digest is taken over
+{"redacts": <target event ID>}, because Synapse may place "redacts" either at
+the top level or inside the content depending on the room version. The module
 accepts the event if a matching, unexpired, unconsumed grant exists and the
 API key that created it still exists with read-write permission. The gateway marks the grant consumed
 once Synapse returns the event ID.
