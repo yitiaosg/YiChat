@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "The chat page may only call the YiChatApp bridge. No fs/shell/http/opener or core plugin permissions are granted.",
+  "windows": ["main"],
+  "permissions": ["allow-yichat-bridge"]
+}

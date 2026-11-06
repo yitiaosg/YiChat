@@ -1,0 +1,14 @@
+{
+  "name": "yichat-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "web": "npm --prefix ../source/yichat/client ci --no-audit --no-fund && npm --prefix ../source/yichat/client run build",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icons": "tauri icon ../source/yichat/client/public/brand/yichat.png -o src-tauri/icons"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  }
+}

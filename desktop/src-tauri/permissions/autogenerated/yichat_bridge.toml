@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-yichat-bridge"
+description = "Enables the yichat_bridge command without any pre-configured scope."
+commands.allow = ["yichat_bridge"]
+
+[[permission]]
+identifier = "deny-yichat-bridge"
+description = "Denies the yichat_bridge command without any pre-configured scope."
+commands.deny = ["yichat_bridge"]
