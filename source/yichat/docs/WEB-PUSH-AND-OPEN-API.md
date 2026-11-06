@@ -1,6 +1,6 @@
 # 网页版：下载链接、浏览器通知与开发者 API（2026-11-06）
 
-状态：**已在本仓库实现并测试，尚未部署到生产**。部署步骤见下文。
+状态：**已部署到生产（2026-11-06）**，部署记录见文末。
 
 接口文档（面向 API 使用者）：[OPEN-API.md](OPEN-API.md)。
 
@@ -50,7 +50,7 @@
    curl -s https://chat.yitiao.org/api/downloads -A 'Mozilla/5.0 (Linux; Android 14)' | python3 -m json.tool
    curl -s -o /dev/null -w '%{http_code}\n' https://chat.yitiao.org/push/sw.js                 # 200
    curl -s -o /dev/null -w '%{http_code}\n' https://chat.yitiao.org/open/v1/conversations      # 401
-   curl -s -o /dev/null -w '%{http_code}\n' https://chat.yitiao.org/api/developer/keys         # 401
+   curl -s -o /dev/null -w '%{http_code}\n' https://chat.yitiao.org/api/developer/keys         # 403 YICHAT_WEB_ONLY（没有网页 Cookie）
    ```
 8. 手动验证（网页版，自己的账户）：创建 Key 后调用 `/open/v1/conversations`，用 `websocat` 连接 `/open/v1/stream` 并收到 `ready`；开启浏览器通知后，关闭标签页，让另一个账户发一条消息，确认收到通知并能点击回到会话。
 9. App 回归：Android 和桌面版的菜单中没有“浏览器通知”“开发者 API”，原有的通知和功能都正常。
@@ -66,3 +66,34 @@ Caddy 不需要修改：`chat.yitiao.org` 会把所有路径（包括 WebSocket 
 - 不按 IP 限速（2026-11-06 按要求取消）。认证失败的请求直接返回 401，不计数；Key 为 256 位随机值，无法猜测。
 - API 文档链接默认指向 `claude/yichat-desktop-planning-sodnv1` 分支；合并到 `main` 后，请修改 `YICHAT_API_DOCS_URL`，或者把默认值改为 `main`。
 - iOS / iPadOS 上的网页通知需要 16.4 以上系统，并且要先把网站添加到主屏幕。
+
+## 生产部署记录（2026-11-06）
+
+- 仓库提交：`042ab59`（功能）+ `bc3b554`（按要求取消 IP 限速）。生产部署分支提交：`5eb9f66` → `4951b6c`。
+- 依赖：生产 venv 只新增 `websockets==17.4`，其余包不变。
+- 网页：`/var/lib/yichat/web/releases/20261106T151447Z`（上一版本 `20261030T135648Z-doudizhu-counter-shop`）。部署前确认过，生产 `client/src` 不加改动时的构建结果与当时线上版本逐字节一致，所以新版本只包含本次改动。
+- 首次启动生成 `/var/lib/yichat/gateway/webpush-vapid.pem`（0600）；`api_keys`、`webpush_subscriptions` 两张表已创建。
+- 备份：`/root/yitiao/backups/yichat-v2-20261106T150125Z/`，其中 `webapi-baseline/` 是 8 个被修改文件的原样副本。
+- 部署分支提交说明：`backend/app.py`、`backend/db.py`、`client/src/main.tsx`、`client/src/style.css` 中的改动与服务器上原有的未提交改动在同一行或相邻行，无法单独提交，因此只存在于生产工作区；内容与本仓库一致。
+- 测试：新增的 66 个后端测试在生产代码上全部通过。生产目录里的 `tests/test_gateway.py` 和 `tests/conftest.py` 比本仓库旧（缺少当前成员屏障的夹具数据），用生产目录的夹具运行时，部分依赖夹具的测试会失败，这不是代码问题；用本仓库的夹具时全部通过。同时修正了 `tests/test_native_wallet_return.py` 中重复插入成员记录的问题，两种夹具下都能通过。生产客户端单元测试中 `native fetch and server FCM summaries…` 一项在部署前后都失败，与本次无关。
+- 只读验证：`/api/downloads` 按 UA 返回 Android APK 直链；桌面版尚未发布，Windows/Linux/iOS 指向 Releases 页面。`/push/sw.js` 200；`/open/v1/conversations` 401；`/api/developer/keys`、`/api/webpush/config` 无 Cookie 时 403 `YICHAT_WEB_ONLY`。经 Cloudflare 的 `wss://chat.yitiao.org/open/v1/stream` 能完成 WebSocket 升级，无效 Key 收到 `YICHAT_API_KEY_INVALID` 并以 4401 关闭。journal 无 ERROR/WARNING。
+
+### 回退
+
+```bash
+B=/root/yitiao/backups/yichat-v2-20261106T150125Z/webapi-baseline
+cd /root/yitiao/yichat
+# 1. 网页切回上一版本（原子替换链接）
+sudo ln -sfn /var/lib/yichat/web/releases/20261030T135648Z-doudizhu-counter-shop /var/lib/yichat/web/current.next
+sudo mv -T /var/lib/yichat/web/current.next /var/lib/yichat/web/current
+# 2. 网关代码恢复原文件（新模块文件留着无害，旧 app.py 不会加载它们）
+for f in backend/app.py backend/config.py backend/db.py client/src/main.tsx client/src/style.css \
+         deploy/backup.py requirements.in requirements.lock; do sudo cp $B/$f $f; done
+sudo systemctl restart yichat.service
+# 3. 在部署分支记录回退（只改暂存区）
+sudo git -C /root/yitiao show 4951b6c | sudo git -C /root/yitiao apply --cached -R -C1 && \
+  sudo git -C /root/yitiao commit -m "Revert Web download/push/open API deploy (4951b6c)"
+```
+
+两张新表、VAPID 私钥和 `websockets` 包可以保留。
+

@@ -100,7 +100,7 @@ def test_order_return_url_follows_device_platform(gateway,platform,path):
     c,app,s=gateway;s.funds_enabled=True
     with connect(s.ledger) as db:
         for name,event in [('alice','$join1'),('bob','$join2')]:
-            db.execute("INSERT INTO yichat_memberships VALUES(?,?,'join',?,NULL,NULL,NULL)",('!direct','@'+name+':chat.yitiao.org',event))
+            db.execute("INSERT OR IGNORE INTO yichat_memberships VALUES(?,?,'join',?,NULL,NULL,NULL)",('!direct','@'+name+':chat.yitiao.org',event))
     if platform!='web':device(c,s,platform)
     r=c.post('/api/orders',json={'room':'!direct','key':secrets.token_urlsafe(24),'amount':'0.01','count':1,'title':'test'})
     assert r.status_code==200,r.text
