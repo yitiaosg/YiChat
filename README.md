@@ -6,6 +6,13 @@
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
 
+## 桌面版（开发中）
+
+Windows / Linux 桌面版位于 [desktop/](desktop/README.md)，使用 Tauri 2 外壳，界面沿用共享 Web 前端和 `YiChatApp` 消息桥；Android 与共享前端不受影响。
+
+- **服务端前置升级（待部署）**：桌面登录使用 RFC 8252 回环回调 `http://127.0.0.1:<端口>/app/callback`，网关需先部署 [DESKTOP-LOOPBACK-LOGIN.md](source/yichat/docs/DESKTOP-LOOPBACK-LOGIN.md)（提交 `441c9d6`，补丁见 `delivery/desktop-loopback-20261106/`）。Android 请求格式不变。
+- 进度：①外壳与加载界面 ✅ ②托盘与通知 ③本地加密备份 ④打包与 CI。
+
 ## 0.3.7 更新
 
 - 站内 URL 预览、图片、音视频、文件和赠卡沿用转账的独立内容布局，去掉外围聊天气泡；双方消息及发送中草稿一致。说明文字、回复、时间、已读及操作继续显示，普通文字保留原气泡。
@@ -70,5 +77,6 @@ export YICHAT_FIREBASE_CONFIG=/private/path/google-services.json
 | `source/yichat/tests` | 使用隔离账本及专用测试数据库的回归测试 |
 | `delivery/offline-fix-20261023` | 0.3.2 历史验证结果 |
 | `android/legacy-native` | 不参与编译的旧原生实现，仅供追溯 |
+| `desktop` | Windows / Linux 桌面版（Tauri 2 外壳、反向代理、原生登录） |
 
 [Android 构建说明](android/README.md) · [架构](ARCHITECTURE.md) · [接口文档](source/yichat/docs/CHAT-KERNEL-API.md)
