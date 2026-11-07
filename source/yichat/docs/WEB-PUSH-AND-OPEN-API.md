@@ -177,3 +177,27 @@ sudo git -C /root/yitiao show f20cef3 | sudo git -C /root/yitiao apply --cached 
 
 新增的列和表可以保留。回退前如已有 Key 用于发送，请先在网页版删除这些 Key，让对应的“YiChat API”设备被登出；回退后旧代码不会再登出它们。
 
+
+### 2026-11-07：图片本地缓存、已读双对勾、API 订阅已读回执（已上线）
+
+- 仓库提交 `6d076fc`；生产部署分支 `2a80243`，网关已重启（Synapse 未改动，无需重启）。
+- 网页：`/var/lib/yichat/web/releases/20261107T030433Z`（上一版本 `20261106T164504Z`）。部署前确认未修改的生产源码重新构建与线上版本逐字节一致。
+- 备份：`/root/yitiao/backups/yichat-v2-20261107T030245Z/readticks-baseline/`（10 个被修改文件的原样副本），`own.patch` 为本次全部改动。
+- `client/src/chat.ts`、`conversation.tsx`、`vault.ts` 的改动与服务器上原有未提交改动重叠，只存在于生产工作区；其余已提交。
+- 验证：`/brand/yichat.png` 返回 `public, max-age=86400, stale-while-revalidate=604800`；线上主包包含新的已读判断。
+
+#### 回退
+
+```bash
+B=/root/yitiao/backups/yichat-v2-20261107T030245Z/readticks-baseline
+cd /root/yitiao/yichat
+sudo ln -sfn /var/lib/yichat/web/releases/20261106T164504Z /var/lib/yichat/web/current.next
+sudo mv -T /var/lib/yichat/web/current.next /var/lib/yichat/web/current
+for f in backend/app.py backend/open_api.py client/src/chat.ts client/src/conversation.tsx client/src/media.ts \
+         client/src/profiles.tsx client/src/vault.ts tests/test_open_api.py tests/test_web_reads.py docs/OPEN-API.md; do sudo cp $B/$f $f; done
+sudo systemctl restart yichat.service
+sudo git -C /root/yitiao show 2a80243 | sudo git -C /root/yitiao apply --cached -R -C1 && \
+  sudo git -C /root/yitiao commit -m "Revert image cache / read ticks deploy (2a80243)"
+```
+
+浏览器里新增的 `yc-images:*` IndexedDB 在回退后不再使用，留着无害。
