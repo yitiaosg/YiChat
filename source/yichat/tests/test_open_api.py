@@ -687,3 +687,32 @@ def test_recall_grant_is_bound_to_target_and_key(gateway):
     assert not api_grants.granted(s,'!direct',a,'m.room.message',{'redacts':'$one'})
     assert c.delete('/api/developer/keys/'+created['id']).status_code==200
     assert not api_grants.granted(s,'!direct',a,'m.room.redaction',{'redacts':'$one'})
+
+
+# ---------- read receipts from a per-conversation stream ----------
+
+def test_conversation_stream_marks_newest_peer_message_read(gateway):
+    c,app,s,fake=sending(gateway)
+    receipts=[];base=fake.call
+    async def call(method,path,token=None,data=None,params=None):
+        if '/receipt/' in path:receipts.append((method,path,token,data));return {}
+        return await base(method,path,token,data,params)
+    app.state.matrix.call=call
+    key=new_key(c)['key'];unthrottle(s);now=int(time.time()*1000)
+    # Account-wide streams never send receipts.
+    with api(app,key).websocket_connect('/open/v1/stream') as ws:
+        assert ws.receive_json()['type']=='ready'
+        put(s,[text('$wide','!direct',70,now,mxid(s,'bob'),'wide')])
+        assert ws.receive_json()['message']['id']=='$wide'
+    assert receipts==[]
+    unthrottle(s)
+    with api(app,key).websocket_connect('/open/v1/stream?conversation=!direct') as ws:
+        assert ws.receive_json()['type']=='ready'
+        put(s,[text('$p1','!direct',71,now,mxid(s,'bob'),'one'),text('$p2','!direct',72,now,mxid(s,'bob'),'two'),text('$mine','!direct',73,now,mxid(s,'alice'),'me')])
+        assert [ws.receive_json()['message']['id'] for _ in range(3)]==['$p1','$p2','$mine']
+        for _ in range(50):
+            if receipts:break
+            time.sleep(0.05)
+    # Only the newest message from the peer, through the key's own device (read keys too).
+    assert receipts==[('POST','/_matrix/client/v3/rooms/%21direct/receipt/m.read/%24p2','api-device-token',{})]
+    with connect(s.db) as db:assert db.execute('SELECT device FROM api_keys').fetchone()[0]=='APIDEVICE'

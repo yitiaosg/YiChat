@@ -25,6 +25,11 @@ same gateway checks as the apps (membership, send policy, attachment
 ownership) and is admitted by the Synapse module through a one-time grant for
 exactly that content (backend/api_grants.py) instead of a live main-site
 session.
+
+Read receipts: a stream opened with ?conversation=<id> marks the newest
+delivered message from other members as read (m.read via the key's device),
+so senders see the double tick exactly as when the apps show the message.
+Account-wide streams do not send receipts.
 """
 import asyncio
 import hashlib
@@ -575,7 +580,23 @@ def install(app,s):
             finally:closed.set()
 
         task=asyncio.create_task(reader())
-        last_sent=time.monotonic();checked=time.monotonic()
+        last_sent=time.monotonic();checked=time.monotonic();receipts=set()
+
+        async def mark_read(room,event_id):
+            # A stream subscribed to one conversation is the account reading it:
+            # the peer sees the double tick as with the apps. Best effort only.
+            nonlocal who
+            try:
+                who=await matrix_session(who)
+                path='/_matrix/client/v3/rooms/'+quote(room,safe='')+'/receipt/m.read/'+quote(event_id,safe='')
+                await app.state.matrix.call('POST',path,app.state.matrix.token(who),{})
+            except HTTPException as e:
+                detail=e.detail if isinstance(e.detail,dict) else {}
+                if e.status_code==401 and detail.get('errcode')=='M_UNKNOWN_TOKEN':
+                    with transaction(s.db) as c:c.execute('UPDATE api_keys SET device=NULL,upstream=NULL WHERE id=?',(who['key_id'],))
+                    who={k:v for k,v in who.items() if k not in ('device','upstream')}
+                log.warning('Developer API read receipt failed')
+            except Exception:log.warning('Developer API read receipt failed')
         try:
             while not closed.is_set():
                 if time.monotonic()-checked>=RECHECK_SECONDS:
@@ -606,6 +627,10 @@ def install(app,s):
                     else:
                         await ws.send_json({'type':'message','conversation_id':row['room'],'message':message(s,row,names,describe=describe)})
                     last_sent=time.monotonic()
+                if conversation is not None:
+                    latest=next((r for r,allowed in reversed(batch) if allowed and r['type'] in MESSAGE_TYPES and r['sender']!=who['mxid']),None)
+                    if latest:
+                        job=asyncio.create_task(mark_read(latest['room'],latest['event_id']));receipts.add(job);job.add_done_callback(receipts.discard)
                 if time.monotonic()-last_sent>=PING_SECONDS:
                     await ws.send_json({'type':'ping','server_time':int(time.time()*1000)});last_sent=time.monotonic()
                 if not batch or len(batch)<100:

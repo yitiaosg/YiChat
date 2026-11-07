@@ -42,6 +42,9 @@ export async function attachment(content:any,signal:AbortSignal){
   if(content.file)throw Error('旧加密附件已清空，请使用新会话中的附件');
   const mxc=content.url;
   const match=/^mxc:\/\/chat\.yitiao\.org\/([a-f0-9]{48})$/.exec(mxc||'');if(!match)throw Error('附件地址不受支持');
+  // File IDs are content-addressed: a stored chat image never changes.
+  const key='file:'+match[1],image=content.msgtype==='m.image',vault=chat.businessVault;
+  if(image){const stored=await vault.image(key).catch(()=>undefined);if(stored)return stored}
   let response:Response|undefined;
   for(let attempt=0;attempt<5;attempt++){
     response=await requests.fetch('/api/files/'+match[1]+'/content',{signal});if(response.ok)break;
@@ -53,6 +56,8 @@ export async function attachment(content:any,signal:AbortSignal){
   const bytes=await response.arrayBuffer();
   // Never execute HTML/SVG or arbitrary uploaded files in the app origin.
   const type=String(content.info?.mimetype||'application/octet-stream');
-  return new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});
+  const blob=new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});
+  if(image&&!signal.aborted)void vault.saveImage(key,blob).catch(()=>{});
+  return blob;
 }
 export async function saveBlob(blob:Blob,name:string){if(isApp){await appSave(blob,name);return}const url=blobUrl(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>releaseUrl(url),30000)}

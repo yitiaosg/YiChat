@@ -2,19 +2,22 @@
 // on logout and are never shared with a new device.
 import {PREVIEW_BYTES,PREVIEW_COUNT,type PreviewEntry} from './preview-cache';
 export class Vault {
-  private writes:Promise<void>=Promise.resolve();db!:IDBDatabase; key!:CryptoKey;
+  private writes:Promise<void>=Promise.resolve();db!:IDBDatabase; key!:CryptoKey;private images?:IDBDatabase;private pruned=0;
   async open(scope:string){
     this.db=await new Promise((resolve,reject)=>{const r=indexedDB.open('yc-vault:'+scope,3);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('data'))r.result.createObjectStore('data');if(!r.result.objectStoreNames.contains('packets')){const store=r.result.createObjectStore('packets',{keyPath:'id'});store.createIndex('at','at')}if(!r.result.objectStoreNames.contains('previews')){const store=r.result.createObjectStore('previews',{keyPath:'id'});store.createIndex('budget',['at','bytes','until','id'])}};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
     this.key=await this.get('wrap')||await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
     await this.set('wrap',this.key);
+    // Images live in their own database so adding them never blocks an older open tab on a version upgrade.
+    this.images=await openImages('yc-images:'+scope).catch(()=>undefined);
   }
   async clearChatState(){
     const keys:IDBValidKey[]=await new Promise((resolve,reject)=>{const r=this.db.transaction('data').objectStore('data').getAllKeys();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
     await new Promise<void>((resolve,reject)=>{const tx=this.db.transaction(['data','packets','previews'],'readwrite');
-      for(const key of keys)if(typeof key==='string'&&(key==='app-ui'||key.startsWith('history')||key.startsWith('recall:')))tx.objectStore('data').delete(key);
+      for(const key of keys)if(typeof key==='string'&&(key==='app-ui'||key==='profiles'||key.startsWith('history')||key.startsWith('recall:')))tx.objectStore('data').delete(key);
       tx.objectStore('packets').clear();tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);
       tx.objectStore('previews').clear();
     });
+    if(this.images)await imageTx(this.images,'readwrite',store=>store.clear());
   }
   get(key:string):Promise<any>{return new Promise((resolve,reject)=>{const r=this.db.transaction('data').objectStore('data').get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
   set(key:string,value:any){return new Promise<void>((resolve,reject)=>{const tx=this.db.transaction('data','readwrite');tx.objectStore('data').put(value,key);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
@@ -49,5 +52,32 @@ export class Vault {
     });this.writes=task.catch(()=>{});return task;
   }
   async deletePreview(key:string){const id=await this.previewKey(key);await new Promise<void>((resolve,reject)=>{const tx=this.db.transaction('previews','readwrite');tx.objectStore('previews').delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)})}
-  close(){this.db?.close();this.key=undefined!}
+  // Encrypted local copies of immutable images (versioned avatar URLs, content-addressed
+  // group avatars and chat images), so reopening any client shows them without refetching.
+  async image(key:string):Promise<Blob|undefined>{
+    const images=this.images,wrap=this.key;if(!images||!wrap)return;
+    const id=await this.previewKey('image:'+key);
+    const row:any=await imageTx(images,'readonly',store=>store.get(id));if(!row)return;
+    const data=await crypto.subtle.decrypt({name:'AES-GCM',iv:row.iv,additionalData:new TextEncoder().encode(id)},wrap,row.data);
+    if(row.at<Date.now()-86400000)void imageTx(images,'readwrite',store=>store.put({...row,at:Date.now()})).catch(()=>{});
+    return new Blob([data],{type:row.type});
+  }
+  async saveImage(key:string,blob:Blob){
+    const images=this.images,wrap=this.key;if(!images||!wrap||blob.size>IMAGE_MAX||!IMAGE_TYPE.test(blob.type))return;
+    const id=await this.previewKey('image:'+key);
+    const task=this.writes.then(async()=>{
+      const iv=crypto.getRandomValues(new Uint8Array(12)),data=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:new TextEncoder().encode(id)},wrap,await blob.arrayBuffer());
+      await imageTx(images,'readwrite',store=>store.put({id,iv,data,type:blob.type,at:Date.now(),bytes:data.byteLength}));
+      if(Date.now()-this.pruned<30000)return;this.pruned=Date.now();
+      // Oldest first; read index keys only, never the encrypted bytes.
+      await new Promise<void>((resolve,reject)=>{const tx=images.transaction('images','readwrite'),store=tx.objectStore('images'),rows:Array<{id:IDBValidKey;bytes:number}>=[],r=store.index('budget').openKeyCursor();let bytes=0;
+        r.onsuccess=()=>{const cursor=r.result;if(cursor){const size=(cursor.key as [number,number])[1];rows.push({id:cursor.primaryKey,bytes:size});bytes+=size;cursor.continue();return}
+          let count=rows.length;for(const row of rows){if(bytes<=IMAGE_BYTES&&count<=IMAGE_COUNT)break;store.delete(row.id);bytes-=row.bytes;count--}};
+        tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error)});
+    });this.writes=task.catch(()=>{});return task;
+  }
+  close(){this.db?.close();this.images?.close();this.images=undefined;this.key=undefined!}
 }
+export const IMAGE_BYTES=150*1024*1024,IMAGE_COUNT=4000,IMAGE_MAX=8*1024*1024,IMAGE_TYPE=/^image\/(png|jpeg|gif|webp|avif)$/;
+function openImages(name:string){return new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open(name,1);r.onupgradeneeded=()=>{const store=r.result.createObjectStore('images',{keyPath:'id'});store.createIndex('budget',['at','bytes'])};r.onsuccess=()=>{r.result.onversionchange=()=>r.result.close();resolve(r.result)};r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('blocked'))})}
+function imageTx(db:IDBDatabase,mode:IDBTransactionMode,op:(store:IDBObjectStore)=>IDBRequest){return new Promise<any>((resolve,reject)=>{const tx=db.transaction('images',mode),r=op(tx.objectStore('images'));let result:any;r.onsuccess=()=>{result=r.result};tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)})}

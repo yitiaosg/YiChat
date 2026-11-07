@@ -57,6 +57,8 @@ def test_static_assets_cache_and_crypto_csp(gateway):
     assert page.headers['cache-control']=='no-store'
     asset=c.get('/render/ycards-render.js');assert asset.status_code==200 and asset.headers['cache-control']=='public, max-age=3600'
     assert c.get('/render/not-found.js').status_code==404
+    # Brand icon: served from cache on every launch, refreshed in the background.
+    brand=c.get('/brand/yichat.png');assert brand.status_code==200 and brand.headers['cache-control']=='public, max-age=86400, stale-while-revalidate=604800'
 
 
 def test_legacy_order_return_enters_chat_without_a_write(gateway):
