@@ -15,6 +15,7 @@ from . import previews
 from .limits import BodyLimitMiddleware
 from . import policy, archive, direct, group_avatars,lifecycle,conversations
 from .security import request_limit
+from .native_auth import native_platform, DESKTOP
 
 log=logging.getLogger('yichat')
 
@@ -35,10 +36,19 @@ def create_app(settings=None):
         from .push import FCMSender
         app.state.push=FCMSender(s,app.state.http)
         push_job=asyncio.create_task(app.state.push.run())
+        from .webpush import WebPushSender
+        try:app.state.webpush=WebPushSender(s,app.state.http)
+        except Exception:
+            # Web Push is optional: never block the gateway (or Apps) on it.
+            log.warning('Web Push unavailable: VAPID key could not be loaded');app.state.webpush=None
+        webpush_job=asyncio.create_task(app.state.webpush.run()) if app.state.webpush else None
         job=asyncio.create_task(maintenance(app))
         yield
         push_job.cancel()
         with contextlib.suppress(asyncio.CancelledError): await push_job
+        if webpush_job:
+            webpush_job.cancel()
+            with contextlib.suppress(asyncio.CancelledError): await webpush_job
         job.cancel()
         with contextlib.suppress(asyncio.CancelledError): await job
         await app.state.http.aclose()
@@ -118,7 +128,7 @@ def create_app(settings=None):
                     request_limit(s,'anonymous:'+host,limit=10)
             try:length=int(request.headers.get('content-length','0'))
             except ValueError:fail(400,'无效请求长度')
-            is_upload=request.method=='POST' and (request.url.path.startswith('/api/files/') or request.url.path in ('/_matrix/media/v3/upload','/_matrix/client/v1/media/upload') or bool(re.fullmatch(r'/api/groups/[^/]+/avatar',request.url.path)))
+            is_upload=request.method=='POST' and (request.url.path.startswith('/api/files/') or request.url.path in ('/_matrix/media/v3/upload','/_matrix/client/v1/media/upload') or bool(re.fullmatch(r'/open/v1/conversations/[^/]+/files',request.url.path)) or bool(re.fullmatch(r'/api/groups/[^/]+/avatar',request.url.path)))
             if not is_upload and length>262144: fail(413,'请求体过大')
             response=await call_next(request)
         except HTTPException as e:response=error_response(e)
@@ -134,7 +144,7 @@ def create_app(settings=None):
                     c.execute("INSERT INTO rate VALUES(?,?,?) ON CONFLICT(subject,bucket) DO UPDATE SET next=max(next,excluded.next)",(who['subject'],'native_requests',time.time()+seconds))
             except Exception:
                 log.warning('Shared cooldown persistence unavailable',exc_info=False)
-        response.headers.update({'Cache-Control':('public, max-age=31536000, immutable' if request.url.path.startswith('/assets/') else 'public, max-age=3600' if (request.url.path.startswith('/render/') or request.url.path=='/.well-known/assetlinks.json') else 'no-store'),'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
+        response.headers.update({'Cache-Control':('public, max-age=31536000, immutable' if request.url.path.startswith('/assets/') else 'public, max-age=3600' if (request.url.path.startswith('/render/') or request.url.path=='/.well-known/assetlinks.json') else 'public, max-age=86400, stale-while-revalidate=604800' if request.url.path.startswith('/brand/') else 'no-store'),'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
         return response
 
     @app.get('/health')
@@ -401,6 +411,12 @@ def create_app(settings=None):
         who,info=await room_access(request,room);require_send(who,info)
         try:size=int(request.headers.get('content-length','0'))
         except ValueError:fail(400,'无效文件长度')
+        token=request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('yc_session','')
+        return await store_upload(who,info,room,request.stream(),size,lambda:authenticate(s,token))
+
+    async def store_upload(who,info,room,stream,size,recheck):
+        # Shared by the session upload above and the developer API; recheck()
+        # re-validates the caller (session or API key) before every chunk.
         if size<0 or size>s.max_file:fail(413,'文件大小超限')
         fid=secrets.token_hex(24);await upload_slot(s,who['subject'],fid,size or s.max_file)
         archive.reserve_upload(s.archive_ingest,fid)
@@ -408,12 +424,12 @@ def create_app(settings=None):
         try:
             # Starlette/ASGI transport is bounded by Uvicorn high-water mark. Reserve
             # each read quantum globally BEFORE requesting the next transport chunk.
-            iterator=request.stream().__aiter__()
+            iterator=stream.__aiter__()
             with target.open('xb') as f:
                 while True:
                     delay=reserve_rate(s,who['subject'],'upload',min(65536,size-total) if size else 65536,s.upload_rate)
                     await asyncio.sleep(delay)
-                    authenticate(s,request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('yc_session',''))
+                    recheck()
                     try: chunk=await asyncio.wait_for(iterator.__anext__(),30)
                     except StopAsyncIteration:break
                     if not chunk:break
@@ -454,9 +470,14 @@ def create_app(settings=None):
 
     @app.get('/api/files/{fid}/content')
     async def download(request:Request,fid:str):
+        return await serve_file(lambda:session(request),fid)
+
+    async def serve_file(recheck,fid):
+        # Shared by the session download above and the developer API; recheck()
+        # returns the caller and runs again before every chunk.
         with connect(s.db) as c:row=c.execute('SELECT * FROM files WHERE id=?',(fid,)).fetchone()
         if not row:fail(404,'附件不存在')
-        who=session(request)
+        who=recheck()
         expiry=await file_access(who,row)
         if expiry<=time.time() or row['removed']:fail(410,'服务器附件已到期；可从已保存的本地归档打开')
         if not (s.objects/fid).is_file():fail(503,'附件实体缺失，下载和清理已暂停')
@@ -464,7 +485,7 @@ def create_app(settings=None):
         async def stream():
             with handle as f:
                 while True:
-                    session(request)
+                    recheck()
                     if expiry<=time.time():return
                     chunk=f.read(65536)
                     if not chunk:return
@@ -476,8 +497,9 @@ def create_app(settings=None):
     async def wallet(request:Request):
         who=session(request)
         with connect(s.ledger) as c:b=app.state.funds.y.binding(c,who['username'],'yichat')
-        with connect(s.db) as c:native=bool(c.execute('SELECT 1 FROM native_devices WHERE subject=? AND device=? LIMIT 1',(who['subject'],who['device'])).fetchone())
-        return {'enabled':app.state.funds.enabled(),'binding':b['address'] if b else None,'bind_url':'https://yidt.yitiao.org/services/yichat/'+('?client=android' if native else ''),'fees':{'incoming':app.state.funds.y.fmt(app.state.funds.y.GAS),'outgoing_per_share':app.state.funds.y.fmt(app.state.funds.y.GAS)}}
+        with connect(s.db) as c:platform=native_platform(c,who['subject'],who['device'])
+        client='' if platform is None else '?client=desktop' if platform in DESKTOP else '?client=android'
+        return {'enabled':app.state.funds.enabled(),'binding':b['address'] if b else None,'bind_url':'https://yidt.yitiao.org/services/yichat/'+client,'fees':{'incoming':app.state.funds.y.fmt(app.state.funds.y.GAS),'outgoing_per_share':app.state.funds.y.fmt(app.state.funds.y.GAS)}}
 
     @app.post('/api/orders')
     async def order_create(request:Request):
@@ -488,9 +510,9 @@ def create_app(settings=None):
             with connect(s.db) as c:r=c.execute('SELECT subject FROM identities WHERE mxid=?',(target,)).fetchone()
             if not r:fail(409,'接收用户尚不可用')
             recipient=policy.username(s,r['subject'])
-        with connect(s.db) as c:
-            native=bool(c.execute('SELECT 1 FROM native_devices WHERE subject=? AND device=? LIMIT 1',(who['subject'],who['device'])).fetchone())
-        return app.state.funds.create(who,info,data,recipient,native_return=native)
+        with connect(s.db) as c:platform=native_platform(c,who['subject'],who['device'])
+        native_return=None if platform is None else 'desktop' if platform in DESKTOP else 'android'
+        return app.state.funds.create(who,info,data,recipient,native_return=native_return)
 
     async def order_access(request,oid):
         with connect(s.ledger) as c:o=c.execute('SELECT * FROM yichat_orders WHERE id=?',(oid,)).fetchone()
@@ -656,6 +678,13 @@ def create_app(settings=None):
     conversations.install(app,s,session)
     from . import push
     push.install(app,s,session)
+    # Web-only browser notifications, the developer API and download links.
+    # None of these change any existing route or App behaviour.
+    app.state.store_upload=store_upload;app.state.serve_file=serve_file
+    from . import webpush,open_api,downloads
+    webpush.install(app,s)
+    open_api.install(app,s)
+    downloads.install(app,s)
     group_avatars.install(app,s,session)
     from .record_audit import install as install_record_audit
     install_record_audit(app,s,session)
@@ -701,6 +730,15 @@ def create_app(settings=None):
         # Existing YIDT intents retain this return URL. Resolve the room through
         # the authenticated API in the client; visiting it never funds an order.
         return RedirectResponse('/?order='+oid,status_code=303)
+    @app.get('/app/desktop-return')
+    async def desktop_return():
+        # Desktop counterpart of /app/return. Static: the query string is never
+        # reflected. The first-party script validates it locally and hands only
+        # a fixed-format order id to the yichat-open: protocol; no intent/token.
+        return Response(DESKTOP_RETURN_PAGE,media_type='text/html; charset=utf-8',headers={'Referrer-Policy':'no-referrer'})
+    @app.get('/app/desktop-return.js')
+    async def desktop_return_script():
+        return Response(DESKTOP_RETURN_SCRIPT,media_type='application/javascript',headers={'Referrer-Policy':'no-referrer'})
     @app.get('/tools/{name}')
     async def local_tool(name:str):
         if name not in ('verify_archive.py',):fail(404,'工具不存在')
@@ -711,6 +749,36 @@ def create_app(settings=None):
         return FileResponse(Path(__file__).parent.parent/'web'/name)
 
     return app
+
+DESKTOP_RETURN_PAGE='''<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>返回 YiChat 桌面版</title>
+<style>body{font:17px system-ui,sans-serif;max-width:30rem;margin:12vh auto;padding:24px;color:#17202a}a{display:block;margin:24px 0;padding:16px;border-radius:12px;text-align:center;background:#2563eb;color:white;text-decoration:none}a[hidden]{display:none}p{line-height:1.7}</style>
+<h1>返回 YiChat 桌面版</h1><p id="status">正在打开 YiChat 桌面版。若浏览器没有自动打开，请点击下面的按钮。</p>
+<a id="return-app" hidden>打开 YiChat 桌面版</a>
+<p>如果没有安装桌面版，或浏览器拦截了打开请求，可以手动打开 YiChat 桌面版，App 会在聊天中显示最近的订单。出资仍需在 App 内再次确认。</p>
+<script src="/app/desktop-return.js" defer></script></html>'''
+
+DESKTOP_RETURN_SCRIPT='''"use strict";
+(() => {
+  const q = new URLSearchParams(location.search);
+  const keys = [...q.keys()];
+  const status = document.getElementById("status");
+  let target = null;
+  // Only two shapes: no query (binding finished) or exactly one order id.
+  if (location.origin === "https://chat.yitiao.org") {
+    if (keys.length === 0) target = "yichat-open://return";
+    else if (keys.length === 1 && keys[0] === "order" && /^[A-Za-z0-9_-]{32}$/.test(q.get("order")))
+      target = "yichat-open://return?order=" + q.get("order");
+  }
+  if (!target) {
+    status.textContent = "回跳无效，请返回 YiChat。";
+    return;
+  }
+  const button = document.getElementById("return-app");
+  button.href = target;
+  button.hidden = false;
+  location.replace(target);
+})();
+'''
 
 async def revoke_sessions(app):
     s=app.state.settings

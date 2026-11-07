@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 from flask import request,session,jsonify,g,redirect
 import yidt_core as y
 
-RETURN={'ycards':'https://yitiao.org/ycards/','parachute':'https://yitiao.org/games/parachute/','daily':'https://yitiao.org/account/','yichat':'https://chat.yitiao.org/'}
+RETURN={'ycards':'https://yitiao.org/ycards/','parachute':'https://yitiao.org/games/parachute/','doudizhu':'https://yitiao.org/games/doudizhu/','daily':'https://yitiao.org/account/','yichat':'https://chat.yitiao.org/'}
 
 def install(app):
     from werkzeug.middleware.proxy_fix import ProxyFix
@@ -22,10 +22,10 @@ def install(app):
                 sid=secrets.token_urlsafe(32);session['yidt_sid']=sid
                 c.execute('INSERT INTO yidt_sessions VALUES(?,?,?,0)',(sid,session['user'],time.time()+30*86400))
         # Every mutating first-party request must be same-origin. Existing services also keep their CSRF tokens.
-        if request.method=='POST' and request.path.startswith(('/games/parachute/','/account/yidt/')):
+        if request.method=='POST' and request.path.startswith(('/games/parachute/','/games/doudizhu/','/account/yidt/')):
             if request.headers.get('Origin') and request.headers['Origin']!=request.host_url.rstrip('/'):
                 return jsonify(error='请求来源不匹配'),403
-            if not request.is_json and request.path.startswith('/games/parachute/api/'):
+            if not request.is_json and request.path.startswith(('/games/parachute/api/','/games/doudizhu/api/')):
                 return jsonify(error='需要 JSON 请求'),400
 
     @app.errorhandler(y.PaymentRequired)
@@ -66,6 +66,6 @@ def install(app):
                     service='ycards' if request.path.startswith('/ycards/') else 'parachute'
                     with y.connect() as c:
                         b=y.binding(c,session['user'],service)
-                        data['yidt_balance']=y.fmt(y.wallet(c,b['address'])['balance']) if b else None
+                        data['yidt_balance']=y.fmt_balance(y.wallet(c,b['address'])['balance']) if b else None
                 response.set_data(app.json.dumps(data))
         return response

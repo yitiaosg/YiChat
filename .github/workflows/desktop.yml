@@ -1,0 +1,200 @@
+name: Desktop (Windows / Linux)
+
+# Builds YiChat desktop installers on every relevant push / PR (artifacts only)
+# and publishes a GitHub release for tags `desktop-v<version>`.
+#
+# Configuration (Settings → Secrets and variables → Actions):
+#   vars.YICHAT_UPDATER_PUBKEY            updater public key (tauri signer generate); injected into
+#                                         plugins.updater.pubkey at build time
+#   secrets.TAURI_SIGNING_PRIVATE_KEY     updater private key (never in the repository)
+#   secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+#   vars.WINDOWS_SIGN_COMMAND             optional, reserved: Authenticode sign command with %1,
+#                                         e.g. a signtool / trusted-signing CLI call. Unset = unsigned.
+# Without the updater key/pubkey, builds still succeed but never self-update;
+# tag builds require them so every published release can update.
+
+on:
+  push:
+    tags: ['desktop-v*']
+    # Feature branches build through their pull request; avoid duplicate runs.
+    branches: ['main']
+    paths: ['desktop/**', 'source/yichat/client/**', '.github/workflows/desktop.yml']
+  pull_request:
+    paths: ['desktop/**', 'source/yichat/client/**', '.github/workflows/desktop.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            bundles: nsis
+          - os: ubuntu-22.04 # oldest supported glibc for the AppImage
+            platform: linux
+            bundles: appimage,deb
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      YICHAT_UPDATER_PUBKEY: ${{ vars.YICHAT_UPDATER_PUBKEY }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      WINDOWS_SIGN_COMMAND: ${{ vars.WINDOWS_SIGN_COMMAND }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            desktop/package-lock.json
+            source/yichat/client/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: NASM for vendored OpenSSL (SQLCipher)
+        if: matrix.platform == 'windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Strawberry Perl for vendored OpenSSL (Git Bash's perl lacks required modules)
+        if: matrix.platform == 'windows'
+        run: |
+          echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
+          echo 'PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
+
+      - name: Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev libdbus-1-dev patchelf file
+
+      - name: Version check
+        run: |
+          app=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
+          crate=$(grep -m1 '^version' desktop/src-tauri/Cargo.toml | cut -d'"' -f2)
+          [ "$app" = "$crate" ] || { echo "tauri.conf.json $app != Cargo.toml $crate"; exit 1; }
+          if [[ "$GITHUB_REF" == refs/tags/desktop-v* ]]; then
+            [ "${GITHUB_REF#refs/tags/desktop-v}" = "$app" ] || { echo "tag does not match version $app"; exit 1; }
+            [ -n "$YICHAT_UPDATER_PUBKEY" ] && [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "release builds need the updater key and pubkey"; exit 1; }
+          fi
+          echo "APP_VERSION=$app" >> "$GITHUB_ENV"
+
+      - name: Install and build shared web client
+        run: |
+          npm ci --prefix desktop --no-audit --no-fund
+          npm run web --prefix desktop
+
+      - name: Lint and unit tests
+        working-directory: desktop/src-tauri
+        run: |
+          cargo clippy --all-targets --locked -- -D warnings
+          cargo test --locked
+
+      - name: Build installers
+        working-directory: desktop
+        run: |
+          if [ -z "$YICHAT_UPDATER_PUBKEY" ] || [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::warning::Updater key not configured: this build will not self-update."
+          fi
+          config=$(PLATFORM='${{ matrix.platform }}' node -e '
+            const e = process.env, signed = !!(e.YICHAT_UPDATER_PUBKEY && e.TAURI_SIGNING_PRIVATE_KEY);
+            const config = { bundle: { createUpdaterArtifacts: signed } };
+            if (signed) config.plugins = { updater: { pubkey: e.YICHAT_UPDATER_PUBKEY.trim() } };
+            if (e.PLATFORM === "windows" && e.WINDOWS_SIGN_COMMAND) config.bundle.windows = { signCommand: e.WINDOWS_SIGN_COMMAND };
+            console.log(JSON.stringify(config));')
+          npx tauri build --bundles ${{ matrix.bundles }} --config "$config"
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p out
+          b=desktop/src-tauri/target/release/bundle
+          cp $b/nsis/*-setup.exe $b/nsis/*-setup.exe.sig out/ 2>/dev/null || true
+          cp $b/appimage/*.AppImage $b/appimage/*.AppImage.sig out/ 2>/dev/null || true
+          cp $b/deb/*.deb $b/deb/*.deb.sig out/ 2>/dev/null || true
+          ls -la out
+          [ -n "$(ls out)" ] || { echo "no installers produced"; exit 1; }
+          (cd out && sha256sum * > SHA256SUMS-${{ matrix.platform }}.txt)
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: yichat-desktop-${{ matrix.platform }}
+          path: out/
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Updater manifest
+        run: |
+          version="${TAG#desktop-v}"
+          python3 - "$version" <<'PY'
+          import json, sys, pathlib, datetime, os
+          version = sys.argv[1]
+          base = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{os.environ['TAG']}/"
+          dist = pathlib.Path("dist")
+          def entry(pattern):
+              files = [p for p in dist.glob(pattern) if not p.name.endswith(".sig")]
+              if len(files) != 1: return None
+              sig = files[0].with_name(files[0].name + ".sig")
+              if not sig.exists(): sys.exit(f"missing signature for {files[0].name}")
+              return {"signature": sig.read_text().strip(), "url": base + files[0].name}
+          platforms = {}
+          for key, pattern in [("windows-x86_64", "*-setup.exe"), ("windows-x86_64-nsis", "*-setup.exe"),
+                               ("linux-x86_64", "*.AppImage"), ("linux-x86_64-appimage", "*.AppImage"),
+                               ("linux-x86_64-deb", "*.deb")]:
+              e = entry(pattern)
+              if e: platforms[key] = e
+          for required in ("windows-x86_64", "linux-x86_64"):
+              if required not in platforms: sys.exit(f"missing {required} artifact")
+          manifest = {"version": version, "notes": f"YiChat 桌面版 {version}",
+                      "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                      "platforms": platforms}
+          pathlib.Path("latest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+          print(json.dumps(manifest, ensure_ascii=False, indent=2))
+          PY
+          cat dist/SHA256SUMS-*.txt > dist/SHA256SUMS.txt && rm dist/SHA256SUMS-*.txt
+
+      - name: "Publish release (never marked latest: Android keeps the latest release)"
+        run: |
+          gh release create "$TAG" dist/* latest.json --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "YiChat 桌面版 ${TAG#desktop-v}" --latest=false \
+            --notes "Windows：下载 *-setup.exe（当前用户安装，无需管理员）。Linux：AppImage 或 .deb。校验值见 SHA256SUMS.txt；已安装的版本会通过签名校验自动更新。"
+
+      - name: Point the updater manifest at this release
+        run: |
+          if ! gh release view desktop-updater --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create desktop-updater --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
+              --title "YiChat 桌面版更新清单" --notes "桌面版自动更新读取此处的 latest.json；请勿删除。安装包见各 desktop-v* 发布。"
+          fi
+          gh release upload desktop-updater latest.json --clobber --repo "$GITHUB_REPOSITORY"

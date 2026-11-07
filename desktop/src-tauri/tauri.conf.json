@@ -1,0 +1,87 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "YiChat",
+  "version": "0.1.0",
+  "identifier": "org.yitiao.yichat.desktop",
+  "build": {
+    "frontendDist": "../../source/yichat/client/dist",
+    "beforeBuildCommand": "npm --prefix ../source/yichat/client ci --no-audit --no-fund && npm --prefix ../source/yichat/client run build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null,
+      "freezePrototype": false,
+      "capabilities": [
+        "main"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "appimage",
+      "deb"
+    ],
+    "publisher": "Yitiao",
+    "category": "SocialNetworking",
+    "shortDescription": "YiChat 桌面版",
+    "longDescription": "YiChat Windows / Linux 桌面客户端：系统托盘、原生通知、本地加密备份。",
+    "copyright": "Yitiao",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "icons/128x128.png": "toast-icon.png"
+    },
+    "createUpdaterArtifacts": false,
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": null,
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "windows/hooks.nsh",
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      }
+    },
+    "linux": {
+      "deb": {
+        "desktopTemplate": "linux/yichat-desktop.desktop"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  },
+  "mainBinaryName": "yichat-desktop",
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "yichat-open"
+        ]
+      }
+    },
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/yitiaosg/YiChat/releases/download/desktop-updater/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

@@ -17,7 +17,7 @@ def fixture(env):
     push.install(app,s,lambda _:who)
     with connect(s.db) as c:
         c.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0,0)',(who['token_hash'],who['subject'],'alice','sid-alice',who['mxid'],who['device'],'test',time.time()+3600))
-        c.execute('INSERT INTO native_devices VALUES(?,?,?,?,?)',('proof',who['subject'],who['mxid'],who['device'],time.time()))
+        c.execute('INSERT INTO native_devices(proof_hash,subject,mxid,device,created) VALUES(?,?,?,?,?)',('proof',who['subject'],who['mxid'],who['device'],time.time()))
         c.execute("INSERT INTO rooms VALUES('!test:chat.yitiao.org','group',?,NULL,30)",(who['mxid'],))
     with TestClient(app) as client:yield s,who,sender,client
 

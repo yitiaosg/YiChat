@@ -7,7 +7,7 @@ def native(c,s):
     c.cookies.clear();c.headers.pop('Origin',None);c.headers['Authorization']='Bearer session-token'
     with connect(s.db) as db:
         who=db.execute("SELECT * FROM sessions WHERE username='alice' LIMIT 1").fetchone()
-        db.execute('INSERT INTO native_devices VALUES(?,?,?,?,?)',('fixture-proof',who['subject'],who['mxid'],who['device'],time.time()))
+        db.execute('INSERT INTO native_devices(proof_hash,subject,mxid,device,created) VALUES(?,?,?,?,?)',('fixture-proof',who['subject'],who['mxid'],who['device'],time.time()))
 
 def test_metadata_binds_room_device_txn_and_original_ciphertext(gateway):
     c,app,s=gateway;native(c,s)
@@ -52,7 +52,7 @@ def test_native_admission_paces_business_and_rust_routes_together(gateway):
 
 def test_native_yidt_return_is_fixed_and_cancel_still_invalidates(env):
     s,f,u=env
-    o=f.create(u['alice'],{'room':'!test:chat.yitiao.org','kind':'direct'},{'key':'native-return-fixture-key','amount':'0.01'},'bob',native_return=True)
+    o=f.create(u['alice'],{'room':'!test:chat.yitiao.org','kind':'direct'},{'key':'native-return-fixture-key','amount':'0.01'},'bob',native_return='android')
     with connect(s.ledger) as db:
         row=db.execute('SELECT * FROM yidt_intents WHERE id=(SELECT intent FROM yichat_orders WHERE id=?)',(o['id'],)).fetchone()
         assert row['return_url']==s.origin+'/app/return?order='+o['id'] and row['state']=='pending'

@@ -19,7 +19,7 @@ def main():
         with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True) as src,sqlite3.connect(destination/db.name) as out:src.backup(out)
         (destination/db.name).chmod(0o600)
     with tarfile.open(destination/'private-config-and-keys.tar.gz','w:gz') as bundle:
-        for path in (Path('/etc/yichat'),Path('/etc/caddy/Caddyfile'),base/'.yidt_key',base/'.secret_key',base/'.oidc_key.pem',Path(config['signing_key_path'])):
+        for path in (Path('/etc/yichat'),Path('/etc/caddy/Caddyfile'),base/'.yidt_key',base/'.secret_key',base/'.oidc_key.pem',Path(config['signing_key_path']),Path(env.get('YICHAT_WEBPUSH_KEY',str(gateway/'webpush-vapid.pem')))):
             if path.exists():bundle.add(path,arcname=str(path).lstrip('/'))
     (destination/'private-config-and-keys.tar.gz').chmod(0o600)
     with (destination/'archive.pgdump').open('wb') as out:
