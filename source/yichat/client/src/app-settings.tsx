@@ -12,6 +12,7 @@ export function AppSettings({close,audit}:{close:()=>void;audit:()=>void}){
   <p class="notice">自动保存原消息包到内部 data 目录，无需选择文件夹。卸载会删除内部数据。消息不再依赖会话密钥。</p>
   {status&&<><p role="status">{status.status}</p><p>内部已保存 {status.packets} 份原消息包</p><p>{status.exportStatus}</p></>}
   <button type="button" disabled={busy} onClick={()=>run('backupNow')}>立即保存内部快照</button>
+  <h3>App 更新</h3><UpdateControls/>
   {chat.appNotifications&&<><h3>消息通知</h3><NotificationControls/></>}
   <h3>核验聊天记录</h3><p class="small muted">选择连续最多5个UTC日期，与服务器存证比对后只读查看，无需会话密钥。</p><button type="button" disabled={busy} onClick={audit}>验证备份记录</button>
   <h3>按天导出到外部</h3><label>间隔天数<input type="number" min="1" max="3650" step="1" value={days} onInput={e=>setDays(e.currentTarget.value)}/></label>
@@ -30,4 +31,12 @@ function NotificationControls(){
  useEffect(()=>{void refresh();const wake=()=>void refresh();window.addEventListener('focus',wake);return()=>window.removeEventListener('focus',wake)},[]);
  async function run(method:string,args={}){setBusy(true);setError('');try{await appCall(method,args);await refresh()}catch(e:any){setError(e.message)}finally{setBusy(false)}}
  return <>  {notifications&&<><label class="check"><input type="checkbox" checked={!!notifications.enabled} disabled={busy} onChange={e=>{const enabled=e.currentTarget.checked;setNotifications({...notifications,enabled});void run('configureNotifications',{enabled})}}/>启用 App 通知</label><p class="small muted">{notifications.permitted?'系统通知权限已开启':'请允许系统通知权限' }。归档和免打扰会话不通知；锁屏隐藏消息正文；解锁后可显示本机解密的内容。{notifications.background_supported?'配置推送后使用系统推送接收；未配置时保留后台连接。系统权限和省电设置可能影响投递。':'此 App 版本的后台通知约15分钟检查一次，建议更新 App。'}</p>{notifications.background_supported&&<button type="button" onClick={()=>void run('backgroundSettings')}>后台运行设置</button>}{!notifications.permitted&&<button type="button" onClick={()=>void run('notificationSettings')}>打开系统通知设置</button>}</>}{!notifications&&!error&&<p role="status">正在读取通知权限…</p>}{error&&<ErrorText>{error}</ErrorText>}</>;
+}
+
+function UpdateControls(){
+ const [state,setState]=useState<{current?:string;available?:boolean;latest?:string|null;error?:string}>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function check(){setBusy(true);setError('');try{setState(await appCall('checkUpdate'))}catch(e:any){setError(/不支持此 App 操作/.test(e.message)?'此 App 版本不支持应用内检查，请从 GitHub Releases 下载最新版':e.message)}finally{setBusy(false)}}
+ return <><p class="small muted">从 GitHub Releases 检查新版本；有更新时在浏览器中下载安装包并覆盖安装，聊天与备份数据保留。</p>
+  {state&&<p role="status">{state.error?state.error:state.available?'发现新版本 '+state.latest+'（当前 '+state.current+'）':'已是最新版本 '+state.current}</p>}
+  <button type="button" disabled={busy} onClick={check}>{busy?'正在检查…':'检查更新'}</button>{error&&<ErrorText>{error}</ErrorText>}</>
 }
