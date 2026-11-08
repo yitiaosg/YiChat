@@ -1,0 +1,11 @@
+{
+  "versionName": "0.3.8",
+  "versionCode": 16,
+  "package": "org.yitiao.yichat.mobile",
+  "bytes": 9772690,
+  "sha256": "74f1435d383f95ec9853568351d24845ea9a044649caf15ea8387e12bfcb5c8d",
+  "certificate_sha256": "9e7505f84f84c28ac920a5da3470a452e7923b76c54167ce1c942afc56c7af3e",
+  "certificate_matches_0.3.7": true,
+  "app_shell_resources": 14,
+  "app_shell_byte_identical": true
+}

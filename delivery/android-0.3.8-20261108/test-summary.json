@@ -1,0 +1,56 @@
+{
+  "web_tests": 34,
+  "android_debug_jvm": [
+    {
+      "name": "org.yitiao.yichat.AppUpdatesTest",
+      "tests": "3",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "org.yitiao.yichat.BrowserUrlsTest",
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "org.yitiao.yichat.GatewayRecoveryTest",
+      "tests": "3",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "org.yitiao.yichat.NotificationPolicyTest",
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "org.yitiao.yichat.PacketBackupTest",
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "org.yitiao.yichat.WebRoutesTest",
+      "tests": "2",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    }
+  ],
+  "android_debug_jvm_total": 18,
+  "lint": {
+    "Warning": 63,
+    "Hint": 1
+  },
+  "lint_errors": 0,
+  "strict_dependency_verification": true,
+  "production_source_unchanged": true,
+  "physical_device_tests_executed": false
+}
