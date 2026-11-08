@@ -56,18 +56,29 @@ def grant_files(s,who,room,contents):
     c.execute('INSERT INTO file_reuse_grants VALUES(?,?,?,?) ON CONFLICT(file,room,uid) DO UPDATE SET expires=max(expires,excluded.expires)',(fid,room,who['subject'],row['expires']))
 def snapshot(app,s,who,event):
  content=event['content'];urls=[]
+ share=content.get('org.yitiao.share') if isinstance(content.get('org.yitiao.share'),dict) else {}
  from .notification_summary import URL,TRAILING
- for u in URL.findall(content.get('body','')):
+ for u in URL.findall(content.get('body',''))+[str(share.get('url',''))]:
   u=u.rstrip(TRAILING)
   if previews.parse(u):urls.append(u)
  metas=[]
+ gift=re.search(r'https://chat\.yitiao\.org/gifts/([a-f0-9]{32})',str(content.get('body',''))+' '+str(share.get('url','')))
+ gid=gift[1] if gift else content.get('org.yitiao.business',{}).get('id') if content.get('org.yitiao.business',{}).get('kind')=='gift' else None
+ if gid:
+  with connect(s.ledger) as c:
+   row=c.execute('SELECT * FROM yichat_card_gifts WHERE id=? AND room=?',(gid,event['room_id'])).fetchone()
+   current=c.execute('SELECT i.owner,EXISTS(SELECT 1 FROM yc_destroyed d WHERE d.instance=i.id) destroyed FROM yc_instances i WHERE i.id=?',(row['instance'],)).fetchone() if row else None
+   if current and not current['destroyed']:
+    from .card_reads import store
+    card=store(s).preview(row['instance'],current['owner'],connection=c)
+    metas.append({'type':'gift','url':'https://chat.yitiao.org/gifts/'+gid,'title':'赠送卡片','data':{'card':card,'sender':row['sender'],'recipient':row['recipient']}})
  for url in urls[:4]:
   parsed=previews.parse(url)
   if parsed[0]=='order':
    with connect(s.ledger) as c:
     o=c.execute('SELECT * FROM yichat_orders WHERE id=? AND room=?',(parsed[1][0],event['room_id'])).fetchone()
     meta={'type':'order','url':url,'data':app.state.funds.public(c,o,who['username'])} if o else None
-   if meta:meta['data']['actions']={};meta['data']['authorize_url']=None;meta['receipt']=content.get('org.yitiao.share',{}).get('type')=='receipt'
+   if meta:meta['data']['actions']={};meta['data']['authorize_url']=None;meta['receipt']=share.get('type')=='receipt'
   else:
    try:meta=previews.metadata(s,url)
    except Exception:meta=None
