@@ -1,0 +1,8 @@
+v22.23.3
+openjdk version "21.0.13" 2026-10-20
+OpenJDK Runtime Environment (build 21.0.13+9-1-deb13u2-Debian)
+OpenJDK 64-Bit Server VM (build 21.0.13+9-1-deb13u2-Debian, mixed mode, sharing)
+List of devices attached
+
+Android platform 36; build-tools 36.0.0
+Private original signing and Firebase configuration supplied outside source checkout.

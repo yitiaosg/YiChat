@@ -3,7 +3,7 @@ import {MESSAGE_EPOCH,chatStoreScope,clearLegacyChatStores} from './message-poli
 import {sdkLog} from './log';
 import { requests, path, codepoints, shareUrls } from './api';
 import { Vault } from './vault';
-import {History} from './history';
+import {History,verifyPacket} from './history';
 import {giftId} from './gifts';
 import {isApp,appCall} from './app';
 export type RoomInfo={room:string;kind:'direct'|'group';owner:string;peer:string|null;encryption:'direct'|'plain'|'legacy_encrypted';membership?:string;peer_deleted?:boolean;revision?:number;has_messages?:boolean;dissolved_at?:number|null};
@@ -105,6 +105,25 @@ export class Chat {
   roomName(room:sdk.Room){const info=this.info.get(room.roomId);if(info?.kind==='direct')return this.name(info.owner===this.session.mxid?info.peer!:info.owner);return room.name||'会话'}
   timeline(room:sdk.Room){return this.history.timeline(room)}
   findEvent(room:sdk.Room,id:string){return room.findEventById(id)}
+  // App only: page older messages from the native automatic packet backup
+  // (not the WebView sync cache) when offline or past the server's retention.
+  private localCursors=new Map<string,string|null>();
+  localHistoryDone(room:string){return this.localCursors.get(room)===null}
+  async localOlder(room:sdk.Room):Promise<number>{
+    if(!isApp||this.localCursors.get(room.roomId)===null)return 0;
+    const live=room.getLiveTimeline(),first=live.getEvents()[0],cursor=this.localCursors.get(room.roomId)||'';
+    let added=0,next:string|null=cursor;
+    for(let page=0;page<5&&!added&&next!==null;page++){
+      let result:{rows:{event_id:string;sha256:string;raw:string}[];cursor:string|null;more:boolean};
+      try{result=await appCall('localOlder',{room:room.roomId,cursor:next,before_ts:first?first.getTs():Number.MAX_SAFE_INTEGER,limit:40})}catch(e:any){if(/不支持此 App 操作/.test(e.message)){this.localCursors.set(room.roomId,null);return added}throw e}
+      if(this.closed)return 0;
+      const events:sdk.MatrixEvent[]=[];
+      for(const row of result.rows){if(room.findEventById(row.event_id))continue;try{events.push(new sdk.MatrixEvent(await verifyPacket(row.raw,{sha256:row.sha256,event_id:row.event_id,room:room.roomId})))}catch{/* Skip packets that fail verification. */}}
+      if(events.length){room.addEventsToTimeline(events,true,false,room.getLiveTimeline(),room.getLiveTimeline().getPaginationToken(sdk.EventTimeline.BACKWARDS)??undefined);added+=events.length}
+      next=result.more&&result.cursor?result.cursor:null;
+    }
+    this.localCursors.set(room.roomId,next);if(added)this.changed();return added;
+  }
   readOnly(room:string){const info=this.info.get(room);return !!info?.peer_deleted||!!info?.dissolved_at||this.client?.getRoom(room)?.getMyMembership()!=='join'}
   preferenceSaving(room:string){return this.preferencePending.has(room)}
   async setPreference(room:string,value:any){
