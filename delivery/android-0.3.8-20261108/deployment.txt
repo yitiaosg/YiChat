@@ -1,0 +1,2 @@
+Static release: /var/lib/yichat/web/releases/20261108T154151Z
+Source commit: 40e7a7bd5ab934a50a8a26f764da3d9b027a6e7a

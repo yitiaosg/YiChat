@@ -8,6 +8,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
+import android.app.AlertDialog
 import android.webkit.*
 import android.widget.*
 import androidx.core.view.ViewCompat
@@ -206,6 +207,48 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onSaveInstanceState(out:Bundle) { callbackDigest?.let { out.putString("callback-digest",it) };super.onSaveInstanceState(out) }
+    private var updateDialog:AlertDialog?=null
+    private var updateCheck:Job?=null
+    /** Compares with the latest GitHub release; the browser downloads and installs the APK. */
+    private fun checkForUpdate(manual:Boolean,reply:Reply?=null) {
+        if(updateCheck?.isActive==true && !manual) return
+        if(!online()) { reply?.let { respond(it,buildJsonObject { put("current",BuildConfig.VERSION_NAME);put("available",false);put("error","当前离线") }) };return }
+        updateCheck=lifecycleScope.launch {
+            val result=runCatching { graph.updates.check(force=manual) }
+            val release=result.getOrNull()
+            reply?.let { r -> respond(r,buildJsonObject { put("current",BuildConfig.VERSION_NAME);put("available",release!=null);put("latest",release?.versionName?.let(::JsonPrimitive) ?: JsonNull);result.exceptionOrNull()?.let { put("error","无法连接 GitHub 检查更新") } }) }
+            if(release==null) return@launch
+            if(!manual && graph.updates.snoozed(release)) return@launch
+            showUpdate(release)
+        }
+    }
+    private fun showUpdate(release:AppRelease) {
+        if(isFinishing || isDestroyed || updateDialog?.isShowing==true) return
+        val notes=release.notes.lines().map { it.trim().removePrefix("#").trim() }.filter { it.isNotEmpty() }.take(6).joinToString("\n")
+        updateDialog=AlertDialog.Builder(this)
+            .setTitle("发现新版本 ${release.versionName}")
+            .setMessage("当前版本 ${BuildConfig.VERSION_NAME}。将在浏览器中通过 GitHub 下载安装包，下载完成后点击安装即可覆盖升级，聊天和备份数据保留。"+(if(notes.isNotEmpty()) "\n\n"+notes else ""))
+            .setPositiveButton("下载并安装") { _,_ -> downloadUpdate(release) }
+            .setNegativeButton("稍后") { _,_ -> graph.updates.snooze(release) }
+            .setNeutralButton("发布说明") { _,_ -> openUpdateLink(release.pageUrl) }
+            .setOnCancelListener { graph.updates.snooze(release) }
+            .show()
+    }
+    private fun downloadUpdate(release:AppRelease) {
+        if(!ReleaseInfo.trustedApk(release.apkUrl)) { toast("更新链接无效");return }
+        graph.updates.snooze(release) // Do not re-prompt immediately when returning from the browser.
+        openUpdateLink(release.apkUrl)
+        toast("浏览器下载完成后，打开安装包并允许安装以完成更新")
+    }
+    private fun openUpdateLink(url:String) {
+        if(!ReleaseInfo.trustedApk(url) && !ReleaseInfo.trustedPage(url)) return
+        // A plain VIEW intent lets the default browser handle the APK download and hand it to the installer.
+        // Target the default web browser so a GitHub client app cannot claim the link.
+        val view=Intent(Intent.ACTION_VIEW,Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val probe=Intent(Intent.ACTION_VIEW,Uri.parse("https://")).addCategory(Intent.CATEGORY_BROWSABLE)
+        packageManager.resolveActivity(probe,PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName?.takeIf { it!="android" }?.let(view::setPackage)
+        runCatching { startActivity(view) }.recoverCatching { BrowserNavigator.external(this,Uri.parse(url)) }.onFailure { toast("无法打开系统浏览器下载更新") }
+    }
     private fun navigate(uri:Uri):Boolean {
         if(WebRoutes.chat(uri.toString())) return false
         if(WebRoutes.trusted(uri.toString()) && uri.path=="/auth/login") { lifecycleScope.launch { runCatching { login() }.onFailure { toast(safeError(it)) } };return true }
@@ -245,6 +288,12 @@ class MainActivity : ComponentActivity() {
                         }
                         require(graph.auth.account?.token==active){"会话已锁定"};respond(reply,value)
                     }
+                    "localOlder" -> {
+                        val active=graph.auth.account?.token;requireNotNull(active){"请先登录"}
+                        val value=graph.localTimeline.older(args.s("room"),args.s("cursor"),args["before_ts"]?.jsonPrimitive?.longOrNull ?: Long.MAX_VALUE,args["limit"]?.jsonPrimitive?.intOrNull ?: LocalTimeline.PAGE)
+                        require(graph.auth.account?.token==active){"会话已锁定"};respond(reply,value)
+                    }
+                    "checkUpdate" -> checkForUpdate(true,reply)
                     "session" -> {
                         val a=withContext(Dispatchers.IO) { graph.restore() }
                         respond(reply,buildJsonObject { put("online",online());put("version",BuildConfig.VERSION_NAME);put("capabilities",buildJsonObject{put("notifications",true);put("backgroundNotifications",true)});put("pendingLogout",graph.vault.get("web.pending-logout")!=null);put("session",a?.let { buildJsonObject {
@@ -304,11 +353,11 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onPause() { graph.notifications.foreground=false; if(::web.isInitialized){web.evaluateJavascript("window.dispatchEvent(new Event('yc:background'))",null);web.onPause()};super.onPause() }
-    override fun onResume() { super.onResume();graph.notifications.foreground=true;if(::web.isInitialized)web.onResume();graph.notifications.startListener();lifecycleScope.launch { runCatching { withContext(Dispatchers.IO){graph.restore()} }.onSuccess { account -> if(account==null && ::web.isInitialized && WebRoutes.chat(web.url.orEmpty()))web.evaluateJavascript("window.dispatchEvent(new Event('yc:app-session-locked'))",null) } } }
+    override fun onResume() { super.onResume();if(::web.isInitialized)checkForUpdate(false);graph.notifications.foreground=true;if(::web.isInitialized)web.onResume();graph.notifications.startListener();lifecycleScope.launch { runCatching { withContext(Dispatchers.IO){graph.restore()} }.onSuccess { account -> if(account==null && ::web.isInitialized && WebRoutes.chat(web.url.orEmpty()))web.evaluateJavascript("window.dispatchEvent(new Event('yc:app-session-locked'))",null) } } }
     override fun onDestroy() {
         chooser?.onReceiveValue(null);microphoneRequest?.deny()
         downloads.values.forEach { it.file.delete() };saving?.first?.file?.delete()
-        graph.notificationContent.detach();(application as YiChatApplication).push.activeRoom="";(application as YiChatApplication).push.refreshVisible=null
+        updateDialog?.dismiss();graph.notificationContent.detach();(application as YiChatApplication).push.activeRoom="";(application as YiChatApplication).push.refreshVisible=null
         if(::web.isInitialized) { WebViewCompat.removeWebMessageListener(web,"YiChatApp");web.destroy() }
         super.onDestroy()
     }

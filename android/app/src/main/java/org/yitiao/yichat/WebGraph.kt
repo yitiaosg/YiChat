@@ -62,6 +62,8 @@ class Graph(val context: Application) {
     val history = HistoryRepository(store, gateway, vault)
     val backup = BackupRepository(context, store, history, vault)
     val records = RecordAudit(store,vault)
+    val localTimeline = LocalTimeline(store,vault)
+    val updates = AppUpdates(context)
     val notifications = Notifications(context,this)
     val notificationContent = NotificationContent(context,this)
     private val startup = Mutex()

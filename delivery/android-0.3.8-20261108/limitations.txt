@@ -1,0 +1,3 @@
+No physical Android device is attached (adb devices -l is empty). Requested device cases a/b/c were not executed.
+0.3.7 native source at e74016d has no AppUpdates/checkUpdate implementation. Publishing 0.3.8 cannot make an unmodified 0.3.7 APK automatically show a native update prompt; use the GitHub APK link for that first upgrade.
+No production backend source or database changes. Message epoch remains plain-20261029-v1.

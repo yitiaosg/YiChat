@@ -1,0 +1,141 @@
+{
+  "origin": "https://chat.yitiao.org",
+  "files": [
+    {
+      "path": "assets/chat-BmDyCqL9.js",
+      "status": 200,
+      "bytes": 210977,
+      "sha256": "8cdf6bde0c98975af95c8add3b127d0681145afdabc4f5705bc03c32d9f52129",
+      "cache_control": "public, max-age=31536000, immutable",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "assets/index-CeTOtgP7.js",
+      "status": 200,
+      "bytes": 218659,
+      "sha256": "05892056fffb8af883aeb598aecac1b00caee0a5d167f7ccdd89e8558479c1a5",
+      "cache_control": "public, max-age=31536000, immutable",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "assets/indexeddb-crypto-store-DI6Cfj0A.js",
+      "status": 200,
+      "bytes": 714654,
+      "sha256": "7e718d33f92578691d898145745324f6b545e3b08062ecf02c6ea381a81a8c5a",
+      "cache_control": "public, max-age=31536000, immutable",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "assets/main--McKfmm-.js",
+      "status": 200,
+      "bytes": 132877,
+      "sha256": "798bed3571cada743f348a5378499047d36ab5d9b79a0e6b9348157e9ee804ab",
+      "cache_control": "public, max-age=31536000, immutable",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "assets/main-DX9mpqyH.css",
+      "status": 200,
+      "bytes": 32191,
+      "sha256": "20ae2e58a36f1601b82a4946927f01a877b947586ebd080a6d3d3c5739b00a21",
+      "cache_control": "public, max-age=31536000, immutable",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "assets/matrix_sdk_crypto_wasm_bg-dMeGppz-.wasm",
+      "status": 200,
+      "bytes": 5513879,
+      "sha256": "5923b21f248e6b7956e48d03ad6b34b33bc35217874c7f357a09ca9aab1a777e",
+      "cache_control": "public, max-age=31536000, immutable",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "assets/notification-C3RP8TJv.js",
+      "status": 200,
+      "bytes": 477,
+      "sha256": "69079ce976fdb19ca7a879096a2504b14d2579b9aeea6ab70131e1695328e21c",
+      "cache_control": "public, max-age=31536000, immutable",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "brand/yichat.png",
+      "status": 200,
+      "bytes": 41480,
+      "sha256": "1f16ecae4e7f47b43e6412bffa5f1025fb4c8d49bba89bf5be8118aae9087972",
+      "cache_control": "public, max-age=86400, stale-while-revalidate=604800",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "index.html",
+      "status": 200,
+      "bytes": 2244,
+      "sha256": "3421c73affd9a0e2da1dc95c0864197e76f9aefd0d5188f070c3bbb4c34aaacd",
+      "cache_control": "no-store",
+      "origin_byte_identical": true,
+      "public_byte_identical": false,
+      "content_security_policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    },
+    {
+      "path": "notification.html",
+      "deployed_byte_identical": true,
+      "public_route": "not exposed; native WebShellCache provides packaged HTML fallback"
+    },
+    {
+      "path": "render/parachute-jump.svg",
+      "status": 200,
+      "bytes": 966,
+      "sha256": "efd693beefd3024e4d704112078127eccebfd773a20c8b4e953b46cfc0a79082",
+      "cache_control": "public, max-age=14400",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "render/parachute-plane.svg",
+      "status": 200,
+      "bytes": 1705,
+      "sha256": "481ab6d52faa18214b39aa23fb20f05b03232ae61f90ccd59d8d5d8e8e017ebb",
+      "cache_control": "public, max-age=14400",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "render/parachute-scene.js",
+      "status": 200,
+      "bytes": 794,
+      "sha256": "a0276177a6844ce30be6ea9f231ffa6e5e454f88634693c2ce85d16bda56d271",
+      "cache_control": "public, max-age=14400",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    },
+    {
+      "path": "render/ycards-render.js",
+      "status": 200,
+      "bytes": 25912,
+      "sha256": "64659cd5dfd646ca8372749487a2c2df0bccdc1b82cc3d9a359ca1d933ead776",
+      "cache_control": "public, max-age=14400",
+      "origin_byte_identical": true,
+      "public_byte_identical": true
+    }
+  ],
+  "health": {
+    "service": "YiChat",
+    "status": "ok",
+    "message_epoch": "plain-20261029-v1",
+    "e2ee": false,
+    "funds_enabled": true
+  },
+  "self_hosted_apk_http": 404,
+  "static_release": "/var/lib/yichat/web/releases/20261108T154151Z",
+  "release_metadata": {
+    "source_commit": "40e7a7bd5ab934a50a8a26f764da3d9b027a6e7a",
+    "created_utc": "20261108T154151Z"
+  }
+}

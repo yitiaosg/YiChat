@@ -1,0 +1,146 @@
+Downloading https://services.gradle.org/distributions/gradle-8.13-bin.zip
+.............10%.............20%.............30%.............40%.............50%.............60%.............70%.............80%.............90%.............100%
+
+Welcome to Gradle 8.13!
+
+Here are the highlights of this release:
+ - Daemon JVM auto-provisioning
+ - Enhancements for Scala plugin and JUnit testing
+ - Improvements for build authors and plugin developers
+
+For more details see https://docs.gradle.org/8.13/release-notes.html
+
+Starting a Gradle Daemon (subsequent builds will be faster)
+
+> Task :app:buildChatWeb
+
+> yichat-web@1.0.0 prebuild
+> node scripts/copy-renderers.mjs
+
+
+> yichat-web@1.0.0 build
+> tsc --noEmit && vite build
+
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 1915 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/notification.html                                   0.36 kB │ gzip:     0.24 kB
+dist/index.html                                          0.76 kB │ gzip:     0.47 kB
+dist/assets/matrix_sdk_crypto_wasm_bg-dMeGppz-.wasm  5,513.88 kB │ gzip: 1,831.16 kB
+dist/assets/main-DX9mpqyH.css                           32.19 kB │ gzip:     7.35 kB
+dist/assets/notification-C3RP8TJv.js                     0.48 kB │ gzip:     0.31 kB
+dist/assets/main--McKfmm-.js                           132.88 kB │ gzip:    46.67 kB
+dist/assets/chat-BmDyCqL9.js                           210.98 kB │ gzip:    58.05 kB
+dist/assets/index-CeTOtgP7.js                          218.66 kB │ gzip:    44.93 kB
+dist/assets/indexeddb-crypto-store-DI6Cfj0A.js         714.65 kB │ gzip:   200.37 kB
+✓ built in 9.56s
+
+> Task :app:bundleChatWeb
+> Task :app:preBuild
+> Task :app:preReleaseBuild
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:mergeReleaseNativeLibs
+> Task :app:checkReleaseDuplicateClasses
+
+> Task :app:stripReleaseDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libdatastore_shared_counter.so. Run with --info option to learn more.
+
+> Task :app:buildKotlinToolingMetadata
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:extractReleaseNativeSymbolTables
+> Task :app:generateReleaseBuildConfig
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:checkReleaseAarMetadata
+> Task :app:generateReleaseResValues
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :app:packageReleaseResources
+> Task :app:mergeReleaseResources
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :app:parseReleaseLocalResources
+> Task :app:processReleaseMainManifest
+> Task :app:processReleaseManifest
+> Task :app:processReleaseManifestForPackage
+> Task :app:javaPreCompileRelease
+> Task :app:desugarReleaseFileDependencies
+> Task :app:mergeReleaseStartupProfile
+> Task :app:processReleaseResources
+> Task :app:mergeExtDexRelease
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseShaders
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets
+> Task :app:compressReleaseAssets
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:extractProguardFiles
+> Task :app:optimizeReleaseResources
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig
+> Task :app:checkDebugAarMetadata
+> Task :app:generateDebugResValues
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugResources
+> Task :app:mergeDebugResources
+> Task :app:packageDebugResources
+> Task :app:parseDebugLocalResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:processDebugResources
+> Task :app:kspDebugKotlin
+> Task :app:kspReleaseKotlin
+> Task :app:compileReleaseKotlin
+> Task :app:compileDebugKotlin
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/MainActivity.kt:106:59 'var databaseEnabled: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/MainActivity.kt:209:38 The corresponding parameter in the supertype 'ComponentActivity' is named 'outState'. This may cause problems when calling this function with named arguments.
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/NotificationContent.kt:44:98 'var databaseEnabled: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/PushNotifications.kt:113:32 'constructor(p0: CharSequence): Notification.MessagingStyle' is deprecated. Deprecated in Java.
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/PushNotifications.kt:116:38 'fun addMessage(p0: CharSequence!, p1: Long, p2: CharSequence!): Notification.MessagingStyle!' is deprecated. Deprecated in Java.
+
+> Task :app:compileReleaseKotlin
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/MainActivity.kt:106:59 'var databaseEnabled: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/MainActivity.kt:209:38 The corresponding parameter in the supertype 'ComponentActivity' is named 'outState'. This may cause problems when calling this function with named arguments.
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/NotificationContent.kt:44:98 'var databaseEnabled: Boolean' is deprecated. Deprecated in Java.
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/PushNotifications.kt:113:32 'constructor(p0: CharSequence): Notification.MessagingStyle' is deprecated. Deprecated in Java.
+w: file:///home/claude/Documents/Codex/2026-11-08-yichat-android-0-3-8-versioncode/android/app/src/main/java/org/yitiao/yichat/PushNotifications.kt:116:38 'fun addMessage(p0: CharSequence!, p1: Long, p2: CharSequence!): Notification.MessagingStyle!' is deprecated. Deprecated in Java.
+
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics
+> Task :app:mergeDexRelease
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:compileReleaseArtProfile
+> Task :app:processReleaseJavaRes
+> Task :app:mergeReleaseJavaResource
+> Task :app:javaPreCompileDebug
+> Task :app:compileDebugJavaWithJavac
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:kspDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestKotlin
+> Task :app:preDebugUnitTestBuild
+> Task :app:javaPreCompileDebugUnitTest
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugJavaRes
+> Task :app:processDebugUnitTestJavaRes
+> Task :app:testDebugUnitTest
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:lintVitalReportRelease
+> Task :app:lintVitalRelease
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+
+BUILD SUCCESSFUL in 6m 20s
+79 actionable tasks: 79 executed
