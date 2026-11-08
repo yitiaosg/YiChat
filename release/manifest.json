@@ -1,42 +1,42 @@
 {
-  "tag": "android-20261108-v0.3.9",
-  "name": "YiChat Android 0.3.9",
-  "source_commit": "7ad4a6a137c5d449493e0b49bf4473cf76889165",
-  "notes": "Android 0.3.9 / versionCode 17，沿用原证书覆盖升级。\n\n站内余额钱包、多选长图/逐条与合并转发、开发者API转账/红包/收款与群资料、已读回执、滑动引用、新消息动画、本地背景与主题色、合并记录附件本机加密备份。API文档及验证边界见仓库 PRODUCTION-0.3.9.md。\n\n后端98项回归和最终8项（含真实Synapse集成）通过；Web34项、浏览器长图与特殊气泡验证、签名Android Release构建与JVM测试通过。没有物理手机验收；摄像头区域按要求未测试。原口令导出包暂不打包合并附件实体，附件已纳入设备内部加密备份。\n\nSHA-256: c5f0527b2d465e3920de413ae45c81b2c65d59502f09caef0ce44056cab8a339",
+  "tag": "android-20261108-v0.3.10",
+  "name": "YiChat Android 0.3.10",
+  "source_commit": "8cf1f75bc4827b60f6f3911bb83f5f84d6551a7e",
+  "notes": "Android 0.3.10 / versionCode 18，沿用原证书覆盖升级。\n\n站内余额钱包、多选长图/逐条与合并转发、开发者API转账/红包/收款与群资料、已读回执、滑动引用、新消息动画、本地背景与主题色、合并记录附件本机加密备份。API文档及验证边界见仓库 PRODUCTION-0.3.10.md。\n\n后端98项回归和最终8项（含真实Synapse集成）通过；Web34项、浏览器长图与特殊气泡验证、签名Android Release构建与JVM测试通过。没有物理手机验收；摄像头区域按要求未测试。原口令导出包暂不打包合并附件实体，附件已纳入设备内部加密备份。\n\nSHA-256: dba361ddd8323d9f6f5bac7cf8744aab25e6182dce8a0260f18e589a288d0ceb",
   "files": [
     {
-      "name": "YiChat-0.3.9-17.apk",
-      "bytes": 9832146,
-      "sha256": "c5f0527b2d465e3920de413ae45c81b2c65d59502f09caef0ce44056cab8a339",
+      "name": "YiChat-0.3.10-18.apk",
+      "bytes": 9832294,
+      "sha256": "dba361ddd8323d9f6f5bac7cf8744aab25e6182dce8a0260f18e589a288d0ceb",
       "parts": [
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-000",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-001",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-002",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-003",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-004",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-005",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-006",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-007",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-008",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-009",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-010",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-011",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-012",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-013",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-014",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-015",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-016",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-017",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-018",
-        "release/0.3.9/YiChat-0.3.9-17.apk.part-019"
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-000",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-001",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-002",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-003",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-004",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-005",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-006",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-007",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-008",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-009",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-010",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-011",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-012",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-013",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-014",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-015",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-016",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-017",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-018",
+        "release/0.3.10/YiChat-0.3.10-18.apk.part-019"
       ]
     },
     {
       "name": "SHA256SUMS",
-      "bytes": 86,
-      "sha256": "de2d9c024626789a892b3f3c39d540a9da41d5f2a1ec066d53502080a3339802",
+      "bytes": 87,
+      "sha256": "2d6597c8df04584a04c990f896f42dd731eeeeac30c1bbb1d902b2491ec48744",
       "parts": [
-        "release/0.3.9/SHA256SUMS.part-000"
+        "release/0.3.10/SHA256SUMS.part-000"
       ]
     }
   ]
