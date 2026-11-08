@@ -1,7 +1,7 @@
 name: Publish verified Android artifacts
 on:
   push:
-    branches: [release/android-20261021]
+    branches: [release/android-20261021, updates/wallet-sharing-20261108]
     paths: [release/manifest.json]
 permissions:
   contents: write

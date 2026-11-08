@@ -1,41 +1,42 @@
 {
-  "tag": "android-20261108-v0.3.8",
-  "name": "YiChat Android 0.3.8",
-  "source_commit": "1aa38e7",
-  "notes": "Android 0.3.8 / versionCode 16 · org.yitiao.yichat.mobile\n\n- 离线、服务器请求失败或已无更早记录时，从本机自动备份的原消息包分页加载历史；校验 SHA-256 和身份，过滤撤回消息，联网后恢复服务器分页并去重。\n- 新增 GitHub Releases 应用内更新检查、系统默认浏览器下载、稍后提醒与设置中的手动检查更新。\n- 共享网页已同步部署到 chat.yitiao.org，网页 App 下载入口更新到 0.3.8；自托管 APK 下载保持关闭。\n- 原签名覆盖升级，不卸载、不清理聊天/钱包/备份，message epoch 保持 plain-20261029-v1。没有后端或数据库改动。\n\n验证：Web 34 项、Android Debug JVM 18 项（含新增更新检查 3 项）通过；严格依赖校验的 Release 构建及 lint 通过，lint 0 errors / 63 warnings / 1 hint；包内 14 个网页资源与 dist 逐字节一致。APK 9772690 字节，签名证书与 0.3.7 相同。详见 PRODUCTION-0.3.8.md。\n\n未接入物理手机，真机覆盖安装、离线分页和更新交互仍待验收。0.3.7 原生代码没有更新检查功能，首次升级请直接下载本 Release 的 APK；0.3.8 才具备后续版本更新提示。\n\nSHA-256: 74f1435d383f95ec9853568351d24845ea9a044649caf15ea8387e12bfcb5c8d\n源码提交：1aa38e7（构建代码提交 40e7a7b）",
+  "tag": "android-20261108-v0.3.9",
+  "name": "YiChat Android 0.3.9",
+  "source_commit": "7ad4a6a137c5d449493e0b49bf4473cf76889165",
+  "notes": "Android 0.3.9 / versionCode 17，沿用原证书覆盖升级。\n\n站内余额钱包、多选长图/逐条与合并转发、开发者API转账/红包/收款与群资料、已读回执、滑动引用、新消息动画、本地背景与主题色、合并记录附件本机加密备份。API文档及验证边界见仓库 PRODUCTION-0.3.9.md。\n\n后端98项回归和最终8项（含真实Synapse集成）通过；Web34项、浏览器长图与特殊气泡验证、签名Android Release构建与JVM测试通过。没有物理手机验收；摄像头区域按要求未测试。原口令导出包暂不打包合并附件实体，附件已纳入设备内部加密备份。\n\nSHA-256: c5f0527b2d465e3920de413ae45c81b2c65d59502f09caef0ce44056cab8a339",
   "files": [
     {
-      "name": "YiChat-0.3.8-16.apk",
-      "bytes": 9772690,
-      "sha256": "74f1435d383f95ec9853568351d24845ea9a044649caf15ea8387e12bfcb5c8d",
+      "name": "YiChat-0.3.9-17.apk",
+      "bytes": 9832146,
+      "sha256": "c5f0527b2d465e3920de413ae45c81b2c65d59502f09caef0ce44056cab8a339",
       "parts": [
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-000",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-001",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-002",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-003",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-004",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-005",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-006",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-007",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-008",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-009",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-010",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-011",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-012",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-013",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-014",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-015",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-016",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-017",
-        "release/0.3.8/YiChat-0.3.8-16.apk.part-018"
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-000",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-001",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-002",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-003",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-004",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-005",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-006",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-007",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-008",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-009",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-010",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-011",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-012",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-013",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-014",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-015",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-016",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-017",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-018",
+        "release/0.3.9/YiChat-0.3.9-17.apk.part-019"
       ]
     },
     {
       "name": "SHA256SUMS",
       "bytes": 86,
-      "sha256": "62b299074822651433dbb4c24f5c924281537c97241ddea3baf45ee23c485a17",
+      "sha256": "de2d9c024626789a892b3f3c39d540a9da41d5f2a1ec066d53502080a3339802",
       "parts": [
-        "release/0.3.8/SHA256SUMS.part-000"
+        "release/0.3.9/SHA256SUMS.part-000"
       ]
     }
   ]
