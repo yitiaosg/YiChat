@@ -1,10 +1,16 @@
 # YiChat
 
-当前版本 **Android 0.3.7 / versionCode 15**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.3.8 / versionCode 16**，包名 `org.yitiao.yichat.mobile`。
 
-[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.7 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261030-v0.3.7/YiChat-0.3.7-15.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
+[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.8 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261108-v0.3.8/YiChat-0.3.8-16.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
+
+## 0.3.8 更新（仅 Android App）
+
+- 离线加载更早消息：App 离线、请求失败或服务器已无更早记录（服务器保留 30 天）时，“加载更早消息”从本机自动备份的原消息包数据库分页读取，而不是 WebView 同步缓存。每个原包按认证摘要重新校验 SHA-256 与身份；已撤回消息不显示。联网后恢复服务器分页并自动去重。
+- 应用内更新提示：启动或回到前台时查询 GitHub Releases 最新版（每 6 小时最多联网一次）。低于最新版时弹窗，点击“下载并安装”在系统默认浏览器中打开 GitHub APK 链接，下载后点击安装包覆盖升级，数据保留。“稍后”当天不再提示；App 设置中可手动“检查更新”。只接受本仓库 `releases/download/` 下的 `.apk`，文件名须为 `YiChat-<版本>-<versionCode>.apk`。
+- 网页版本次不维护；新网页界面在旧 App 中会自动降级，不报错。
 
 ## 0.3.7 更新
 
