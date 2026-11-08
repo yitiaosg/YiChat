@@ -32,7 +32,13 @@ def pick(releases,repo):
             url=a.get('browser_download_url');name=a.get('name')
             if isinstance(url,str) and isinstance(name,str) and url.startswith(prefix) and test(name):return url,name
         return None
-    for r in releases if isinstance(releases,list) else []:
+    def release_order(row):
+        if not isinstance(row,dict):return (0,0,0,'')
+        version=re.search(r'(?:-v|desktop-v)([0-9]+)\.([0-9]+)\.([0-9]+)$',str(row.get('tag_name','')))
+        numbers=tuple(map(int,version.groups())) if version else (0,0,0)
+        return (*numbers,str(row.get('published_at') or row.get('created_at') or ''))
+    # GitHub's release-list order can differ from /latest and semantic version order.
+    for r in sorted(releases,key=release_order,reverse=True) if isinstance(releases,list) else []:
         if not isinstance(r,dict) or r.get('draft') or r.get('prerelease'):continue
         tag=r.get('tag_name') or ''
         page='https://github.com/'+repo+'/releases/tag/'+tag
