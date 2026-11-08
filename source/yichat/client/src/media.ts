@@ -1,7 +1,7 @@
 import {transferFile,type TransferState} from './upload-transfer';
 import { requests, path, ApiError, retryDelay, sleep } from './api';
 import { chat } from './chat';
-import {isApp,appSave} from './app';
+import {isApp,appSave,appCall} from './app';
 export type Upload={id:string;file:File;progress:number;state:string;error?:string;abort:AbortController;content?:any;attachment?:string;room:string;transfer?:TransferState};
 let tail:Promise<any>=Promise.resolve();
 export function uploadFile(upload:Upload,changed:()=>void){
@@ -21,7 +21,7 @@ export function uploadFile(upload:Upload,changed:()=>void){
       finally{clearTimeout(timer);abort.signal.removeEventListener('abort',cancel)}
     };
     let result;
-    try{result=await transferFile(file,room,upload.transfer,call,abort.signal,(offset,state)=>{upload.progress=file.size?offset/file.size:1;upload.state=state;changed()},ms=>sleep(ms,abort.signal))}
+    try{const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(x=>x.toString(16).padStart(2,'0')).join('');const reused=await requests.api('/api/files/'+path(room)+'/reuse',{sha256:digest});if(reused.found)result=reused;else result=await transferFile(file,room,upload.transfer,call,abort.signal,(offset,state)=>{upload.progress=file.size?offset/file.size:1;upload.state=state;changed()},ms=>sleep(ms,abort.signal))}
     catch(e:any){
       if(e.status===410){upload.transfer=undefined;upload.progress=0}
       if(e.name==='AbortError'&&upload.transfer?.id)void requests.fetch('/api/uploads/'+upload.transfer.id,{method:'DELETE'}).catch(()=>{});
@@ -42,7 +42,11 @@ export async function attachment(content:any,signal:AbortSignal){
   if(content.file)throw Error('旧加密附件已清空，请使用新会话中的附件');
   const mxc=content.url;
   const match=/^mxc:\/\/chat\.yitiao\.org\/([a-f0-9]{48})$/.exec(mxc||'');if(!match)throw Error('附件地址不受支持');
+  // File IDs are content-addressed: a stored chat image never changes.
+  const key='file:'+match[1],image=content.msgtype==='m.image',vault=chat.businessVault;
+  if(image){const stored=await vault.image(key).catch(()=>undefined);if(stored)return stored}
   let response:Response|undefined;
+  if(isApp)try{if((await appCall('recordFileAvailable',{id:match[1]})).available){const local=await requests.fetch('/app-local-record-files/'+match[1],{signal});if(local.ok){const bytes=await local.arrayBuffer();const type=String(content.info?.mimetype||'application/octet-stream');return new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'})}}}catch{/* Older Apps and absent local records use the server path. */}
   for(let attempt=0;attempt<5;attempt++){
     response=await requests.fetch('/api/files/'+match[1]+'/content',{signal});if(response.ok)break;
     const data=await response.json();
@@ -53,6 +57,8 @@ export async function attachment(content:any,signal:AbortSignal){
   const bytes=await response.arrayBuffer();
   // Never execute HTML/SVG or arbitrary uploaded files in the app origin.
   const type=String(content.info?.mimetype||'application/octet-stream');
-  return new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});
+  const blob=new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});
+  if(image&&!signal.aborted)void vault.saveImage(key,blob).catch(()=>{});
+  return blob;
 }
 export async function saveBlob(blob:Blob,name:string){if(isApp){await appSave(blob,name);return}const url=blobUrl(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>releaseUrl(url),30000)}

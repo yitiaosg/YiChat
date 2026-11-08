@@ -95,6 +95,8 @@ def finalize(s,uid):
     with transaction(s.db) as c:
         c.execute('INSERT OR IGNORE INTO files VALUES(?,?,?,?,?,?,0)',(uid,row['room'],row['subject'],total,row['completed'],expires))
         c.execute('INSERT OR IGNORE INTO file_hashes VALUES(?,?)',(uid,digest.hexdigest()))
+        from .file_dedup import coalesce
+        coalesce(c,s,uid,digest.hexdigest())
         stored=c.execute('SELECT f.room,f.uploader,f.bytes,h.sha256 FROM files f JOIN file_hashes h USING(id) WHERE f.id=?',(uid,)).fetchone()
         if tuple(stored)!=(row['room'],row['subject'],total,digest.hexdigest()):raise RuntimeError('Upload receipt conflict')
         c.execute("UPDATE file_uploads SET state='complete',expires=? WHERE id=?",(expires,uid));c.execute('DELETE FROM upload_leases WHERE id=?',(uid,))

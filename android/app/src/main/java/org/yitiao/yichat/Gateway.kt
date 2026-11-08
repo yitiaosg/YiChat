@@ -65,6 +65,14 @@ class Gateway(val base: String = BuildConfig.GATEWAY) {
             } } finally { uploadCall = null }
         }
     }
+    suspend fun readFile(id:String,consume:(java.io.InputStream)->Unit)=withContext(Dispatchers.IO) {
+        require(id.matches(Regex("[a-f0-9]{48}")))
+        mutex.withLock { val now=android.os.SystemClock.elapsedRealtime();delay((maxOf(next.get(),cooldown.get())-now).coerceAtLeast(0));next.set(android.os.SystemClock.elapsedRealtime()+180) }
+        readHttp.newCall(Request.Builder().url(base+"/api/files/$id/content").header("Authorization","Bearer "+requireNotNull(token)).build()).execute().use { r ->
+            if(!r.isSuccessful)throw GatewayError(r.code,"合并记录附件暂不能备份（${r.code}）")
+            requireNotNull(r.body).byteStream().use(consume)
+        }
+    }
     suspend fun call(path: String, data: JsonElement? = null, method: String = if (data == null) "GET" else "POST", authenticated: Boolean = true): JsonElement {
         require(path.startsWith("/") && !path.startsWith("//") && '\\' !in path)
         // Business-only pacing. Rust requests share the server's native queue;

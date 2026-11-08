@@ -10,15 +10,16 @@
     "prebuild": "node scripts/copy-renderers.mjs"
   },
   "dependencies": {
-    "preact": "^10.27.0",
-    "matrix-js-sdk": "^38.0.0",
+    "html2canvas": "^1.4.1",
+    "lucide-preact": "^0.468.0",
     "matrix-encrypt-attachment": "^1.0.3",
-    "lucide-preact": "^0.468.0"
+    "matrix-js-sdk": "^38.0.0",
+    "preact": "^10.27.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.0",
-    "vite": "^7.1.0",
+    "@types/node": "^22.0.0",
     "tsx": "^4.20.0",
-    "@types/node": "^22.0.0"
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
   }
 }

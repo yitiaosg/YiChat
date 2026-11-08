@@ -20,6 +20,12 @@ def gateway(env):
             for rid,kind,peer,mode in [('!direct','direct',u['bob']['mxid'],'direct'),('!group','group',None,'plain')]:
                 c.execute('INSERT INTO rooms VALUES(?,?,?,?,30)',(rid,kind,u['alice']['mxid'],peer))
                 c.execute('INSERT INTO room_modes VALUES(?,?,?)',(rid,mode,int(time.time()*1000)))
+        # The live membership registry is distinct from the historical archive.
+        from backend import groups
+        with connect(s.ledger) as ledger:
+            for rid,name in [('!direct','alice'),('!direct','bob'),('!group','alice')]:
+                ledger.execute("INSERT OR REPLACE INTO yichat_memberships VALUES(?,?,'join','fixture-accepted',NULL,NULL,NULL)",(rid,u[name]['mxid']))
+        with connect(s.db) as db:groups.register(db,'!group',seeded=1)
         # Historical visibility evidence comes from the real ingestion adapter in
         # integration tests; this API fixture inserts its accepted source rows.
         now=int(time.time()*1000)
@@ -27,11 +33,6 @@ def gateway(env):
         for i,(room,name) in enumerate([('!direct','alice'),('!direct','bob'),('!group','alice')],1):
             rows.append(('$join'+str(i),room,i,now-86400000,json.dumps({'type':'m.room.member','state_key':u[name]['mxid'],'sender':u[name]['mxid'],'content':{'membership':'join'}})))
         archive.ingest_batch(s.archive_ingest,rows,3,now)
-        # Current membership is a separate permission barrier from archive history.
-        # The mocked Matrix adapter must seed both, as real Synapse ingestion does.
-        with connect(s.ledger) as ledger:
-            for event,room,_,_,raw in rows:
-                ledger.execute("INSERT INTO yichat_memberships(room,mxid,membership,event_id) VALUES(?,?,'join',?)",(room,json.loads(raw)['state_key'],event))
         app.state.matrix.membership=AsyncMock();app.state.matrix.member=AsyncMock();app.state.matrix.fence=AsyncMock(return_value=3)
         client.cookies.set('yc_session','session-token');client.headers['Origin']=s.origin
         yield client,app,s
@@ -150,18 +151,19 @@ def test_two_connections_share_actual_stream_byte_rate(gateway):
     assert time.monotonic()-started>=1.95
 
 
-def test_plain_messages_limit_and_e2ee_disabled(gateway):
+def test_group_unicode_codepoint_limit_and_e2ee_ciphertext_bound(gateway):
     c,app,s=gateway
     from fastapi import HTTPException
     info=policy.room(s,'!group')
     policy.validate_event(s,info,'m.room.message',{'body':'😀'*2000},'@alice:chat.yitiao.org')
     with pytest.raises(HTTPException):policy.validate_event(s,info,'m.room.message',{'body':'😀'*2001},'@alice:chat.yitiao.org')
     with pytest.raises(HTTPException):policy.validate_event(s,info,'m.room.message',{'body':'ok','m.new_content':{'body':'x'*2001}},'@alice:chat.yitiao.org')
-    for room in ('!direct','!group'):
-        info=policy.room(s,room)
-        with pytest.raises(HTTPException) as exc:policy.validate_event(s,info,'m.room.encrypted',{'ciphertext':'opaque'},'@alice:chat.yitiao.org')
-        assert exc.value.detail['code']=='YICHAT_E2EE_DISABLED'
-        with pytest.raises(HTTPException):policy.validate_event(s,info,'m.room.encryption',{'algorithm':'m.megolm.v1.aes-sha2'},'@alice:chat.yitiao.org','')
+    direct=policy.room(s,'!direct')
+    policy.validate_event(s,direct,'m.room.encrypted',{'ciphertext':'opaque'},'@alice:chat.yitiao.org')
+    with pytest.raises(HTTPException):policy.validate_event(s,direct,'m.room.encrypted',{'ciphertext':'x'*65536},'@alice:chat.yitiao.org')
+    with pytest.raises(HTTPException):policy.validate_to_device(s,'@alice:chat.yitiao.org','m.room.message',{'messages':{}})
+    policy.validate_to_device(s,'@alice:chat.yitiao.org','m.room.encrypted',{'messages':{'@alice:chat.yitiao.org':{'device-two':{'algorithm':'m.olm.v1.curve25519-aes-sha2','ciphertext':{}}}}})
+
 
 def test_preview_no_fetch_no_finance_effect_and_route_allowlist(gateway):
     c,app,s=gateway

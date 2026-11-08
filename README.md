@@ -78,3 +78,7 @@ export YICHAT_FIREBASE_CONFIG=/private/path/google-services.json
 | `android/legacy-native` | 不参与编译的旧原生实现，仅供追溯 |
 
 [Android 构建说明](android/README.md) · [架构](ARCHITECTURE.md) · [接口文档](source/yichat/docs/CHAT-KERNEL-API.md)
+
+## 0.3.9 更新
+
+[钱包、转发与主题更新记录](PRODUCTION-0.3.9.md) · [最新开发者 API 文档](source/yichat/docs/OPEN-API.md)。

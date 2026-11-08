@@ -33,6 +33,7 @@ import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private val graph get() = (application as YiChatApplication).graph
+    private var safeRoot: FrameLayout? = null
     private lateinit var web: WebView
     private lateinit var cache: WebShellCache
     private var chooser: ValueCallback<Array<Uri>>? = null
@@ -115,8 +116,12 @@ class MainActivity : ComponentActivity() {
             if(mainFrame && origin.toString().trimEnd('/')==WebRoutes.ORIGIN) receive(message.data,proxy)
         }
         web.webViewClient=object:WebViewClient() {
-            override fun shouldInterceptRequest(view:WebView,request:WebResourceRequest):WebResourceResponse? =
-                if(request.method=="GET") cache.intercept(request.url) else null
+            override fun shouldInterceptRequest(view:WebView,request:WebResourceRequest):WebResourceResponse? {
+                if(request.method!="GET")return null
+                if(WebRoutes.trusted(request.url.toString()) && request.url.path.orEmpty().startsWith("/app-local-record-files/"))
+                    return runCatching{graph.recordFiles.open(request.url.lastPathSegment.orEmpty())}.getOrNull()
+                return cache.intercept(request.url)
+            }
             override fun shouldOverrideUrlLoading(view:WebView,request:WebResourceRequest):Boolean {
                 if(!request.isForMainFrame) return !WebRoutes.trusted(request.url.toString())
                 return navigate(request.url)
@@ -181,7 +186,7 @@ class MainActivity : ComponentActivity() {
     private fun setSafeContent(content: View) {
         WindowCompat.setDecorFitsSystemWindows(window,false)
         val dark=resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES
-        val root=FrameLayout(this).apply { setBackgroundColor(if(dark) 0xff101817.toInt() else android.graphics.Color.WHITE) }
+        val root=FrameLayout(this).apply { setBackgroundColor(if(dark) 0xff121f2d.toInt() else android.graphics.Color.WHITE) };safeRoot=root
         root.addView(content,FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT))
         val controller=WindowInsetsControllerCompat(window,root)
         controller.isAppearanceLightStatusBars=!dark;controller.isAppearanceLightNavigationBars=!dark
@@ -202,7 +207,8 @@ class MainActivity : ComponentActivity() {
                 val account=withContext(Dispatchers.IO) { graph.auth.callback(uri) }
                 if(account!=null) withContext(Dispatchers.IO) { graph.activate(account) }
                 val order=uri.getQueryParameter("order")?.takeIf { uri.path=="/app/return" && uri.queryParameterNames==setOf("order") && uri.getQueryParameters("order").size==1 && it.matches(Regex("[A-Za-z0-9_-]{32}")) }
-                if(::web.isInitialized) web.loadUrl(WebRoutes.ORIGIN+"/"+(order?.let { "?order=$it" } ?: ""))
+                val deposit=uri.getQueryParameter("wallet_deposit")?.takeIf { uri.path=="/app/return" && uri.queryParameterNames==setOf("wallet_deposit") && uri.getQueryParameters("wallet_deposit").size==1 && it.matches(Regex("[A-Za-z0-9_-]{32}")) }
+                if(::web.isInitialized) web.loadUrl(WebRoutes.ORIGIN+"/"+(order?.let { "?order=$it" } ?: deposit?.let { "?wallet_deposit=$it" } ?: ""))
             } catch(e:Exception) { toast(safeError(e)) }
         }
     }
@@ -279,6 +285,19 @@ class MainActivity : ComponentActivity() {
             try {
                 val args=data.o("args")
                 when(data.s("method")) {
+                    "recordFileAvailable" -> respond(reply,buildJsonObject { put("available",graph.recordFiles.available(args.s("id"))) })
+                    "systemThemeColor" -> {
+                        val color=if(android.os.Build.VERSION.SDK_INT>=31) getColor(android.R.color.system_accent1_500) else 0xff1479b8.toInt()
+                        respond(reply,buildJsonObject { put("color",String.format("#%06x",color and 0xffffff)) })
+                    }
+                    "setChromeColor" -> {
+                        val seed=args.s("seed");require(seed.matches(Regex("#[0-9a-fA-F]{6}")))
+                        val dark=args.b("dark");val base=if(dark) 0xff101820.toInt() else android.graphics.Color.WHITE
+                        val color=androidx.core.graphics.ColorUtils.blendARGB(base,android.graphics.Color.parseColor(seed),if(dark) .04f else .01f)
+                        safeRoot?.setBackgroundColor(color)
+                        WindowInsetsControllerCompat(window,safeRoot?:web).apply { isAppearanceLightStatusBars=!dark;isAppearanceLightNavigationBars=!dark }
+                        respond(reply)
+                    }
                     "recordRooms", "recordDays", "recordPage" -> {
                         val active=graph.auth.account?.token;requireNotNull(active){"请先登录"}
                         val value=when(data.s("method")) {

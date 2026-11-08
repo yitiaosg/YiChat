@@ -6,8 +6,8 @@ class BodyLimitMiddleware:
     def __init__(self, app, settings): self.app,self.settings=app,settings
     async def __call__(self, scope, receive, send):
         if scope['type']!='http':return await self.app(scope,receive,send)
-        upload=scope['method']=='POST' and (scope['path'].startswith('/api/files/') or scope['path'] in ('/_matrix/media/v3/upload','/_matrix/client/v1/media/upload'))
-        avatar=scope['method']=='POST' and re.fullmatch(r'/api/groups/[^/]+/avatar',scope['path'])
+        upload=scope['method']=='POST' and (scope['path'].startswith('/api/files/') or scope['path'] in ('/_matrix/media/v3/upload','/_matrix/client/v1/media/upload') or bool(re.fullmatch(r'/open/v1/conversations/[^/]+/files',scope['path'])))
+        avatar=(scope['method']=='POST' and re.fullmatch(r'/api/groups/[^/]+/avatar',scope['path'])) or (scope['method']=='PUT' and re.fullmatch(r'/open/v1/groups/[^/]+/avatar',scope['path']))
         limit=2000000 if avatar else self.settings.max_file if upload else 262144
         total=0
         async def bounded():

@@ -81,3 +81,7 @@ Android versionCode：**10**。沿用 `org.yitiao.yichat.mobile` 与原签名，
 群解散与只读历史、最多 8 名管理员、个人会话归档/置顶/静音、App 通知、交易记录和账户最终注销联动。后续修正空会话条目、复用私聊及预览标志，并移除消息编辑。
 
 详见 [0.3.1 说明](PRODUCTION-0.3.1.md) 和 [GitHub Release](https://github.com/yitiaosg/YiChat/releases/tag/android-20261021-v0.3.1)。
+
+## 0.3.9 / code 17
+
+增加站内余额钱包、服务器收款气泡、多选长图/合并转发、API资金与群资料、触屏引用和本地主题。保留0.3.8本机历史与更新检查。详见 PRODUCTION-0.3.9.md。

@@ -23,7 +23,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /** Versioned, portable scrypt + AES-GCM backup; never exports Keystore wraps. */
-class BackupRepository(private val context: Context, private val matrix: PacketStore, private val history: HistoryRepository, private val vault: SecureStore) {
+class BackupRepository(private val context: Context, private val matrix: PacketStore, private val history: HistoryRepository, private val vault: SecureStore,private val recordFiles:RecordFiles?=null) {
     private val mutex = Mutex()
     val status = MutableStateFlow("自动备份保存在应用内部")
     val exportStatus = MutableStateFlow("未启用外部导出")
@@ -72,6 +72,7 @@ class BackupRepository(private val context: Context, private val matrix: PacketS
         val a = requireNotNull(matrix.account)
         val last = vault.get("${a.storage}.local-backup-last")?.decodeToString()?.toLongOrNull() ?: 0
         if (!force && System.currentTimeMillis() - last in 0 until TimeUnit.HOURS.toMillis(6)) return@withContext
+        recordFiles?.backupMerged()
         val plain = packetContent(a)
         try {
             val packed = vault.encrypt(a.storage, "backup:packets", plain)

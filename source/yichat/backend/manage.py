@@ -17,7 +17,7 @@ def main():
     if action=='archive-once':load_env(Path('/etc/yichat/archive-worker.env'))
     from .config import Settings
     from .db import migrate,connect
-    from .funds import Funds
+    from .chat_wallet import Funds
     from . import policy,archive
     from .assets import migrate as migrate_assets
     s=Settings();f=Funds(s)

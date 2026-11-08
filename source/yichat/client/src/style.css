@@ -46,3 +46,12 @@ html[data-app="android"] .message-body,html[data-app="android"] input,html[data-
 .content-bubble>.actions{padding:0 8px 8px}
 .content-bubble>.media-content .image-preview{background:transparent;border:0;padding:0}
 .content-bubble>.media-content .file-row{padding:8px 3px}
+.welcome-links{display:flex;gap:16px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.welcome-links a{display:inline-flex;gap:7px;align-items:center;font-size:11px;color:var(--muted)}
+
+.message{touch-action:pan-y;position:relative}.message.swiping-reply .message-main{transform:translateX(var(--reply-drag));transition:none}.message.swiping-reply:after{content:'↩';position:absolute;right:4px;top:40%;font-size:25px;color:var(--accent,#4285ed)}
+@media(prefers-reduced-motion:reduce){.timeline{scroll-behavior:auto!important}}
+
+.custom-chat-background{background-size:cover;background-position:center}.custom-chat-background .timeline{background:transparent}.custom-chat-background .conversation-header,.custom-chat-background .composer{background:var(--panel)}html[style*="--theme-seed"] .brand-image{object-position:-9999px;object-fit:none;background:var(--accent);mask:url('/brand/yichat.png') center/contain no-repeat}html[style*="--theme-seed"] .app-shell{background:var(--bg)}
+
+.selection-toolbar{display:flex;align-items:center;gap:8px;padding:10px;background:var(--panel);flex-wrap:wrap}.selection-toolbar small{width:100%;color:var(--muted)}.message-selection{width:20px;height:20px;align-self:center;margin:8px;accent-color:var(--accent)}.snapshot-message{display:flex;flex-direction:column;gap:8px;margin:10px 0}.snapshot-sender{display:flex;align-items:center;gap:8px;font-size:12px}.snapshot-message .bubble{max-width:100%;width:100%}.record-capture{padding:18px;background:var(--panel);color:var(--text);width:100%;max-width:640px}.record-capture .media-content img{max-height:420px}.record-capture .message-meta,.record-capture button.icon{display:none}.snapshot-message .share-content{width:100%}.share-card>.share-content{display:block;text-align:left;width:100%}

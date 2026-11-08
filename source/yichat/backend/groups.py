@@ -44,11 +44,17 @@ def require_send(s,room,mxid):
 def normalize(content):
     return hashlib.sha256(json.dumps({k:v for k,v in content.items() if k not in ('redacts','displayname','avatar_url')},sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
 
+def operation_auth(s,op):
+    if op['sid'].startswith('api:'):
+        with connect(s.db) as c:
+            return bool(c.execute("SELECT 1 FROM api_keys k JOIN identities i ON i.subject=k.subject WHERE k.id=? AND k.scope='read_write' AND i.mxid=?",(op['sid'][4:],op['actor'])).fetchone())
+    return valid_sid(s,op['sid'],op['username'])
+
 def admitted(s,room,sender,typ,content,state_key=''):
     opid=content.get(MARK)
     if not isinstance(opid,str):return None
     with connect(s.db) as c:r=c.execute('SELECT o.*,a.sender,a.type,a.state_key,a.digest,a.expires FROM group_operations o JOIN group_admissions a USING(id) WHERE o.id=? AND o.room=?',(opid,room)).fetchone()
-    if not r or r['done'] or r['expires']<time.time() or r['sender']!=sender or r['type']!=typ or r['state_key']!=(state_key or '') or r['digest']!=normalize(content) or not (valid_sid(s,r['sid'],r['username']) or (r['action']=='account_transfer' and lifecycle.purged(s,r['actor']))):fail(403,'群管理授权无效或已过期')
+    if not r or r['done'] or r['expires']<time.time() or r['sender']!=sender or r['type']!=typ or r['state_key']!=(state_key or '') or r['digest']!=normalize(content) or not (operation_auth(s,r) or (r['action']=='account_transfer' and lifecycle.purged(s,r['actor']))):fail(403,'群管理授权无效或已过期')
     if r['action'] not in ('join','direct_join','direct_open','account_transfer'):
         with connect(s.db) as c:permission(c,room,r['actor'],r['action'],r['target'])
     elif r['action']=='account_transfer':
@@ -161,7 +167,9 @@ def install(app,s,session,room_access):
         return result
     @app.post('/api/groups/{room}/manage')
     async def manage(request:Request,room:str):
-        who=session(request);data=await request.json();action=data.get('action');target=data.get('target');key=data.get('key')
+        return await manage_as(session(request),room,await request.json())
+    async def manage_as(who,room,data):
+        action=data.get('action');target=data.get('target');key=data.get('key')
         if action not in ('settings','transfer','admin','mute','kick','unban','redact','name','topic','avatar','dissolve') or not isinstance(key,str) or not re.fullmatch('[A-Za-z0-9_-]{16,100}',key):fail(400,'无效群管理请求')
         if action in ('transfer','admin','mute','kick','unban','redact') and not isinstance(target,str):fail(400,'需要目标成员')
         async with locks.setdefault(room,asyncio.Lock()):
@@ -250,3 +258,6 @@ def install(app,s,session,room_access):
         if not op['done']:await emit(who,info,op,info['owner'],'m.room.member',{'membership':'invite'},who['mxid'])
         await app.state.matrix.call('POST','/_matrix/client/v3/rooms/'+quote(room,safe='')+'/join',app.state.matrix.token(who),{})
         return {'room_id':room}
+
+    app.state.group_read=read
+    app.state.group_manage=manage_as

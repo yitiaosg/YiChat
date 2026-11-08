@@ -115,6 +115,9 @@ def room(s,room_id):
 
 
 def validate_event(s,info,event_type,content,sender,state_key=None,control=None):
+    if event_type=='m.room.message':
+        from .sharing import validate
+        validate(s,info['room'],sender,content)
     from . import lifecycle
     if info['kind']=='group' and not (event_type=='m.room.member' and content.get('membership')=='leave' and sender==state_key and lifecycle.purged(s,sender)):
         with connect(s.ledger) as ledger:lifecycle.require_active(ledger,info['room'])
@@ -164,7 +167,8 @@ def admit_attachments(s,event_id,room,sender,event_type,content,worker,boot):
     with transaction(s.db) as c:
         for fid in set(ids):
             row=c.execute('SELECT f.*,h.sha256 FROM files f JOIN file_hashes h USING(id) WHERE f.id=?',(fid,)).fetchone()
-            if not row or row['room']!=room or row['uploader']!=uid or row['removed'] or row['expires']<=time.time():fail(403,'附件未上传、已到期或不属于此发送者及会话')
+            reuse=c.execute('SELECT 1 FROM file_reuse_grants WHERE file=? AND room=? AND uid=? AND expires>?',(fid,room,uid,time.time())).fetchone()
+            if not row or (not reuse and (row['room']!=room or row['uploader']!=uid)) or row['removed'] or row['expires']<=time.time():fail(403,'附件未上传、已到期或不属于此发送者及会话')
             if not (s.objects/fid).is_file():fail(503,'附件实体缺失，发送已暂停')
             c.execute('INSERT OR IGNORE INTO attachment_admissions VALUES(?,?,?,?)',(event_id,fid,worker,boot))
 

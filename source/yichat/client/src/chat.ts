@@ -60,6 +60,8 @@ export class Chat {
       await this.vault.open(scope);if(this.closed){this.vault.close();return}this.outbox=(await this.vault.outbox()).map((x:Outgoing)=>({...x,state:'failed',error:'上次发送结果未知；重试将沿用原事务 ID'}));if(this.closed)return;await this.businessVault.open('account:'+this.session.uid+':business');if(this.closed){this.businessVault.close();return}this.business=await this.businessVault.business();
       if(this.closed)return;
       if(isApp){const cached=await this.businessVault.state('app-ui');if(cached){this.info=new Map(cached.info);this.profiles=new Map(cached.profiles);this.preferences=new Map(cached.preferences||[])}}
+      // Web keeps only names/avatar URLs between visits so cached avatars show at once; they are refreshed as before.
+      else{const cached=await this.businessVault.state('profiles').catch(()=>undefined);if(Array.isArray(cached))this.profiles=new Map(cached)}
       if(await this.businessVault.get('message-epoch')!==MESSAGE_EPOCH){
         await this.businessVault.clearChatState();await this.businessVault.set('message-epoch',MESSAGE_EPOCH);
         this.info.clear();this.profiles.clear();this.preferences.clear();sessionStorage.removeItem('yc:create:'+this.session.uid);
@@ -94,7 +96,7 @@ export class Chat {
   fail(e:any){if(e?.name!=='AbortError'){this.error=e.message||String(e);this.changed()}}
   updateRooms(){if(!this.client||this.closed)return;this.rooms=this.client.getRooms().filter(r=>!this.preferences.get(r.roomId)?.deleted&&(r.getMyMembership()==='invite'||(['join','leave'].includes(r.getMyMembership())&&this.info.has(r.roomId)))).sort((a,b)=>Number(!!this.preferences.get(b.roomId)?.pinned)-Number(!!this.preferences.get(a.roomId)?.pinned)||b.getLastActiveTimestamp()-a.getLastActiveTimestamp());this.changed()}
   scheduleRefresh(){if(this.notificationMode||this.offline||this.closed)return;clearTimeout(this.refreshTimer);this.refreshTimer=setTimeout(()=>void this.refresh().catch(e=>this.fail(e)),800)}
-  async refresh(){const revision=this.preferenceRevision;const [rows,prefs]:[RoomInfo[],any[]]=await Promise.all([requests.single('rooms',()=>requests.api('/api/rooms')),requests.single('preferences',()=>requests.api('/api/conversations/preferences'))]);if(this.closed)return;for(const r of rows){const old=this.info.get(r.room);if(old?.dissolved_at)r.dissolved_at=old.dissolved_at;if(old?.peer_deleted)r.peer_deleted=true;if((old?.revision||0)>(r.revision||0)){r.owner=old!.owner;r.revision=old!.revision}}this.info=new Map(rows.map(r=>[r.room,r]));const fresh=new Map(prefs.map(r=>[r.room,r]));for(const [id,version] of this.preferenceVersions)if(version>revision||this.preferencePending.has(id)){if(this.preferences.has(id))fresh.set(id,this.preferences.get(id));else fresh.delete(id)};this.preferences=fresh;this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences]});if(isApp&&!this.notificationMode)void appCall('notificationNames',{rooms:this.rooms.filter(r=>r.getMyMembership()==='join').map(r=>({room:r.roomId,label:this.roomName(r)}))}).catch(()=>{})}
+  async refresh(){const revision=this.preferenceRevision;const [rows,prefs]:[RoomInfo[],any[]]=await Promise.all([requests.single('rooms',()=>requests.api('/api/rooms')),requests.single('preferences',()=>requests.api('/api/conversations/preferences'))]);if(this.closed)return;for(const r of rows){const old=this.info.get(r.room);if(old?.dissolved_at)r.dissolved_at=old.dissolved_at;if(old?.peer_deleted)r.peer_deleted=true;if((old?.revision||0)>(r.revision||0)){r.owner=old!.owner;r.revision=old!.revision}}this.info=new Map(rows.map(r=>[r.room,r]));const fresh=new Map(prefs.map(r=>[r.room,r]));for(const [id,version] of this.preferenceVersions)if(version>revision||this.preferencePending.has(id)){if(this.preferences.has(id))fresh.set(id,this.preferences.get(id));else fresh.delete(id)};this.preferences=fresh;this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences]});else await this.businessVault.saveState('profiles',[...this.profiles]).catch(()=>{});if(isApp&&!this.notificationMode)void appCall('notificationNames',{rooms:this.rooms.filter(r=>r.getMyMembership()==='join').map(r=>({room:r.roomId,label:this.roomName(r)}))}).catch(()=>{})}
   async loadProfiles(mxids:string[],usernames:string[]=[]):Promise<void>{
     const missing=[...new Set(mxids)].filter(id=>!this.profiles.has(id)||(this.profileTimes.get(id)||0)<Date.now()-300000).slice(0,100);if(!missing.length)return;
     if(this.profileFlight){await this.profileFlight;return this.loadProfiles(mxids,usernames)}
@@ -145,6 +147,7 @@ export class Chat {
     await this.saveBusiness();
   }
   async announceOrder(order:any){
+    if(order.internal)return; // The server owns internal order announcements.
     if(order.state==='cancelled'||order.sender_uid!==this.session.uid||!order.deposit)throw Error('请先明确确认入金；已取消订单不能发送');
     let op=this.business.find(b=>b.type==='order'&&b.result?.id===order.id);
     if(op?.state==='announced')return;
@@ -154,16 +157,7 @@ export class Chat {
     await this.send(order.room,{msgtype:'m.text',body:url,'org.yitiao.share':{type:'order',url},'org.yitiao.business':{kind:'order',id:order.id}},[],op.txn);
     op.state='announced';await this.saveBusiness();
   }
-  async announceReceipt(order:any){
-    if(order.kind!=='direct'||order.recipient_uid!==this.session.uid||!order.claims?.some((p:any)=>p.user_id===this.session.uid))return;
-    let op=this.business.find(b=>b.type==='receipt'&&b.result?.id===order.id);
-    if(op?.state==='announced')return;
-    if(!op){op={type:'receipt',room:order.room,txn:crypto.randomUUID(),result:{id:order.id},state:'pending'};this.business.push(op)}
-    await this.saveBusiness();
-    const url='https://chat.yitiao.org/orders/'+order.id;
-    await this.send(order.room,{msgtype:'m.text',body:'已收款 · '+url,'org.yitiao.share':{type:'receipt',url,id:order.id},'org.yitiao.business':{kind:'order',id:order.id}},[],op.txn);
-    op.state='announced';await this.saveBusiness();
-  }
+  async announceReceipt(_order:any){/* Receipts are generated and retried by the server. */}
   async send(room:string,content:any,attachments:string[]=[],txn:string=crypto.randomUUID()){
     if(content['m.relates_to']?.rel_type==='m.replace'||content['m.new_content'])throw Error('消息编辑已停用，请撤回后重新发送');
     if(this.readOnly(room))throw Error('已退出或已解散的群聊仅可查看记录');
@@ -173,8 +167,8 @@ export class Chat {
     const encrypted=!!r?.hasEncryptionStateEvent();
     if(info.encryption!=='plain')throw Error('旧会话已停用，请重新打开会话');
     if(info.encryption==='plain'&&encrypted)throw Error('服务端会话策略与加密状态不一致，请重新同步');
-    const gift=giftId(content);if(gift&&!content['org.yitiao.business'])content={...content,'org.yitiao.business':{kind:'gift',id:gift}};
-    if(!content['org.yitiao.business'])for(const url of shareUrls(content.body||'')){const match=url.match(/^https:\/\/chat\.yitiao\.org\/orders\/([A-Za-z0-9_-]{32})$/);if(match)try{const order=await requests.api('/api/orders/'+path(match[1]));if(order.room===room){content['org.yitiao.business']={kind:'order',id:order.id};break}}catch{}}
+    const gift=content['org.yitiao.forward_snapshot']?null:giftId(content);if(gift&&!content['org.yitiao.business'])content={...content,'org.yitiao.business':{kind:'gift',id:gift}};
+    if(!content['org.yitiao.forward_snapshot']&&!content['org.yitiao.business'])for(const url of shareUrls(content.body||'')){const match=url.match(/^https:\/\/chat\.yitiao\.org\/orders\/([A-Za-z0-9_-]{32})$/);if(match)try{const order=await requests.api('/api/orders/'+path(match[1]));if(order.room===room){content['org.yitiao.business']={kind:'order',id:order.id};break}}catch{}}
     let row=this.outbox.find(x=>x.txn===txn);if(!row){row={txn,room,content,attachments,state:'sending',time:Date.now()};this.outbox.push(row)}
     row.state='sending';row.error=undefined;await this.persist();return this.dispatch(row);
   }

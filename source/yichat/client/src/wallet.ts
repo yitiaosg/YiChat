@@ -4,8 +4,9 @@ import {requests} from './api';
 export type WalletState={
   enabled:boolean;
   binding:string|null;
+  balance:string;
   bind_url:string;
-  fees:{incoming:string;outgoing_per_share:string};
+  fees:{incoming:string;outgoing_per_share:string;wallet:string;gas:string};
 };
 
 // Binding can change in YIDT while this Web/App dialog stays mounted.
