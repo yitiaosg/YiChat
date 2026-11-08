@@ -1,6 +1,6 @@
 # YiChat Android 网页容器
 
-当前 0.3.9 / code 17 / `org.yitiao.yichat.mobile`。单 APK 不分 ABI，Matrix 使用同源网页 SDK，聊天不再启用 E2EE。最低 Android 8（API26），需要 Android System WebView / Chrome 内核 100+，并支持 WebMessageListener、Web Locks、IndexedDB；过旧内核会提示更新。
+当前 0.3.10 / code 18 / `org.yitiao.yichat.mobile`。单 APK 不分 ABI，Matrix 使用同源网页 SDK，聊天不再启用 E2EE。最低 Android 8（API26），需要 Android System WebView / Chrome 内核 100+，并支持 WebMessageListener、Web Locks、IndexedDB；过旧内核会提示更新。
 
 JDK21、Android SDK36/build-tools36、Node22+。Gradle8.13、AGP8.11.1、Kotlin2.1.21，AndroidX WebKit / Browser、Room、WorkManager、OkHttp。无 Compose/Matrix FFI。先在仓库根目录运行 `npm --prefix source/yichat/client ci`，再：
 

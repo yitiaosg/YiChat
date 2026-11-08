@@ -82,3 +82,5 @@ export YICHAT_FIREBASE_CONFIG=/private/path/google-services.json
 ## 0.3.9 更新
 
 [钱包、转发与主题更新记录](PRODUCTION-0.3.9.md) · [最新开发者 API 文档](source/yichat/docs/OPEN-API.md)。
+
+最新安装包为0.3.10 / code 18，修正主题色Logo图形，见 [0.3.10记录](PRODUCTION-0.3.10.md)。
