@@ -11,7 +11,7 @@ const order={type:'order',url:'https://chat.yitiao.org/orders/'+'a'.repeat(32),d
 const make=(id:string,content:any,age=600001,sender=bob)=>new sdk.MatrixEvent({event_id:id,room_id:'!source',type:'m.room.message',sender,origin_server_ts:Date.now()-age,content});
 const texts=['这是一整条消息，包含两行文字。\n第二行有 emoji 👋，长按应全选。','第二条普通消息'];
 const items:any[]=texts.map((body,i)=>({id:'$text'+i,sender:i?alice:bob,username:i?'alice':'bob',name:i?'爱丽丝':'小鲍',avatar_url:'/api/avatars/bob?v=1',sent_at:Date.now()-600001,content:{msgtype:'m.text',body},previews:[]}));
-items.push({id:'$special',sender:bob,username:'bob',name:'小鲍',avatar_url:'/api/avatars/bob?v=1',sent_at:Date.now()-600001,content:{msgtype:'m.text',body:order.url},previews:[order]} as any);
+items.push({id:'$special',sender:bob,username:'bob',name:'小鲍',avatar_url:'/api/avatars/bob?v=1',sent_at:Date.now()-600001,content:{msgtype:'m.text',body:order.url},previews:[order,{...order}]} as any);
 items.push({...items[2],id:'$receipt',previews:[{...order,receipt:true}]},{...items[2],id:'$packet',previews:[{...order,data:{...order.data,kind:'group',count:2,title:'午饭红包'}}]},{id:'$photo',sender:alice,username:'alice',name:'爱丽丝',avatar_url:'/api/avatars/alice?v=1',sent_at:Date.now()-600001,content:{msgtype:'m.image',body:'photo.png',url:'mxc://chat.yitiao.org/'+'a'.repeat(48),info:{mimetype:'image/png'}},previews:[]});
 const canonical=JSON.stringify({version:2,owner:alice,identity:'both',messages:items}),hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical)))).map(n=>n.toString(16).padStart(2,'0')).join('');
 const record={'msgtype':'m.text',body:'https://chat.yitiao.org/records/'+hash,'org.yitiao.record':hash,'org.yitiao.record_json':canonical};

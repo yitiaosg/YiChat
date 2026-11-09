@@ -1,0 +1,10 @@
+{
+  "version": "0.3.14",
+  "code": 22,
+  "bytes": 9864598,
+  "sha256": "aded062c96146ee95dc0ae49c26b78f29ca44347bef21f68837589b9733d9f65",
+  "matched_assets": 14,
+  "jvm_tests": 22,
+  "jvm_failures": 0,
+  "physical_device_tested": false
+}

@@ -1,3 +1,4 @@
+import {unreadCount} from './unread-count';
 import * as sdk from 'matrix-js-sdk';
 import {MESSAGE_EPOCH,chatStoreScope,clearLegacyChatStores} from './message-policy';
 import {sdkLog} from './log';
@@ -15,7 +16,7 @@ export class Chat {
   constructor(readonly notificationMode=false){}
   client!:sdk.MatrixClient; history=new History(this);private historyStarted=false; session:any;vault=new Vault();businessVault=new Vault();phase='loading';error='';sync='正在连接';
   private preferencePending=new Set<string>();private preferenceRevision=0;private preferenceVersions=new Map<string,number>();
-  appNotifications=false;activeRoom='';preferences=new Map<string,{pinned?:boolean;archived?:boolean;muted?:boolean;deleted?:boolean}>();
+  appNotifications=false;activeRoom='';preferences=new Map<string,{pinned?:boolean;archived?:boolean;muted?:boolean;deleted?:boolean;read_sequence?:number;read_event?:string;latest_event?:string;unread_count?:number}>();
   rooms: sdk.Room[]=[];info=new Map<string,RoomInfo>();profiles=new Map<string,Profile>();outbox:Outgoing[]=[];business:any[]=[];
   offline=false;private saveTimer?:ReturnType<typeof setTimeout>;
   private listeners=new Set<()=>void>();private release?:()=>void;private closed=false;private refreshTimer?:ReturnType<typeof setTimeout>;private channel?:BroadcastChannel;
@@ -82,7 +83,7 @@ export class Chat {
         if(isApp&&['PREPARED','SYNCING'].includes(state)){clearTimeout(this.saveTimer);this.saveTimer=setTimeout(()=>void store.save(true).catch(()=>{}),1200)}
       });
       const update=()=>{this.updateRooms()};
-      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{update();if(room&&!toStart&&data.liveEvent&&this.preferences.get(room.roomId)?.deleted&&['m.room.message','m.room.encrypted'].includes(event.getWireType()))this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Name,update);this.client.on(sdk.RoomEvent.Receipt,update);this.client.on(sdk.RoomEvent.Redaction,update);
+      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{update();if(room&&!toStart&&data.liveEvent&&this.preferences.get(room.roomId)?.deleted&&['m.room.message','m.room.encrypted'].includes(event.getWireType()))this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Name,update);this.client.on(sdk.RoomEvent.Receipt,()=>{update();this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Redaction,update);
       this.client.on(sdk.MatrixEventEvent.Decrypted,update);this.client.on(sdk.RoomEvent.MyMembership,()=>{this.scheduleRefresh();update()});this.client.on(sdk.ClientEvent.Room,()=>{this.scheduleRefresh();update()});
 
       this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{if(this.notificationMode||!isApp||!this.appNotifications||this.phase!=='ready'||toStart||!data.liveEvent||!room||event.getSender()===this.session?.mxid||!['m.room.message','m.room.encrypted'].includes(event.getWireType()))return;const p=this.preferences.get(room.roomId);if(!p?.archived&&!p?.muted&&!this.readOnly(room.roomId)&&(document.hidden||this.activeRoom!==room.roomId))void appCall('notifyRoom',{room:room.roomId,event:event.getId(),label:this.roomName(room),kind:this.info.get(room.roomId)?.kind==='group'?'group':'private'}).catch(()=>{})});
@@ -94,10 +95,12 @@ export class Chat {
     }catch(e:any){if(!this.closed){this.phase='error';this.error=e.message;this.changed()}}
   }
   fail(e:any){if(e?.name!=='AbortError'){this.error=e.message||String(e);this.changed()}}
+  unreadCount(room:sdk.Room){return unreadCount(room,this.preferences.get(room.roomId))}
   updateRooms(){if(!this.client||this.closed)return;this.rooms=this.client.getRooms().filter(r=>!this.preferences.get(r.roomId)?.deleted&&(r.getMyMembership()==='invite'||(['join','leave'].includes(r.getMyMembership())&&this.info.has(r.roomId)))).sort((a,b)=>Number(!!this.preferences.get(b.roomId)?.pinned)-Number(!!this.preferences.get(a.roomId)?.pinned)||b.getLastActiveTimestamp()-a.getLastActiveTimestamp());this.changed()}
   scheduleRefresh(){if(this.notificationMode||this.offline||this.closed)return;clearTimeout(this.refreshTimer);this.refreshTimer=setTimeout(()=>void this.refresh().catch(e=>this.fail(e)),800)}
   async refresh(){const revision=this.preferenceRevision;const [rows,prefs]:[RoomInfo[],any[]]=await Promise.all([requests.single('rooms',()=>requests.api('/api/rooms')),requests.single('preferences',()=>requests.api('/api/conversations/preferences'))]);if(this.closed)return;for(const r of rows){const old=this.info.get(r.room);if(old?.dissolved_at)r.dissolved_at=old.dissolved_at;if(old?.peer_deleted)r.peer_deleted=true;if((old?.revision||0)>(r.revision||0)){r.owner=old!.owner;r.revision=old!.revision}}this.info=new Map(rows.map(r=>[r.room,r]));const fresh=new Map(prefs.map(r=>[r.room,r]));for(const [id,version] of this.preferenceVersions)if(version>revision||this.preferencePending.has(id)){if(this.preferences.has(id))fresh.set(id,this.preferences.get(id));else fresh.delete(id)};this.preferences=fresh;this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences]});else await this.businessVault.saveState('profiles',[...this.profiles]).catch(()=>{});if(isApp&&!this.notificationMode)void appCall('notificationNames',{rooms:this.rooms.filter(r=>r.getMyMembership()==='join').map(r=>({room:r.roomId,label:this.roomName(r)}))}).catch(()=>{})}
   async loadProfiles(mxids:string[],usernames:string[]=[]):Promise<void>{
+    if(this.offline||!navigator.onLine)return;
     const missing=[...new Set(mxids)].filter(id=>!this.profiles.has(id)||(this.profileTimes.get(id)||0)<Date.now()-300000).slice(0,100);if(!missing.length)return;
     if(this.profileFlight){await this.profileFlight;return this.loadProfiles(mxids,usernames)}
     this.profileFlight=(async()=>{const rows:Profile[]=await requests.api('/api/profiles',{mxids:missing.slice(0,100-usernames.length),usernames});if(this.closed)return;for(const id of missing)this.profiles.set(id,{mxid:id,username:id,nickname:id});for(const id of missing)this.profileTimes.set(id,Date.now());for(const row of rows)this.profiles.set(row.mxid,row);this.changed()})();

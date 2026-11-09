@@ -1,0 +1,286 @@
+{
+  "hash": "24ad5be01f7237308acfab72f61e1fe4ececf2dfe0d557100eed9f5700beb2d9",
+  "canonical": "{\"version\":2,\"owner\":\"@alice:chat.yitiao.org\",\"identity\":\"both\",\"messages\":[{\"id\":\"$text0\",\"sender\":\"@bob:chat.yitiao.org\",\"username\":\"bob\",\"name\":\"小鲍\",\"avatar_url\":\"/api/avatars/bob?v=1\",\"sent_at\":1794208703761,\"content\":{\"msgtype\":\"m.text\",\"body\":\"这是一整条消息，包含两行文字。\\n第二行有 emoji 👋，长按应全选。\"},\"previews\":[]},{\"id\":\"$text1\",\"sender\":\"@alice:chat.yitiao.org\",\"username\":\"alice\",\"name\":\"爱丽丝\",\"avatar_url\":\"/api/avatars/bob?v=1\",\"sent_at\":1794208703761,\"content\":{\"msgtype\":\"m.text\",\"body\":\"第二条普通消息\"},\"previews\":[]},{\"id\":\"$special\",\"sender\":\"@bob:chat.yitiao.org\",\"username\":\"bob\",\"name\":\"小鲍\",\"avatar_url\":\"/api/avatars/bob?v=1\",\"sent_at\":1794208703761,\"content\":{\"msgtype\":\"m.text\",\"body\":\"https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"previews\":[{\"type\":\"order\",\"url\":\"https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"data\":{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"kind\":\"direct\",\"amount\":\"12.50\",\"title\":\"午饭\",\"state\":\"paid\",\"actions\":{}}},{\"type\":\"order\",\"url\":\"https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"data\":{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"kind\":\"direct\",\"amount\":\"12.50\",\"title\":\"午饭\",\"state\":\"paid\",\"actions\":{}}}]},{\"id\":\"$receipt\",\"sender\":\"@bob:chat.yitiao.org\",\"username\":\"bob\",\"name\":\"小鲍\",\"avatar_url\":\"/api/avatars/bob?v=1\",\"sent_at\":1794208703761,\"content\":{\"msgtype\":\"m.text\",\"body\":\"https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"previews\":[{\"type\":\"order\",\"url\":\"https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"data\":{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"kind\":\"direct\",\"amount\":\"12.50\",\"title\":\"午饭\",\"state\":\"paid\",\"actions\":{}},\"receipt\":true}]},{\"id\":\"$packet\",\"sender\":\"@bob:chat.yitiao.org\",\"username\":\"bob\",\"name\":\"小鲍\",\"avatar_url\":\"/api/avatars/bob?v=1\",\"sent_at\":1794208703761,\"content\":{\"msgtype\":\"m.text\",\"body\":\"https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"previews\":[{\"type\":\"order\",\"url\":\"https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"data\":{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"kind\":\"group\",\"amount\":\"12.50\",\"title\":\"午饭红包\",\"state\":\"paid\",\"actions\":{},\"count\":2}}]},{\"id\":\"$photo\",\"sender\":\"@alice:chat.yitiao.org\",\"username\":\"alice\",\"name\":\"爱丽丝\",\"avatar_url\":\"/api/avatars/alice?v=1\",\"sent_at\":1794208703761,\"content\":{\"msgtype\":\"m.image\",\"body\":\"photo.png\",\"url\":\"mxc://chat.yitiao.org/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"info\":{\"mimetype\":\"image/png\"}},\"previews\":[]}]}",
+  "payload": {
+    "version": 2,
+    "owner": "@alice:chat.yitiao.org",
+    "identity": "both",
+    "messages": [
+      {
+        "id": "$text0",
+        "sender": "@bob:chat.yitiao.org",
+        "username": "bob",
+        "name": "小鲍",
+        "avatar_url": "/api/avatars/bob?v=1",
+        "sent_at": 1794208703761,
+        "content": {
+          "msgtype": "m.text",
+          "body": "这是一整条消息，包含两行文字。\n第二行有 emoji 👋，长按应全选。"
+        },
+        "previews": []
+      },
+      {
+        "id": "$text1",
+        "sender": "@alice:chat.yitiao.org",
+        "username": "alice",
+        "name": "爱丽丝",
+        "avatar_url": "/api/avatars/bob?v=1",
+        "sent_at": 1794208703761,
+        "content": {
+          "msgtype": "m.text",
+          "body": "第二条普通消息"
+        },
+        "previews": []
+      },
+      {
+        "id": "$special",
+        "sender": "@bob:chat.yitiao.org",
+        "username": "bob",
+        "name": "小鲍",
+        "avatar_url": "/api/avatars/bob?v=1",
+        "sent_at": 1794208703761,
+        "content": {
+          "msgtype": "m.text",
+          "body": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "previews": [
+          {
+            "type": "order",
+            "url": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "data": {
+              "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "kind": "direct",
+              "amount": "12.50",
+              "title": "午饭",
+              "state": "paid",
+              "actions": {}
+            }
+          },
+          {
+            "type": "order",
+            "url": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "data": {
+              "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "kind": "direct",
+              "amount": "12.50",
+              "title": "午饭",
+              "state": "paid",
+              "actions": {}
+            }
+          }
+        ]
+      },
+      {
+        "id": "$receipt",
+        "sender": "@bob:chat.yitiao.org",
+        "username": "bob",
+        "name": "小鲍",
+        "avatar_url": "/api/avatars/bob?v=1",
+        "sent_at": 1794208703761,
+        "content": {
+          "msgtype": "m.text",
+          "body": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "previews": [
+          {
+            "type": "order",
+            "url": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "data": {
+              "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "kind": "direct",
+              "amount": "12.50",
+              "title": "午饭",
+              "state": "paid",
+              "actions": {}
+            },
+            "receipt": true
+          }
+        ]
+      },
+      {
+        "id": "$packet",
+        "sender": "@bob:chat.yitiao.org",
+        "username": "bob",
+        "name": "小鲍",
+        "avatar_url": "/api/avatars/bob?v=1",
+        "sent_at": 1794208703761,
+        "content": {
+          "msgtype": "m.text",
+          "body": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "previews": [
+          {
+            "type": "order",
+            "url": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "data": {
+              "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "kind": "group",
+              "amount": "12.50",
+              "title": "午饭红包",
+              "state": "paid",
+              "actions": {},
+              "count": 2
+            }
+          }
+        ]
+      },
+      {
+        "id": "$photo",
+        "sender": "@alice:chat.yitiao.org",
+        "username": "alice",
+        "name": "爱丽丝",
+        "avatar_url": "/api/avatars/alice?v=1",
+        "sent_at": 1794208703761,
+        "content": {
+          "msgtype": "m.image",
+          "body": "photo.png",
+          "url": "mxc://chat.yitiao.org/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "info": {
+            "mimetype": "image/png"
+          }
+        },
+        "previews": []
+      }
+    ]
+  },
+  "active": true,
+  "url": "https://chat.yitiao.org/records/24ad5be01f7237308acfab72f61e1fe4ececf2dfe0d557100eed9f5700beb2d9",
+  "expires": 1794814103.765,
+  "messages": [
+    {
+      "id": "$text0",
+      "sender": "@bob:chat.yitiao.org",
+      "username": "bob",
+      "name": "小鲍",
+      "avatar_url": "/api/avatars/bob?v=1",
+      "sent_at": 1794208703761,
+      "content": {
+        "msgtype": "m.text",
+        "body": "这是一整条消息，包含两行文字。\n第二行有 emoji 👋，长按应全选。"
+      },
+      "previews": []
+    },
+    {
+      "id": "$text1",
+      "sender": "@alice:chat.yitiao.org",
+      "username": "alice",
+      "name": "爱丽丝",
+      "avatar_url": "/api/avatars/bob?v=1",
+      "sent_at": 1794208703761,
+      "content": {
+        "msgtype": "m.text",
+        "body": "第二条普通消息"
+      },
+      "previews": []
+    },
+    {
+      "id": "$special",
+      "sender": "@bob:chat.yitiao.org",
+      "username": "bob",
+      "name": "小鲍",
+      "avatar_url": "/api/avatars/bob?v=1",
+      "sent_at": 1794208703761,
+      "content": {
+        "msgtype": "m.text",
+        "body": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "previews": [
+        {
+          "type": "order",
+          "url": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "data": {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "direct",
+            "amount": "12.50",
+            "title": "午饭",
+            "state": "paid",
+            "actions": {}
+          }
+        },
+        {
+          "type": "order",
+          "url": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "data": {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "direct",
+            "amount": "12.50",
+            "title": "午饭",
+            "state": "paid",
+            "actions": {}
+          }
+        }
+      ]
+    },
+    {
+      "id": "$receipt",
+      "sender": "@bob:chat.yitiao.org",
+      "username": "bob",
+      "name": "小鲍",
+      "avatar_url": "/api/avatars/bob?v=1",
+      "sent_at": 1794208703761,
+      "content": {
+        "msgtype": "m.text",
+        "body": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "previews": [
+        {
+          "type": "order",
+          "url": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "data": {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "direct",
+            "amount": "12.50",
+            "title": "午饭",
+            "state": "paid",
+            "actions": {}
+          },
+          "receipt": true
+        }
+      ]
+    },
+    {
+      "id": "$packet",
+      "sender": "@bob:chat.yitiao.org",
+      "username": "bob",
+      "name": "小鲍",
+      "avatar_url": "/api/avatars/bob?v=1",
+      "sent_at": 1794208703761,
+      "content": {
+        "msgtype": "m.text",
+        "body": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "previews": [
+        {
+          "type": "order",
+          "url": "https://chat.yitiao.org/orders/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "data": {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "group",
+            "amount": "12.50",
+            "title": "午饭红包",
+            "state": "paid",
+            "actions": {},
+            "count": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "$photo",
+      "sender": "@alice:chat.yitiao.org",
+      "username": "alice",
+      "name": "爱丽丝",
+      "avatar_url": "/api/avatars/alice?v=1",
+      "sent_at": 1794208703761,
+      "content": {
+        "msgtype": "m.image",
+        "body": "photo.png",
+        "url": "mxc://chat.yitiao.org/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "info": {
+          "mimetype": "image/png"
+        }
+      },
+      "previews": []
+    }
+  ]
+}

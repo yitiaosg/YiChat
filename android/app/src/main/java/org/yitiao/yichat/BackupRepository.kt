@@ -89,6 +89,7 @@ class BackupRepository(private val context: Context, private val matrix: PacketS
     private suspend fun packetContent(a: Account): ByteArray {
         check(matrix.account?.storage == a.storage) { "备份账号已改变" }
         val db = requireNotNull(matrix.database); val dao = db.local()
+        val previews=recordFiles?.previews?.export(a)?:JsonArray(emptyList())
         val content = db.withTransaction {
             buildJsonObject {
                 put("format", "yichat-app-packets"); put("version", 1); put("uid", a.uid); put("mxid", a.mxid)
@@ -97,6 +98,7 @@ class BackupRepository(private val context: Context, private val matrix: PacketS
                     val raw = vault.decrypt(a.storage, "packet:${p.room}:${p.event}", p.encrypted)
                     try { put("raw", Base64.encodeToString(raw, Base64.NO_WRAP)) } finally { raw.fill(0) }
                 }) })
+                put("special_previews",previews)
                 put("tombstones", buildJsonArray { for (t in dao.tombstones()) add(obj("room" to t.room, "event" to t.event)) })
             }.toString().toByteArray()
         }
@@ -142,6 +144,7 @@ class BackupRepository(private val context: Context, private val matrix: PacketS
             Packet(r.room, r.event, r.sequence, r.hash, vault.encrypt(a.storage, "packet:${r.room}:${r.event}", raw))
         }
         db.withTransaction { verified.forEach { if (dao.packet(it.room, it.event) == null) dao.addPacket(it) } }
+        recordFiles?.previews?.restore(a,data.a("special_previews"))
         plain.fill(0)
         status.value = "已恢复 ${verified.size} 份认证原消息包；无需会话密钥"
         verified.size

@@ -7,7 +7,7 @@ from backend.security import digest
 from backend import archive,server_messages
 from test_synapse_integration import synapse
 
-def test_real_receipt_group_api_and_server_receipt_outbox(synapse):
+def test_real_receipt_group_api_and_server_receipt_outbox(synapse,monkeypatch):
  s,_,users,h,*_=synapse;app=create_app(s)
  with TestClient(app) as c:
   async def seed():
@@ -26,7 +26,7 @@ def test_real_receipt_group_api_and_server_receipt_outbox(synapse):
   r=c.post('/api/rooms',json={'kind':'group','users':['bob'],'name':'Old Group'});assert r.status_code==200,r.text;group=r.json()['room_id']
   alice=c.post('/api/developer/keys',json={'name':'sender','scope':'read_write'}).json()['key']
   bob_client=TestClient(app);bob_client.cookies.set('yc_session',tokens['bob']['gateway']);bob_client.headers['Origin']=s.origin
-  bob=bob_client.post('/api/developer/keys',json={'name':'reader','scope':'read_write'}).json()['key']
+  bob_key=bob_client.post('/api/developer/keys',json={'name':'reader','scope':'read'}).json();bob=bob_key['key']
   class API:
    def __init__(self,key):self.key=key
    def post(self,path,**kwargs):return c.post(path,headers={'Authorization':'Bearer '+self.key},**kwargs)
@@ -45,6 +45,33 @@ def test_real_receipt_group_api_and_server_receipt_outbox(synapse):
     if any(users['bob']['mxid'] in e.get('content',{}).get(eid,{}).get('m.read',{}) for e in events):seen=True;break
     time.sleep(.2)
    assert seen,'Real Synapse did not publish the public read receipt'
+  def preference():
+   r=bob_client.get('/api/conversations/preferences');assert r.status_code==200,r.text
+   return next(p for p in r.json() if p['room']==room)
+  assert preference()['read_event']==eid and preference()['unread_count']==0
+  # Full account marker is persisted in Synapse, not only in this device's UI.
+  synced=h.get(s.synapse+'/_matrix/client/v3/sync',headers=rb,params={'timeout':0}).json()['rooms']['join'][room]
+  assert synced.get('unread_notifications',{}).get('notification_count',0)==0
+  assert any(e.get('type')=='m.fully_read' and e.get('content',{}).get('event_id')==eid for e in synced.get('account_data',{}).get('events',[]))
+  r=a.post('/open/v1/conversations/'+quote(room,safe='')+'/messages',json={'text':'unread after unsubscribe'});assert r.status_code==200,r.text
+  time.sleep(.6);assert preference()['read_event']==eid and preference()['unread_count']>=1
+  # Account-wide subscriptions count too, even without reading a delivered frame.
+  with b.websocket_connect('/open/v1/stream') as ws:
+   assert ws.receive_json()['type']=='ready'
+   time.sleep(.3)
+   r=a.post('/open/v1/conversations/'+quote(room,safe='')+'/messages',json={'text':'account subscription without acknowledgements'});assert r.status_code==200,r.text;all_eid=r.json()['event_id']
+   until=time.monotonic()+10
+   while preference()['read_event']!=all_eid and time.monotonic()<until:time.sleep(.2)
+   assert preference()['read_event']==all_eid and preference()['unread_count']==0
+   seen=False
+   while time.monotonic()<until:
+    data=h.get(s.synapse+'/_matrix/client/v3/sync',headers={'Authorization':'Bearer '+tokens['alice']['raw']},params={'timeout':0,**({'since':since} if since else {})}).json();since=data.get('next_batch',since)
+    events=data.get('rooms',{}).get('join',{}).get(room,{}).get('ephemeral',{}).get('events',[])
+    if any(users['bob']['mxid'] in e.get('content',{}).get(all_eid,{}).get('m.read',{}) for e in events):seen=True;break
+    time.sleep(.2)
+   assert seen,'Account-wide subscription did not publish a real public read receipt'
+  time.sleep(1.1)
+  r=bob_client.patch('/api/developer/keys/'+bob_key['id'],json={'scope':'read_write'});assert r.status_code==200,r.text
   time.sleep(1.1)
   r=a.patch('/open/v1/groups/'+quote(group,safe=''),json={'name':'New Group'});assert r.status_code==200,r.text
   assert h.get(s.synapse+'/_matrix/client/v3/rooms/'+quote(group,safe='')+'/state/m.room.name',headers={'Authorization':'Bearer '+tokens['alice']['raw']}).json()['name']=='New Group'
@@ -59,6 +86,14 @@ def test_real_receipt_group_api_and_server_receipt_outbox(synapse):
    if found:break
    time.sleep(.2)
   assert found,'Cross-room reference was not archived with its original file ID'
+  from backend import sharing
+  from types import SimpleNamespace
+  monkeypatch.setattr(sharing,'time',SimpleNamespace(time=lambda:time.time()+301))
+  r=a.post('/open/v1/conversations/'+quote(room,safe='')+'/forward',json={'message_ids':[eid],'target':group,'identity':'avatar','txn_id':'real-api-record'})
+  assert r.status_code==200,r.text;forwarded=r.json();until=time.monotonic()+10
+  while c.get('/api/public-records/'+forwarded['hash']).status_code==404 and time.monotonic()<until:time.sleep(.2)
+  assert c.get('/api/public-records/'+forwarded['hash']).status_code==200
+  monkeypatch.undo()
   # Publication opens only when the real Matrix record message is accepted.
   from backend import public_records
   with archive.connect(s.archive_reader) as pg:source=pg.execute('SELECT body FROM events WHERE event_id=%s',(eid,)).fetchone()

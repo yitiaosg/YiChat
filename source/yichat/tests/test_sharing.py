@@ -188,3 +188,15 @@ def test_preview_creates_no_hash_and_combined_url_waits_for_accepted_message(gat
  assert c.get('/api/public-records/'+result['hash']).status_code==404
  public_records.activate_message(s,'!group',result['content'])
  assert c.get('/api/public-records/'+result['hash']).status_code==200
+
+def test_order_url_in_body_and_share_field_produces_one_snapshot(gateway):
+ from test_open_api import order
+ c,app,s=gateway;oid='a'*32;url='https://chat.yitiao.org/orders/'+oid
+ order(s,app,oid,'!direct','direct','1.25')
+ with connect(s.db) as db:ids={r['username']:r['subject'] for r in db.execute('SELECT username,subject FROM identities')}
+ with connect(s.ledger) as db:
+  db.execute('INSERT INTO yichat_order_participants(order_id,sender_uid,recipient_uid,request_key) VALUES(?,?,?,?)',(oid,ids['alice'],ids['bob'],'duplicate-order-preview'))
+  db.execute('UPDATE yichat_orders SET expires=? WHERE id=?',(time.time()+3600,oid))
+ seed(s,{'msgtype':'m.text','body':url,'org.yitiao.share':{'type':'order','url':url}})
+ r=c.post('/api/sharing/!direct/selection',json={'ids':['$selected'],'mode':'prepare'});assert r.status_code==200,r.text
+ previews=r.json()['messages'][0]['previews'];assert len(previews)==1 and previews[0]['type']=='order'

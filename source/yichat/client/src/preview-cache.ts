@@ -24,17 +24,19 @@ export class PreviewCache {
   const task=this.read(key,load,force).finally(()=>{if(this.pending.get(key)===task)this.pending.delete(key)});this.pending.set(key,task);return task;
  }
  private async read(key:string,load:()=>Promise<any>,force:boolean){
-  if(!force){
-   let row=this.rows.get(key);
-   if(!row&&this.store)try{row=await this.store.read(key)}catch{/* A missing/corrupt cache must not block a live preview. */}
-   this.check();if(row&&Number.isFinite(row.until)&&row.until>this.now()&&row.until<=this.now()+30*86400000&&Number.isFinite(row.bytes)&&row.bytes>=0&&row.bytes<=PREVIEW_BYTES){this.remember(key,row);return row.value}
-  }
+  let row=this.rows.get(key);
+  if(!row&&this.store)try{row=await this.store.read(key)}catch{/* Cache failures do not block a live request. */}
+  this.check();
+  const valid=!!row&&Number.isFinite(row.at)&&row.at<=this.now()&&Number.isFinite(row.bytes)&&row.bytes>=0&&row.bytes<=PREVIEW_BYTES;
+  if(!force&&valid&&row!.until>this.now()&&row!.until<=this.now()+30*86400000){this.remember(key,row!);return row!.value}
   try{
    const value=await load();this.check();const at=this.now(),row={value,at,until:at+previewLifetime(value),bytes:JSON.stringify(value??null).length*2};
    this.remember(key,row);if(this.store)try{await this.store.write(key,row)}catch{/* Cache quota/write failures do not fail the request. */}
    this.check();return value;
   }catch(e:any){
    if([401,403,404,410].includes(e.status)){this.bytes-=this.rows.get(key)?.bytes||0;this.rows.delete(key);if(this.store)try{await this.store.remove(key)}catch{}}
+   this.check();
+   if(this.store&&valid&&e?.name!=='AbortError'&&(!e.status||e.status>=500)){this.remember(key,row!);return row!.value}
    throw e;
   }
  }

@@ -23,6 +23,13 @@ object WebRoutes {
     }.getOrDefault(false)
     fun publicAsset(path: String): Boolean = !path.contains("..") && !path.contains('%') &&
         path.matches(Regex("/(assets|render|brand)/[A-Za-z0-9_./-]+\\.(js|css|wasm|svg|png|jpg|webp|woff2?)"))
+    fun shellPath(value:String):String? = runCatching {
+        if(!trusted(value))return@runCatching null
+        val u=URI(value);val path=u.rawPath
+        when { chat(value) && path.startsWith("/records/")->"/"
+            path=="/" || path=="/notification.html" || publicAsset(path)->path
+            else->null }
+    }.getOrNull()
     fun external(value: String): Boolean = runCatching {
         val u = URI(value)
         u.scheme in setOf("https", "http") && !u.host.isNullOrBlank() && u.rawUserInfo == null
@@ -39,9 +46,8 @@ class WebShellCache(private val context: Context, private val online: () -> Bool
     private fun file(path: String) = File(directory, SecureStore.hash(path))
     private fun bundled(path: String) = runCatching { context.assets.open("app-shell/" + if(path=="/") "index.html" else path.removePrefix("/")).use { it.readBytes() } }.getOrNull()
     fun intercept(uri: Uri): WebResourceResponse? {
-        if (!WebRoutes.trusted(uri.toString())) return null
-        val path = uri.path ?: return null
-        if (path != "/" && path!="/notification.html" && !WebRoutes.publicAsset(path)) return null
+        // Record pages use the bundled shell and backed-up local metadata.
+        val path=WebRoutes.shellPath(uri.toString())?:return null
         var bytes: ByteArray? = if (bundledOnly) bundled(path) else null
         val cached = file(path)
         // Hashed assets are immutable. Index is refreshed online; APK resources

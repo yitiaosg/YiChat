@@ -25,7 +25,7 @@ def sharing(s,who,room):
  return {'allowed':not blocked,'blocked_by_me':bool(mine and mine[0]),'can_set':small or who['mxid']==info['owner']}
 def eligible(s,who,room,ids):
  access(s,who,room)
- if not isinstance(ids,list) or not 1<=len(ids)<=100 or len(set(ids))!=len(ids) or any(not isinstance(e,str) or not e.startswith('$') for e in ids):fail(400,'请选择1～100条不同消息')
+ if not isinstance(ids,list) or not 1<=len(ids)<=100 or any(not isinstance(e,str) or not e.startswith('$') for e in ids) or len(set(ids))!=len(ids):fail(400,'请选择1～100条不同消息')
  with archive.connect(s.archive_reader) as pg:
   from .open_api import require_archive_ready
   require_archive_ready(pg)
@@ -70,7 +70,7 @@ def snapshot(app,s,who,event):
  from .notification_summary import URL,TRAILING
  for u in URL.findall(content.get('body',''))+[str(share.get('url',''))]:
   u=u.rstrip(TRAILING)
-  if previews.parse(u) and not content.get('org.yitiao.no_preview'):urls.append(u)
+  if previews.parse(u) and not content.get('org.yitiao.no_preview') and u not in urls:urls.append(u)
  metas=[]
  gift=re.search(r'https://chat\.yitiao\.org/gifts/([a-f0-9]{32})',str(content.get('body',''))+' '+str(share.get('url','')))
  gid=gift[1] if gift else content.get('org.yitiao.business',{}).get('id') if content.get('org.yitiao.business',{}).get('kind')=='gift' else None
@@ -97,6 +97,12 @@ def snapshot(app,s,who,event):
   metas=json.loads(json.dumps(frozen.get('previews',[])))
   for meta in metas:
    if meta.get('type')=='order':meta['data']['actions']={};meta['data']['authorize_url']=None
+ # Keep new snapshots clean too, including older forwarded snapshots.
+ unique={}
+ for meta in metas:
+  key=(meta.get('type'),meta.get('url'),(meta.get('data') or {}).get('id'),bool(meta.get('receipt')))
+  unique.setdefault(key,meta)
+ metas=list(unique.values())
  username=policy.username(s,policy.subject(s,event['sender']))
  from fastapi import HTTPException
  try:profile=app.state.public_profile(username)
@@ -117,23 +123,28 @@ def validate(s,room,sender,content):
         proof=content.get('org.yitiao.forward_proof');unsigned={k:v for k,v in content.items() if k!='org.yitiao.forward_proof'}
         if not isinstance(proof,str) or not hmac.compare_digest(proof,sign(s,room,sender,unsigned)):fail(403,'转发快照签名无效')
 
+def set_sharing(s,who,room,data):
+ current=sharing(s,who,room)
+ if not current['can_set']:fail(403,'超过5人的群聊只有群主可以设置分享权限')
+ if not isinstance(data,dict) or set(data)!={'blocked'} or type(data['blocked'])!=bool:fail(400,'需要 blocked 布尔值')
+ with transaction(s.db) as c:c.execute('INSERT OR REPLACE INTO room_share_preferences VALUES(?,?,?)',(room,who['subject'],int(data['blocked'])))
+ return sharing(s,who,room)
+
 def install(app,s,session):
  public_records.install(app,s)
  @app.get('/api/sharing/{room}')
  async def preferences(request:Request,room:str):return sharing(s,session(request),room)
  @app.put('/api/sharing/{room}')
- async def preference_set(request:Request,room:str):
-  who=session(request);current=sharing(s,who,room);data=await request.json()
-  if not current['can_set']:fail(403,'超过5人的群聊只有群主可以设置分享权限')
-  if not isinstance(data,dict) or set(data)!={'blocked'} or type(data['blocked'])!=bool:fail(400,'需要 blocked 布尔值')
-  with transaction(s.db) as c:c.execute('INSERT OR REPLACE INTO room_share_preferences VALUES(?,?,?)',(room,who['subject'],int(data['blocked'])))
-  return sharing(s,who,room)
+ async def preference_set(request:Request,room:str):return set_sharing(s,session(request),room,await request.json())
  @app.get('/api/sharing/{room}/eligible')
  async def eligibility(request:Request,room:str,event:str):
   eligible(s,session(request),room,[event]);return {'eligible':True}
  @app.post('/api/sharing/{room}/selection')
  async def selection(request:Request,room:str):
-  who=session(request);data=await request.json();events=eligible(s,who,room,data.get('ids'));mode=data.get('mode','image')
+  return await select(session(request),room,await request.json())
+ async def select(who,room,data):
+  if not isinstance(data,dict):fail(400,'需要 JSON 对象')
+  events=eligible(s,who,room,data.get('ids'));mode=data.get('mode','image')
   if mode not in ('image','individual','combined','prepare'):fail(400,'分享方式无效')
   if mode!='individual' and not sharing(s,who,room)['allowed']:fail(403,'此会话已禁止分享图片和合并记录')
   if mode=='image' and len(events)>=50:fail(400,'长图最多49条消息')
@@ -154,6 +165,8 @@ def install(app,s,session):
   if any(record_message(e['content']) for e in events):fail(400,'聊天记录不能再次合并或生成分享图片，可逐条转发原链接')
   display=public_records.identity(data)
   if mode=='prepare':return public_records.draft(app,s,who,room,events,display)
+  if mode=='combined':
+   info=access(s,who,data.get('target'));policy.require_send(s,info,who['mxid'])
   record=public_records.prepare(app,s,who,room,events,display,activate=mode=='image')
   if mode=='image':return record|{'messages':record['payload']['messages']}
   target=data.get('target');info=access(s,who,target);policy.require_send(s,info,who['mxid'])
@@ -162,6 +175,7 @@ def install(app,s,session):
   content={'msgtype':'m.text','body':record['url'],'org.yitiao.record':h,'org.yitiao.record_json':record['canonical'],'org.yitiao.attachments':sorted(set().union(*(file_ids(e['content']) for e in events)))}
   if len(archive.canonical(content))>60000:fail(413,'合并记录过大，请减少选择的消息；仍可生成分享图片')
   return record|{'content':content}
+ app.state.share_selection=select
  @app.get('/api/records/{h}')
  async def record(request:Request,h:str,room:str):
   who=session(request);access(s,who,room)

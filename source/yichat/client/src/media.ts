@@ -42,6 +42,7 @@ export async function attachment(content:any,signal:AbortSignal,publicRecord?:st
   if(content.file)throw Error('旧加密附件已清空，请使用新会话中的附件');
   const mxc=content.url;
   const match=/^mxc:\/\/chat\.yitiao\.org\/([a-f0-9]{48})$/.exec(mxc||'');if(!match)throw Error('附件地址不受支持');
+  if(isApp)try{if((await appCall('recordFileAvailable',{id:match[1]})).available){const local=await requests.fetch('/app-local-record-files/'+match[1],{signal});if(local.ok){const bytes=await local.arrayBuffer();const type=String(content.info?.mimetype||'application/octet-stream');return new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'})}}}catch{/* Older Apps and absent local records use the server path. */}
   if(publicRecord){
     const response=await requests.fetch('/api/public-records/'+path(publicRecord)+'/files/'+match[1]+'/content',{signal});if(!response.ok)throw new ApiError(response.status,await response.json());
     const type=String(content.info?.mimetype||'application/octet-stream');return new Blob([await response.arrayBuffer()],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});
@@ -50,7 +51,7 @@ export async function attachment(content:any,signal:AbortSignal,publicRecord?:st
   const key='file:'+match[1],image=content.msgtype==='m.image',vault=chat.businessVault;
   if(image){const stored=await vault.image(key).catch(()=>undefined);if(stored)return stored}
   let response:Response|undefined;
-  if(isApp)try{if((await appCall('recordFileAvailable',{id:match[1]})).available){const local=await requests.fetch('/app-local-record-files/'+match[1],{signal});if(local.ok){const bytes=await local.arrayBuffer();const type=String(content.info?.mimetype||'application/octet-stream');return new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'})}}}catch{/* Older Apps and absent local records use the server path. */}
+
   for(let attempt=0;attempt<5;attempt++){
     response=await requests.fetch('/api/files/'+match[1]+'/content',{signal});if(response.ok)break;
     const data=await response.json();

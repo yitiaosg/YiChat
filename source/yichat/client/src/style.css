@@ -91,3 +91,7 @@ html[data-app="android"] .message .message-body:not(.message-copy-text){user-sel
 .bubble>.snapshot-message{--message-corners:inherit;display:block;margin:0;padding:0!important;min-height:0}.bubble>.snapshot-message>.message-main{max-width:100%;min-width:0}.bubble>.snapshot-message>.message-main>.bubble{background:transparent;border:0;box-shadow:none;padding:0}.bubble>.snapshot-message .snapshot-time{display:none}
 
 .message.message-text-selected{transition:none}
+
+/* The card has one outline, including its clickable inner surface. */
+.message .record-card>.share-content{border:0;border-radius:inherit;margin:0;background:transparent}
+.message .record-card>.share-content:hover{background:var(--raised)}

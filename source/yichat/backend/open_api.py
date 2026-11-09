@@ -26,10 +26,10 @@ ownership) and is admitted by the Synapse module through a one-time grant for
 exactly that content (backend/api_grants.py) instead of a live main-site
 session.
 
-Read receipts: a stream opened with ?conversation=<id> marks the newest
-delivered message from other members as read (m.read via the key's device),
+Read receipts: subscriptions persist account-level read watermarks and send
+m.read plus m.fully_read via the key's device,
 so senders see the double tick exactly as when the apps show the message.
-Account-wide streams do not send receipts.
+Account-wide streams mark all subscribed conversations read.
 """
 import asyncio
 import hashlib
@@ -430,6 +430,37 @@ def install(app,s):
         event_id=await send_message(who,info,content,txn)
         return {'event_id':event_id,'conversation_id':room,'txn_id':txn}
 
+    @app.get('/open/v1/conversations/{room}/sharing')
+    async def read_sharing(request:Request,room:str):
+        from .sharing import sharing
+        who=api_owner(request)
+        return sharing(s,who,room)
+
+    @app.put('/open/v1/conversations/{room}/sharing')
+    async def write_sharing(request:Request,room:str):
+        from .sharing import set_sharing
+        who=api_owner(request)
+        if who.get('scope')!='read_write':fail(403,READ_ONLY)
+        try:data=await request.json()
+        except ValueError:fail(400,'JSON 无效')
+        return set_sharing(s,who,room,data)
+
+    @app.post('/open/v1/conversations/{room}/forward')
+    async def forward_record(request:Request,room:str):
+        who=api_owner(request)
+        if who.get('scope')!='read_write':fail(403,READ_ONLY)
+        try:data=await request.json()
+        except ValueError:fail(400,'JSON 无效')
+        if not isinstance(data,dict) or set(data)-{'message_ids','target','identity','txn_id'}:fail(400,'只接受 message_ids、target、identity 和 txn_id')
+        target=data.get('target')
+        if not isinstance(target,str):fail(400,'需要目标会话 target')
+        info=writable(who,target);txn=txn_of(data.get('txn_id'))
+        # One canonical record is shared by web and API, with identical age,
+        # membership, sharing preference and attachment access checks.
+        record=await app.state.share_selection(who,room,{'ids':data.get('message_ids'),'target':target,'identity':data.get('identity','both'),'mode':'combined'})
+        event_id=await send_message(who,info,record['content'],txn)
+        return {'event_id':event_id,'conversation_id':target,'txn_id':txn,'hash':record['hash'],'url':record['url'],'expires':record['expires']}
+
     @app.post('/open/v1/conversations/{room}/files')
     async def send_file(request:Request,room:str,name:str='',type:str='auto',txn_id:str=''):
         who=api_owner(request)
@@ -636,7 +667,7 @@ def install(app,s):
             touch(s,who)
             await ws.accept()
             await run_stream(ws,who,conversation)
-        except WebSocketDisconnect:pass
+        except (WebSocketDisconnect,asyncio.CancelledError):pass
         except RuntimeError:
             # Socket already closed by the reader, or an archive integrity
             # failure. Fixed message only: no keys, bodies or IDs in logs.
@@ -668,31 +699,45 @@ def install(app,s):
             finally:closed.set()
 
         task=asyncio.create_task(reader())
-        last_sent=time.monotonic();checked=time.monotonic();pending_read=None;retry_read=0
+        last_sent=time.monotonic();checked=time.monotonic()
 
-        async def mark_read(room,event_id):
-            # A stream subscribed to one conversation is the account reading it:
-            # the peer sees the double tick as with the apps. Best effort only.
+        async def auto_read():
             nonlocal who
-            try:
-                who=await matrix_session(who)
-                path='/_matrix/client/v3/rooms/'+quote(room,safe='')+'/receipt/m.read/'+quote(event_id,safe='')
-                await app.state.matrix.call('POST',path,app.state.matrix.token(who),{})
-                return True
-            except HTTPException as e:
-                detail=e.detail if isinstance(e.detail,dict) else {}
-                if e.status_code==401 and detail.get('errcode')=='M_UNKNOWN_TOKEN':
-                    with transaction(s.db) as c:c.execute('UPDATE api_keys SET device=NULL,upstream=NULL WHERE id=?',(who['key_id'],))
-                    who={k:v for k,v in who.items() if k not in ('device','upstream')}
-                log.warning('Developer API read receipt failed')
-            except Exception:log.warning('Developer API read receipt failed')
-        if conversation is not None:
-            def newest():
-                with archive.connect(s.archive_reader) as pg:
-                    row=pg.execute('SELECT event_id,received_ms FROM events WHERE room=%s AND sender<>%s AND sequence<=%s AND type = ANY(%s) ORDER BY sequence DESC LIMIT 1',(conversation,who['mxid'],cursor,list(MESSAGE_TYPES))).fetchone()
-                    return row if row and archive.allowed(pg,conversation,who['mxid'],row['received_ms'],row['received_ms']+1) else None
-            initial=await asyncio.to_thread(newest)
-            if initial:pending_read=(conversation,initial['event_id'])
+            done={}
+            while not closed.is_set():
+                try:
+                    # Revalidate the key and membership even when delivery is
+                    # blocked on a slow consumer. No acknowledgement is needed.
+                    current=owner(s,ws.headers.get('authorization','').removeprefix('Bearer '))
+                    rooms=current_rooms(s,current['mxid'])
+                    if conversation is not None:rooms=rooms&{conversation}
+                    def newest():
+                        with archive.connect(s.archive_reader) as pg:
+                            require_archive_ready(pg)
+                            rows=pg.execute('SELECT DISTINCT ON(room) room,event_id,sequence,received_ms FROM events WHERE room = ANY(%s) AND type = ANY(%s) ORDER BY room,sequence DESC',(sorted(rooms),list(MESSAGE_TYPES))).fetchall()
+                            return [r for r in rows if archive.allowed(pg,r['room'],who['mxid'],r['received_ms'],r['received_ms']+1)]
+                    for row in await asyncio.to_thread(newest) if rooms else []:
+                        if closed.is_set():break
+                        room,event_id=row['room'],row['event_id']
+                        if done.get(room)==row['sequence']:continue
+                        # Persist account-level read state before contacting
+                        # Matrix; it survives disconnects, restarts and devices.
+                        with transaction(s.db) as c:
+                            c.execute('INSERT INTO conversation_preferences(subject,room,read_sequence) VALUES(?,?,?) ON CONFLICT(subject,room) DO UPDATE SET read_sequence=max(read_sequence,excluded.read_sequence)',(who['subject'],room,row['sequence']))
+                        who=await matrix_session(who)
+                        path='/_matrix/client/v3/rooms/'+quote(room,safe='')+'/read_markers'
+                        await app.state.matrix.call('POST',path,app.state.matrix.token(who),{'m.read':event_id,'m.fully_read':event_id})
+                        done[room]=row['sequence']
+                except HTTPException as e:
+                    detail=e.detail if isinstance(e.detail,dict) else {}
+                    if e.status_code==401 and detail.get('errcode')=='M_UNKNOWN_TOKEN':
+                        with transaction(s.db) as c:c.execute('UPDATE api_keys SET device=NULL,upstream=NULL WHERE id=?',(who['key_id'],))
+                        who={k:v for k,v in who.items() if k not in ('device','upstream')}
+                    log.warning('Developer API read marker pending (HTTP %s)',e.status_code)
+                except Exception as e:log.warning('Developer API read marker pending (%s)',type(e).__name__)
+                try:await asyncio.wait_for(closed.wait(),POLL_SECONDS)
+                except asyncio.TimeoutError:pass
+        read_task=asyncio.create_task(auto_read())
         try:
             while not closed.is_set():
                 if time.monotonic()-checked>=RECHECK_SECONDS:
@@ -723,17 +768,11 @@ def install(app,s):
                     else:
                         await ws.send_json({'type':'message','conversation_id':row['room'],'message':message(s,row,names,describe=describe)})
                     last_sent=time.monotonic()
-                if conversation is not None:
-                    latest=next((r for r,allowed in reversed(batch) if allowed and r['type'] in MESSAGE_TYPES and r['sender']!=who['mxid']),None)
-                    if latest:
-                        pending_read=(latest['room'],latest['event_id'])
-                if pending_read and time.monotonic()>=retry_read:
-                    if await mark_read(*pending_read):pending_read=None
-                    retry_read=time.monotonic()+2
                 if time.monotonic()-last_sent>=PING_SECONDS:
                     await ws.send_json({'type':'ping','server_time':int(time.time()*1000)});last_sent=time.monotonic()
                 if not batch or len(batch)<100:
                     try:await asyncio.wait_for(closed.wait(),POLL_SECONDS)
                     except asyncio.TimeoutError:pass
         finally:
-            task.cancel()
+            closed.set();task.cancel();read_task.cancel()
+            await asyncio.gather(task,read_task,return_exceptions=True)

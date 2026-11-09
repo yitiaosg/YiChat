@@ -13,6 +13,11 @@ class WebRoutesTest {
         assertTrue(WebRoutes.external("https://yidt.yitiao.org/"))
         assertFalse(WebRoutes.external("intent://evil/"))
     }
+    @Test fun recordPagesUseTheSameOfflineShell() {
+        assertEquals("/",WebRoutes.shellPath("https://chat.yitiao.org/records/"+"a".repeat(64)))
+        assertEquals("/render/ycards-render.js",WebRoutes.shellPath("https://chat.yitiao.org/render/ycards-render.js"))
+        for(url in listOf("https://chat.yitiao.org/api/session","https://evil.test/records/"+"a".repeat(64),"https://chat.yitiao.org/records/invalid")) assertNull(WebRoutes.shellPath(url))
+    }
     @Test fun cacheNeverAcceptsAuthenticatedDataOrTraversal() {
         assertTrue(WebRoutes.publicAsset("/assets/matrix-crypto.wasm"))
         assertTrue(WebRoutes.publicAsset("/render/ycards-render.js"))

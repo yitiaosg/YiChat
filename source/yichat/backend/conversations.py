@@ -12,8 +12,12 @@ def deleted(c,subject,room):
     return bool(c.execute("SELECT 1 FROM conversation_entries e WHERE subject=? AND room=? AND deleted=1 AND NOT EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=e.room AND h.sequence>e.hidden_sequence AND h.type IN ('m.room.message','m.room.encrypted'))",(subject,room)).fetchone())
 
 def entry_preference(c,subject,room):
-    row=c.execute('SELECT room,pinned,archived,muted FROM conversation_preferences WHERE subject=? AND room=?',(subject,room)).fetchone()
-    return (dict(row) if row else {'room':room,'pinned':0,'archived':0,'muted':0})|{'deleted':deleted(c,subject,room)}
+    row=c.execute('SELECT room,pinned,archived,muted,read_sequence FROM conversation_preferences WHERE subject=? AND room=?',(subject,room)).fetchone()
+    result=dict(row) if row else {'room':room,'pinned':0,'archived':0,'muted':0,'read_sequence':0}
+    read=c.execute("SELECT event_id FROM history_receipts WHERE room=? AND sequence<=? AND type IN ('m.room.message','m.room.encrypted') ORDER BY sequence DESC LIMIT 1",(room,result['read_sequence'])).fetchone()
+    latest=c.execute("SELECT event_id FROM history_receipts WHERE room=? AND type IN ('m.room.message','m.room.encrypted') ORDER BY sequence DESC LIMIT 1",(room,)).fetchone()
+    count=c.execute("SELECT count(*) FROM history_receipts h JOIN identities i ON i.subject=? WHERE h.room=? AND h.sequence>? AND h.sender<>i.mxid AND h.type IN ('m.room.message','m.room.encrypted') AND NOT EXISTS(SELECT 1 FROM history_receipts r WHERE r.room=h.room AND r.redacts=h.event_id)",(subject,room,result['read_sequence'])).fetchone()[0]
+    return result|{'read_event':read[0] if read else None,'latest_event':latest[0] if latest else None,'unread_count':count,'deleted':deleted(c,subject,room)}
 
 async def accepted_fence(app,s):
     sequence=await app.state.matrix.fence()

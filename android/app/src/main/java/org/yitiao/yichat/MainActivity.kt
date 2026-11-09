@@ -285,6 +285,7 @@ class MainActivity : ComponentActivity() {
             try {
                 val args=data.o("args")
                 when(data.s("method")) {
+                    "messagePreview" -> respond(reply,withContext(Dispatchers.IO){graph.recordFiles.previews.read(args.s("room"),args.s("resource"))?:JsonNull})
                     "recordFileAvailable" -> respond(reply,buildJsonObject { put("available",graph.recordFiles.available(args.s("id"))) })
                     "systemThemeColor" -> {
                         val color=if(android.os.Build.VERSION.SDK_INT>=31) getColor(android.R.color.system_accent1_500) else 0xff1479b8.toInt()

@@ -40,3 +40,8 @@ test('fixed results and mutable resources have explicit separate freshness bound
  for(const type of ['game','transaction','doudizhu_record'])assert.equal(previewLifetime({type}),30*86400000);
  assert.equal(previewLifetime({type:'card'}),60000);assert.equal(previewLifetime({type:'order'}),5000);assert.equal(previewLifetime({type:'doudizhu'}),20000);assert.equal(previewLifetime(null),20000);
 });
+test('expired App previews remain readable offline, including after restarting the cache',async()=>{
+ const f=fixture();await new PreviewCache(f.store,f.clock).get('gift',async()=>({id:'gift',card:{name:'赠卡'}}));f.tick(86400000);
+ const value=await new PreviewCache(f.store,f.clock).get('gift',async()=>{throw TypeError('Failed to fetch')});assert.equal(value.card.name,'赠卡');
+ const c=new PreviewCache(f.store,f.clock);await assert.rejects(c.get('gift',async()=>{throw Object.assign(Error('gone'),{status:410})}),/gone/);assert.equal(f.rows.has('gift'),false);
+});

@@ -4,7 +4,7 @@ import {chat} from './chat';import {RoomAvatar} from './profiles';
 export function ConversationRow({room,active,open}:{room:any;active:boolean;open:()=>void}){
  const pref=chat.preferences.get(room.roomId)||{},start=useRef<{x:number;y:number}>(),swiped=useRef(false),[busy,setBusy]=useState(false),[dx,setDx]=useState(0);
  const empty=chat.info.get(room.roomId)?.has_messages===false;
- const count=room.getUnreadNotificationCount(),invited=room.getMyMembership()==='invite',last=room.getLiveTimeline().getEvents().filter((e:any)=>e.getType()==='m.room.message'||e.getWireType()==='m.room.encrypted').at(-1),content=last?.getContent();
+ const count=chat.unreadCount(room),invited=room.getMyMembership()==='invite',last=room.getLiveTimeline().getEvents().filter((e:any)=>e.getType()==='m.room.message'||e.getWireType()==='m.room.encrypted').at(-1),content=last?.getContent();
  const summary=invited?'邀请你加入会话':chat.info.get(room.roomId)?.peer_deleted?'对方账户已注销':chat.info.get(room.roomId)?.dissolved_at?'群聊已解散':room.getMyMembership()==='leave'?'已退出群聊':last?.isRedacted()?(last.getWireType()==='m.room.encrypted'?'加密消息 · 打开核实':'消息已撤回'):last?.isDecryptionFailure()?'加密消息 · 等待密钥':(content?messageCaption(content):'')||'还没有消息';
  async function change(value:any){setBusy(true);try{await chat.setPreference(room.roomId,value)}catch(e){chat.fail(e)}finally{setBusy(false)}}
  return <div class={'conversation-entry '+(pref.pinned?'pinned':'')}>

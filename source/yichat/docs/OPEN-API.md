@@ -510,7 +510,7 @@ Authorization: Bearer yck_…
 - 握手时必须在请求头中带 `Authorization`。浏览器的 `WebSocket` API 不能设置请求头，所以请在服务器端程序中使用，例如 Python `websockets`、Node.js `ws`、Go，或命令行工具 `websocat`。
 - **每个账户最多同时运行 3 个订阅**，不论使用哪个 Key：例如可以用同一个 Key 分别订阅 3 个私聊，或者 1 个订阅全部、2 个各订阅一个会话。第 4 个连接会以 `4409` 关闭。连接断开后名额立即释放。
 - 连接只推送**建立连接之后**到达的消息。断线期间的消息请用 REST 接口按时间补齐（见下文“断线重连”）。
-- **已读回执**：带 `conversation` 订阅单个会话时，推送给你的其他成员的新消息会被标记为已读，对方会看到双对勾（与在 App 中看到消息相同）。只读和读写 Key 都会这样做，回执通过该 Key 自己的设备发送；订阅全部会话时不发送已读回执。
+- **自动已读**：只要该账户有 WebSocket 订阅此会话，服务器就持续把会话消息标为已读；无需客户端接收确认或发送 ack。带 `conversation` 时覆盖该会话，省略时覆盖当前全部已加入会话。`read` 和 `read_write` Key 均适用。对方收到公开已读回执并显示双对勾；账户的已读位置持久保存，打开 YiChat 后不再显示这些消息的未读红点。最后一个覆盖该会话的订阅断开后，后续消息恢复正常未读。
 
 ### 服务器发送的消息
 
@@ -777,11 +777,11 @@ websocat -H "Authorization: Bearer $YICHAT_KEY" \
 
 ### WebSocket 已读
 
-`/open/v1/stream?conversation=<room>` 会对成功投递的对方消息发送公开 `m.read` 回执；连接时也补标记会话中已存在的最新对方消息。回执失败后重试，即使期间没有新消息。全账户订阅继续只投递事件，不自动把所有会话标为已读。
+服务器独立于消息推送持续更新账户已读位置，连接时补标已有消息，订阅期间自动标记新消息；不要求客户端发送确认，也不依赖客户端消费推送。`?conversation=<room>` 覆盖指定会话，省略参数覆盖当前所有已加入会话。已读位置写入服务器数据库，并发送公开 `m.read` 和账户 `m.fully_read`，失败时重试。关闭一个订阅不影响同账户其他仍在运行的订阅；最后一个相关订阅关闭后，后续消息恢复正常未读。
 
 ## 聊天记录公开链接
 
-合并转发和分享图片由浏览器会话在 YiChat 界面创建；相同消息、分享者及头像/昵称显示选项复用同一份记录和 URL。预览不创建记录哈希或公开链接，只有点击下载/分享图片或确认合并转发才创建记录；合并 URL 在消息被服务器接受后开放。图片在本地生成，可下载或通过系统分享，底部二维码指向该 URL。
+合并转发可通过 YiChat 界面或下述 API 创建；分享图片在 YiChat 界面生成。相同消息、分享者及头像/昵称显示选项复用同一份记录和 URL。预览不创建记录哈希或公开链接，只有点击下载/分享图片或确认合并转发才创建记录；合并 URL 在消息被服务器接受后开放。图片在本地生成，可下载或通过系统分享，底部二维码指向该 URL。
 
 - 页面：`https://chat.yitiao.org/records/<SHA-256>`，无需登录。
 - 数据：`GET /api/public-records/<SHA-256>`，返回 `hash`、`canonical`、`payload`、`url`、`expires`。`hash` 是 `canonical` UTF-8 字节的 SHA-256。
@@ -789,4 +789,42 @@ websocat -H "Authorization: Bearer $YICHAT_KEY" \
 - 附件只允许通过该记录中的文件 ID 读取：`GET /api/public-records/<SHA-256>/files/<文件ID>/content`。使用原文件，不复制一份。现有私有文件接口仍需原有权限。
 - 公开页面不提供转账、收款、领取红包或赠卡操作。逐条转发按本人新发消息处理，不附带原发送者；转账、收款、红包和赠卡消息禁止逐条转发，聊天记录消息不能再次合并。
 
-这些公开读取地址不要求 API Key；发布与会话分享权限仍由浏览器会话和服务器校验。Open API Key 的现有限速规则保持不变。
+这些公开读取地址不要求 API Key；发布时仍校验账户的会话权限和禁止分享设置。Open API Key 的现有限速规则保持不变。
+
+
+## 合并转发与禁止分享 API
+
+### 合并转发
+
+`POST /open/v1/conversations/{source_room}/forward`，需要 `read_write` Key。`source_room` 是原消息所在会话，`target` 是转发目标会话；均使用真实会话 ID，路径参数需要 URL 编码。
+
+```json
+{"message_ids":["$event1","$event2"],"target":"!target:chat.yitiao.org","identity":"both","txn_id":"record-001"}
+```
+
+- `message_ids`：1～100 个不同的原消息 ID，服务器按原会话顺序排列；消息须发送满五分钟、仍在服务器保留期内、未撤回，且调用账户有历史访问权限。
+- `target`：调用账户当前可发送消息的会话 ID。
+- `identity`：可选，`avatar` 只显示头像，`name` 只显示昵称，`both` 同时显示（默认）。
+- `txn_id`：可选，1～64 个字母、数字或 `._-`。重试必须复用相同事务 ID 和完整请求内容，避免重复发送。
+- 原会话禁止分享时返回403；包含聊天记录消息时返回400，不允许再次合并。已删除/过期返回410，未满五分钟返回409。附件沿用原文件 ID，并校验访问权限，不复制文件。
+
+成功响应：
+
+```json
+{"event_id":"$forwarded","conversation_id":"!target:chat.yitiao.org","txn_id":"record-001","hash":"<64位SHA-256>","url":"https://chat.yitiao.org/records/<64位SHA-256>","expires":1794600000}
+```
+
+服务器计算并验证记录摘要，发送一条与界面合并转发相同的特殊 URL 消息。消息被服务器接受后 URL 可用；匿名访问、七天有效期、原消息删除/撤回后的失效规则与界面分享一致。相同分享者、原消息和显示选项复用相同哈希及 URL。
+
+### 读取或设置禁止分享
+
+- `GET /open/v1/conversations/{room}/sharing`：`read` 或 `read_write` Key，当前会话成员可读。
+- `PUT /open/v1/conversations/{room}/sharing`：需要 `read_write` Key，请求体为 `{"blocked":true}` 或 `{"blocked":false}`。
+
+两者返回：
+
+```json
+{"allowed":false,"blocked_by_me":true,"can_set":true}
+```
+
+`allowed` 是会话当前是否允许分享，`blocked_by_me` 是当前账户设置，`can_set` 是该账户是否可修改。私聊及当前成员不超过五人的群聊，每个成员都可设置；只要一个成员开启，所有人都不能分享图片或合并转发。超过五人的群聊仅群主可设置，其他成员修改返回403。关闭自己的设置后，其他成员仍可能使 `allowed` 为 false。界面名称统一为“禁止分享”；逐条转发仍遵守原有规则。

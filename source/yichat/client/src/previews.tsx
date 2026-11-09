@@ -3,6 +3,7 @@ import {ExternalLink,RefreshCw,Gift,ArrowUpRight,ArrowLeftRight,CheckCircle2,Che
 import {requests,decimal,path} from './api';
 import {chat} from './chat';
 import {isApp} from './app';
+import {withOfflinePreview} from './offline-previews';
 import {PreviewCache} from './preview-cache';
 import {useVisible,rendererScript,ErrorText,Modal} from './shared';
 let cache:PreviewCache|undefined;let concurrent=0;const waiters:Array<()=>void>=[];
@@ -11,7 +12,7 @@ async function cachedPreview(resource:string,room:string,load:()=>Promise<any>,f
  const session=chat.session;if(!session)throw new DOMException('会话已锁定','AbortError');
  const key=JSON.stringify([session.uid,session.device_id,room,resource]);
  if(!cache){const vault=chat.vault;cache=new PreviewCache(isApp?{read:key=>vault.preview(key),write:(key,row)=>vault.savePreview(key,row),remove:key=>vault.deletePreview(key)}:undefined)}
- const value=await cache.get(key,()=>limited(async()=>{if(chat.session!==session)throw new DOMException('会话已锁定','AbortError');const value=await load();if(chat.session!==session)throw new DOMException('会话已锁定','AbortError');return value}),force);
+ const value=await cache.get(key,()=>limited(async()=>{if(chat.session!==session)throw new DOMException('会话已锁定','AbortError');const value=await withOfflinePreview(room,resource,load,chat.offline);if(chat.session!==session)throw new DOMException('会话已锁定','AbortError');return value}),force);
  if(chat.session!==session)throw new DOMException('会话已锁定','AbortError');return value;
 }
 const ddzStyle=(v:string)=>({background:v==='king'?'#35141f':'#102442',color:v==='king'?'#f1bc92':'#f4d28e',padding:'24px'});
@@ -45,12 +46,12 @@ function GameArt({data}:{data:any}){
 const status:Record<string,string>={cancelled:'已取消',pending:'到账处理中',awaiting_deposit:'待授权入金',awaiting_receipt:'待确认收款',active:'可领取',paying:'到账处理中',paid:'已到账',expired:'已截止',refunding:'退款处理中',refunded:'已退款'};
 const visibleOrders=new Map<string,{count:number;room:string;set:Set<(value:any)=>void>}>();
 let polling=false;
-setInterval(async()=>{if(polling||document.hidden||!chat.session)return;polling=true;try{for(const [id,row] of [...visibleOrders].slice(0,30)){const o=await requests.single('order:'+id,()=>requests.api('/api/orders/'+id));for(const set of row.set)set(o)}}catch{}finally{polling=false}},20000);
+setInterval(async()=>{if(polling||document.hidden||!chat.session)return;polling=true;try{for(const [id,row] of [...visibleOrders].slice(0,30)){const o=await cachedPreview('order:'+id,row.room,()=>requests.api('/api/orders/'+id),true);for(const set of row.set)set(o)}}catch{}finally{polling=false}},20000);
 window.addEventListener('yc:locked',()=>visibleOrders.clear());
 function publishOrder(order:any){for(const set of visibleOrders.get(order.id)?.set||[])set(order)}
 function useOrder(initial:any,room:string){
  const [order,setOrder]=useState(initial),[error,setError]=useState('');const {ref,visible}=useVisible();
- async function refresh(afterAction=false){try{if(afterAction)await requests.single('order:'+order.id,()=>Promise.resolve(null));const value=await requests.single('order:'+order.id,()=>requests.api('/api/orders/'+path(order.id)));setOrder(value);publishOrder(value);setError('');return value}catch(e:any){setError(e.message)}}
+ async function refresh(afterAction=false){try{if(afterAction)await requests.single('order:'+order.id,()=>Promise.resolve(null));const value=await cachedPreview('order:'+order.id,room,()=>requests.api('/api/orders/'+path(order.id)),afterAction);setOrder(value);publishOrder(value);setError('');return value}catch(e:any){setError(e.message)}}
  useEffect(()=>{if(!visible)return;void refresh();if(['paid','refunded','cancelled'].includes(order.state))return;let row=visibleOrders.get(order.id);if(!row){row={room,count:0,set:new Set()};visibleOrders.set(order.id,row)}row.count++;row.set.add(setOrder);return()=>{const r=visibleOrders.get(order.id);r?.set.delete(setOrder);if(r&&!--r.count)visibleOrders.delete(order.id)}},[visible,order.id,['paid','refunded','cancelled'].includes(order.state)]);
  return {order,setOrder,error,setError,ref,refresh};
 }
@@ -63,7 +64,7 @@ export function OrderBubble({initial,room,receiptSender}:{initial:any;room:strin
 }
 export function OrderCard({initial,room,onFunded,onCancelled,confirmFund=false}:{initial:any;room:string;onFunded?:()=>void;onCancelled?:()=>void;confirmFund?:boolean}){
  const {order,setOrder,error,setError,ref,refresh}=useOrder(initial,room),[busy,setBusy]=useState(false),[confirm,setConfirm]=useState(confirmFund&&initial.actions?.fund?'fund':'');
- const readOnly=chat.readOnly(room);
+ const readOnly=chat.offline||!navigator.onLine||chat.readOnly(room);
  useEffect(()=>{if(confirm&&!order.actions?.[confirm])setConfirm('')},[order.state]);
  async function action(which:string){
   if(readOnly){setError('此会话已只读，不能继续交易操作');return}

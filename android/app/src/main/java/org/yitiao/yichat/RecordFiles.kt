@@ -14,17 +14,20 @@ import java.util.Collections
 
 /** Per-account encrypted chunks for media referenced inside merged records. */
 class RecordFiles(private val context:Context,private val store:PacketStore,private val gateway:Gateway,private val vault:SecureStore) {
+ val previews=SpecialPreviews(context,store,gateway,vault)
  private fun valid(id:String)=id.matches(Regex("[a-f0-9]{48}"))
  private fun folder(a:Account,id:String)=File(context.noBackupFilesDir,"record-files/${a.storage}/$id")
  fun available(id:String):Boolean { val a=store.account?:return false;return valid(id)&&File(folder(a,id),"manifest").isFile }
  suspend fun backupMerged()=withContext(Dispatchers.IO) {
+  previews.backup()
   val a=store.account?:return@withContext;val db=store.database?:return@withContext;val ids=mutableSetOf<String>()
   for(packet in db.local().packets()) {
    val bytes=vault.decrypt(a.storage,"packet:${packet.room}:${packet.event}",packet.encrypted)
    try {
     val content=json.parseToJsonElement(bytes.decodeToString()).jsonObject.o("content")
-    val raw=content.s("org.yitiao.record_json");if(raw.isBlank())continue
-    require(SecureStore.hash(raw)==content.s("org.yitiao.record")){"合并记录摘要不一致"}
+    val hash=content.s("org.yitiao.record").ifBlank{SpecialPreviewPlan.requests(packet.room,content).firstOrNull{it.resource.startsWith("record:")}?.resource?.removePrefix("record:").orEmpty()}
+    val raw=content.s("org.yitiao.record_json").ifBlank{previews.read("","record:$hash")?.jsonObject?.s("canonical").orEmpty()};if(raw.isBlank())continue
+    require(SecureStore.hash(raw)==hash){"合并记录摘要不一致"}
     val record=json.parseToJsonElement(raw).jsonObject
     for(message in record.a("messages")) {
      val c=message.jsonObject.o("content")

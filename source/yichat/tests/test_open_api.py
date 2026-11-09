@@ -199,7 +199,7 @@ def test_messages_require_current_membership(gateway):
 # ---------- WebSocket stream ----------
 
 def test_stream_delivers_new_messages_and_redactions(gateway,monkeypatch):
-    c,app,s=gateway
+    c,app,s,_=sending(gateway)
     key=new_key(c)['key'];unthrottle(s);now=int(time.time()*1000)
     with api(app,key).websocket_connect('/open/v1/stream') as ws:
         ready=ws.receive_json();assert ready['type']=='ready' and ready['ping_interval']<=60
@@ -213,7 +213,7 @@ def test_stream_delivers_new_messages_and_redactions(gateway,monkeypatch):
 
 
 def test_stream_only_sends_rooms_of_the_account(gateway):
-    c,app,s=gateway
+    c,app,s,_=sending(gateway)
     key=new_key(other(app,s,'bob-token'))['key'];unthrottle(s);now=int(time.time()*1000)
     with api(app,key).websocket_connect('/open/v1/stream') as ws:
         assert ws.receive_json()['type']=='ready'
@@ -222,7 +222,7 @@ def test_stream_only_sends_rooms_of_the_account(gateway):
 
 
 def test_stream_pings_when_idle_and_answers_client_ping(gateway,monkeypatch):
-    c,app,s=gateway
+    c,app,s,_=sending(gateway)
     monkeypatch.setattr(open_api,'PING_SECONDS',0.3)
     key=new_key(c)['key'];unthrottle(s)
     with api(app,key).websocket_connect('/open/v1/stream') as ws:
@@ -234,7 +234,7 @@ def test_stream_pings_when_idle_and_answers_client_ping(gateway,monkeypatch):
 
 
 def test_stream_limit_is_three_per_account_and_delete_closes(gateway,monkeypatch):
-    c,app,s=gateway
+    c,app,s,_=sending(gateway)
     monkeypatch.setattr(open_api,'RECHECK_SECONDS',0.2)
     one,two=new_key(c,'one'),new_key(c,'two')
     unthrottle(s)
@@ -266,7 +266,7 @@ def test_stream_limit_is_three_per_account_and_delete_closes(gateway,monkeypatch
 
 
 def test_stream_can_subscribe_to_one_conversation(gateway):
-    c,app,s=gateway
+    c,app,s,_=sending(gateway)
     key=new_key(c)['key'];unthrottle(s);now=int(time.time()*1000)
     with api(app,key).websocket_connect('/open/v1/stream?conversation=!direct') as ws:
         ready=ws.receive_json();assert ready['type']=='ready' and ready['conversation_id']=='!direct'
@@ -282,7 +282,7 @@ def test_stream_can_subscribe_to_one_conversation(gateway):
 
 
 def test_stream_rejects_missing_or_invalid_key(gateway):
-    c,app,s=gateway
+    c,app,s,_=sending(gateway)
     for headers in ({},{'Authorization':'Bearer session-token'},{'Authorization':'Bearer yck_'+'a'*43}):
         unthrottle(s)
         with TestClient(app).websocket_connect('/open/v1/stream',headers=headers) as ws:
@@ -292,7 +292,7 @@ def test_stream_rejects_missing_or_invalid_key(gateway):
 
 
 def test_stream_handshake_account_limit_closes_with_4429(gateway):
-    c,app,s=gateway;app.state.matrix.call=AsyncMock(return_value={})
+    c,app,s,_=sending(gateway);app.state.matrix.call=AsyncMock(return_value={})
     key=new_key(c)['key'];unthrottle(s)
     # Five REST calls from other IPs use up the account's budget for this second.
     for i in range(5):assert api(app,key,'203.0.113.'+str(70+i)).get('/open/v1/conversations').status_code==200
@@ -696,27 +696,35 @@ def test_conversation_stream_marks_newest_peer_message_read(gateway):
     c,app,s,fake=sending(gateway)
     receipts=[];base=fake.call
     async def call(method,path,token=None,data=None,params=None):
-        if '/receipt/' in path:receipts.append((method,path,token,data));return {}
+        if path.endswith('/read_markers'):receipts.append((method,path,token,data));return {}
         return await base(method,path,token,data,params)
     app.state.matrix.call=call
     key=new_key(c)['key'];unthrottle(s);now=int(time.time()*1000)
-    # Account-wide streams never send receipts.
+    # Account-wide streams subscribe to every current conversation and auto-read too.
     with api(app,key).websocket_connect('/open/v1/stream') as ws:
         assert ws.receive_json()['type']=='ready'
         put(s,[text('$wide','!direct',70,now,mxid(s,'bob'),'wide')])
         assert ws.receive_json()['message']['id']=='$wide'
-    assert receipts==[]
+        for _ in range(50):
+            if receipts:break
+            time.sleep(.05)
+        assert receipts
     unthrottle(s)
     with api(app,key).websocket_connect('/open/v1/stream?conversation=!direct') as ws:
         assert ws.receive_json()['type']=='ready'
         put(s,[text('$p1','!direct',71,now,mxid(s,'bob'),'one'),text('$p2','!direct',72,now,mxid(s,'bob'),'two'),text('$mine','!direct',73,now,mxid(s,'alice'),'me')])
         assert [ws.receive_json()['message']['id'] for _ in range(3)]==['$p1','$p2','$mine']
-        for _ in range(50):
-            if receipts:break
+        for _ in range(100):
+            if any(r[3].get('m.read')=='$mine' for r in receipts):break
             time.sleep(0.05)
     # Only the newest message from the peer, through the key's own device (read keys too).
-    assert receipts[-1]==('POST','/_matrix/client/v3/rooms/%21direct/receipt/m.read/%24p2','api-device-token',{})
-    assert all(r[1].endswith(('%24wide','%24p2')) for r in receipts)
+    assert receipts[-1]==('POST','/_matrix/client/v3/rooms/%21direct/read_markers','api-device-token',{'m.read':'$mine','m.fully_read':'$mine'})
+    with connect(s.db) as db:assert db.execute("SELECT read_sequence FROM conversation_preferences WHERE subject=(SELECT subject FROM identities WHERE username='alice') AND room='!direct'").fetchone()[0]==73
+    unthrottle(s)
+    pref=next(p for p in c.get('/api/conversations/preferences').json() if p['room']=='!direct')
+    assert pref['read_event']=='$mine' and pref['unread_count']==0
+    put(s,[text('$after-unsubscribe','!direct',74,now+1,mxid(s,'bob'),'unread')]);time.sleep(.2)
+    with connect(s.db) as db:assert db.execute("SELECT read_sequence FROM conversation_preferences WHERE subject=(SELECT subject FROM identities WHERE username='alice') AND room='!direct'").fetchone()[0]==73
     with connect(s.db) as db:assert db.execute('SELECT device FROM api_keys').fetchone()[0]=='APIDEVICE'
 
 
@@ -743,8 +751,8 @@ def test_conversation_receipt_retries_without_another_message(gateway):
     c,app,s,fake=sending(gateway);calls=[];base=fake.call
     from fastapi import HTTPException
     async def call(method,path,token=None,data=None,params=None):
-        if '/receipt/' in path:
-            calls.append(path)
+        if path.endswith('/read_markers'):
+            calls.append((path,data))
             if len(calls)==1:raise HTTPException(503,{'error':'temporary'})
             return {}
         return await base(method,path,token,data,params)
@@ -754,7 +762,7 @@ def test_conversation_receipt_retries_without_another_message(gateway):
         assert ws.receive_json()['type']=='ready'
         until=time.monotonic()+5
         while len(calls)<2 and time.monotonic()<until:time.sleep(.05)
-    assert len(calls)==2 and calls[0]==calls[1] and calls[0].endswith('%24existing')
+    assert len(calls)==2 and calls[0]==calls[1] and calls[0][1]=={'m.read':'$existing','m.fully_read':'$existing'}
 
 
 def test_group_reads_and_writes_enforce_key_scope_and_role(gateway):
@@ -792,3 +800,34 @@ def test_api_transfer_receive_and_redpacket_do_not_touch_chain(gateway):
     r=api(app,alice).post('/open/v1/conversations/!group/red-packets',json={'amount':'1','count':1,'key':'api-packet-test-000001'});assert r.status_code==200,r.text
     with connect(s.ledger) as db:assert db.execute('SELECT count(*) FROM yidt_transactions').fetchone()[0]==before
     f.reconcile()
+
+def test_combined_forward_api_and_sharing_preferences(gateway):
+    c,app,s,fake=sending(gateway)
+    from test_sharing import seed
+    from backend import public_records
+    seed(s)
+    writer=new_key(c,scope='read_write')['key'];reader=new_key(c,'reader')['key'];unthrottle(s)
+    base='/open/v1/conversations/!direct'
+    assert api(app,reader).get(base+'/sharing').json()=={'allowed':True,'blocked_by_me':False,'can_set':True}
+    assert api(app,reader).put(base+'/sharing',json={'blocked':True}).status_code==403
+    unthrottle(s)
+    r=api(app,writer).post(base+'/forward',json={'message_ids':['$selected'],'target':'!group','identity':'avatar','txn_id':'forward-one'})
+    assert r.status_code==200,r.text
+    result=r.json();content=fake.sent[-1][2]
+    assert result['conversation_id']=='!group' and result['txn_id']=='forward-one'
+    assert content['org.yitiao.record']==result['hash'] and content['body']==result['url']
+    assert json.loads(content['org.yitiao.record_json'])['identity']=='avatar'
+    assert c.get('/api/public-records/'+result['hash']).status_code==404
+    public_records.activate_message(s,'!group',content)
+    assert c.get('/api/public-records/'+result['hash']).status_code==200
+    unthrottle(s)
+    again=api(app,writer).post(base+'/forward',json={'message_ids':['$selected'],'target':'!group','identity':'avatar','txn_id':'forward-one'})
+    assert again.status_code==200 and again.json()['hash']==result['hash']
+    unthrottle(s)
+    assert api(app,writer).put(base+'/sharing',json={'blocked':True}).json()['allowed'] is False
+    assert api(app,writer).post(base+'/forward',json={'message_ids':['$selected'],'target':'!group'}).status_code==403
+    unthrottle(s)
+    assert api(app,writer).put(base+'/sharing',json={'blocked':False}).json()['allowed'] is True
+    assert api(app,reader).post(base+'/forward',json={'message_ids':['$selected'],'target':'!group'}).status_code==403
+    unthrottle(s)
+    assert api(app,writer).post(base+'/forward',json={'message_ids':['$missing'],'target':'!group'}).status_code==410
