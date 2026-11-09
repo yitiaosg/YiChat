@@ -1,42 +1,42 @@
 {
-  "tag": "android-20261109-v0.3.11",
-  "name": "YiChat Android 0.3.11",
-  "source_commit": "7b45208e569b9d91ebaaca85210afd077b38246d",
-  "notes": "Android 0.3.11 / versionCode 19，原签名覆盖升级。\n\n统一钱包和主题色图标；会话详情下方新开关；仅向左滑引用；长按全文选择与多选、右上角多选入口、底部悬浮分享按钮；合并记录显示头像昵称。多选时保留输入草稿，保留分享权限及消息年龄限制。\n\n前端37项、后端22项、JVM18项通过，手机尺寸触屏浏览器与长图特殊预览检查通过，签名Release构建及zipalign通过。尚未做物理手机手势验收。详细记录见 PRODUCTION-0.3.11.md。\n\nSHA-256: 8255d7e12bccf6f95f56abe5cce3c4497a80e30520f13f6bd5cb94a1f1738be3",
+  "tag": "android-20261109-v0.3.12",
+  "name": "YiChat Android 0.3.12",
+  "source_commit": "aaeb24ed53c74519bed40dde2fd2ef83cb8c2fff",
+  "notes": "Android 0.3.12 / versionCode 20，原签名覆盖升级。\n\n修复重开页面后旧消息被误判为不可选，支持鼠标/触屏/笔长按进入多选。所有复选框统一右侧，使用44px点击区域，自己消息的气泡左移让位。Web会话详情支持消息免打扰。服务器仍校验5分钟、保留、撤回和嵌套记录等限制。\n\n前端42项、通知过滤4项、JVM18项通过；浏览器已验证无历史回执缓存场景、鼠标与触屏长按、特殊气泡、复选框与标签点击、左右对齐和Web免打扰。签名Release和zipalign检查通过。没有物理手机验收。详情见 PRODUCTION-0.3.12.md。\n\nSHA-256: ba2451fbe5b6d2151d0b219572818f04fe16ed2afbda6011d04c4bb38a9f61cc",
   "files": [
     {
       "name": "SHA256SUMS",
       "bytes": 87,
-      "sha256": "f2347482c152eda81e83dc3b4ab9a2f1daacb49f15cd9ec2e67ccfa38e559b47",
+      "sha256": "80fb4eb86020fa9027ed357fc5ac8a5415c4d831efe3aae02765e3fe718bbb31",
       "parts": [
-        "release/0.3.11/SHA256SUMS.part-000"
+        "release/0.3.12/SHA256SUMS.part-000"
       ]
     },
     {
-      "name": "YiChat-0.3.11-19.apk",
-      "bytes": 9834578,
-      "sha256": "8255d7e12bccf6f95f56abe5cce3c4497a80e30520f13f6bd5cb94a1f1738be3",
+      "name": "YiChat-0.3.12-20.apk",
+      "bytes": 9834962,
+      "sha256": "ba2451fbe5b6d2151d0b219572818f04fe16ed2afbda6011d04c4bb38a9f61cc",
       "parts": [
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-000",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-001",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-002",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-003",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-004",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-005",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-006",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-007",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-008",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-009",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-010",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-011",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-012",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-013",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-014",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-015",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-016",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-017",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-018",
-        "release/0.3.11/YiChat-0.3.11-19.apk.part-019"
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-000",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-001",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-002",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-003",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-004",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-005",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-006",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-007",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-008",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-009",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-010",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-011",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-012",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-013",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-014",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-015",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-016",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-017",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-018",
+        "release/0.3.12/YiChat-0.3.12-20.apk.part-019"
       ]
     }
   ]
