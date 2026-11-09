@@ -77,7 +77,8 @@ async def prepare(app,s,who,room,content):
   if not original_content.get(KEY) or not individual_allowed(original_content):fail(403,'此原始消息不能逐条转发')
   meta=state(s,source);raw=(directory(s)/meta['id']).read_bytes()
   if body_hash(raw)!=meta['payload_sha256']:fail(503,'原始消息存证不一致')
-  value=json.loads(raw);content=dict(value['content']);content['org.yitiao.attachments']=[f['id'] for f in value.get('files',[])]
+  value=json.loads(raw);content=dict(value['content']);content.pop('m.relates_to',None)
+  value['content']=dict(content);content['org.yitiao.attachments']=[f['id'] for f in value.get('files',[])]
  for fid in file_ids(content):
   with connect(s.db) as c:row=c.execute('SELECT * FROM files WHERE id=?',(fid,)).fetchone()
   if not row:fail(410,'附件已删除')

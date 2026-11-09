@@ -24,6 +24,8 @@ def day_range(start,end):
  return [(a+timedelta(days=i)).isoformat() for i in range((b-a).days+1)]
 def header(room,day):return {'day':day,'format':FORMAT,'immutable_at':str(immutable_ms(day)),'room_id':room,'version':'2'}
 def access(s,who,room,day):
+ from . import policy
+ if policy.retired(s,room):fail(403,'此旧会话已清空，不能校验旧数据')
  start,end=archive.day_bounds(day)
  with archive.connect(s.archive_reader) as pg:
   if archive.allowed(pg,room,who['mxid'],start,end):return
@@ -138,13 +140,13 @@ async def tick(app):
  if failed is None:failed=app.state.packet_seal_failures={}
  today=archive.utcday(now);last=today-timedelta(days=1)
  if now<immutable_ms(str(last)):last-=timedelta(days=1)
- with connect(s.db) as c:rooms=[r['room'] for r in c.execute('SELECT room FROM rooms')]
+ with connect(s.db) as c:rooms=[r['room'] for r in c.execute('SELECT room FROM rooms WHERE room NOT IN (SELECT room FROM retired_rooms)')]
  with archive.connect(s.archive_reader) as pg:
-  firsts={r['room']:min(r['first_message'] or int(time.time()*1000),max(r['first'],int(time.time()*1000)-7*86400000)) for r in pg.execute("SELECT room,min(received_ms) first,min(received_ms) FILTER(WHERE type IN ('m.room.message','m.room.redaction')) first_message FROM events WHERE room=ANY(%s) GROUP BY room",(rooms,)).fetchall()}
+  firsts={r['room']:r['first'] for r in pg.execute('SELECT room,min(received_ms) first FROM events WHERE room=ANY(%s) GROUP BY room',(rooms,)).fetchall()}
  with transaction(s.db) as c:
   for room in rooms:
    first=archive.utcday(firsts.get(room,now))
-   c.execute('INSERT OR IGNORE INTO packet_rooms VALUES(?,?)',(room,str(first)))
+   c.execute('INSERT INTO packet_rooms VALUES(?,?) ON CONFLICT(room) DO UPDATE SET started_day=min(started_day,excluded.started_day)',(room,str(first)))
   jobs=[]
   for row in c.execute('SELECT * FROM packet_rooms'):
    d=date.fromisoformat(row['started_day'])

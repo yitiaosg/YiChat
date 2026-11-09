@@ -151,6 +151,19 @@ def test_forward_clones_original_bytes_without_refetch_or_duplicate_storage(gate
  assert first[materials.KEY]['id']!=clone[materials.KEY]['id']
 
 
+def test_forwarded_material_drops_source_room_reply(gateway,monkeypatch):
+ c,app,s=gateway;s.material_protocol=True
+ from backend import previews
+ url='https://yitiao.org/ycards/card/'+'d'*32+'/alice/'
+ monkeypatch.setattr(previews,'metadata',lambda *_:{'type':'card','url':url,'title':'卡面','data':{'name':'原件'}})
+ first=c.portal.call(materials.prepare,app,s,who(s),'!direct',{'msgtype':'m.text','body':url,'m.relates_to':{'m.in_reply_to':{'event_id':'$source-room-message'}}});accepted(s,first)
+ clone=c.portal.call(materials.prepare,app,s,who(s),'!direct',{'org.yitiao.material_source':'$material'})
+ assert 'm.relates_to' not in clone
+ original=json.loads((materials.directory(s)/first[materials.KEY]['id']).read_bytes())
+ forwarded=json.loads((materials.directory(s)/clone[materials.KEY]['id']).read_bytes())
+ assert 'm.relates_to' not in forwarded['content'] and forwarded['previews']==original['previews']
+
+
 def test_retention_classifies_only_legacy_special_urls_and_keeps_normal_files(gateway):
  from backend import protocol_retention
  c,app,s=gateway;s.material_protocol=True
@@ -252,3 +265,20 @@ def test_parallel_day_recovery_requests_remain_unique_and_bounded(gateway,monkey
  for malformed in ([],{'offers':[{'request':[]}]}):
   with pytest.raises(HTTPException) as error:relay.exchange(devices[0],malformed)
   assert error.value.status_code==400
+
+def test_retired_rooms_cannot_certify_or_recover_pre_reset_data(gateway):
+ c,app,s=gateway;s.material_protocol=True;day=(datetime.now(timezone.utc).date()-timedelta(days=1)).isoformat()
+ assert day_packets.seal(s,'!direct',day,3,int(time.time()*1000))
+ with connect(s.db) as db:db.execute('INSERT INTO retired_rooms VALUES(?,?)',('!direct',int(time.time()*1000)))
+ with pytest.raises(HTTPException) as error:day_packets.trusted(s,who(s),'!direct',day)
+ assert error.value.status_code==403
+
+def test_empty_dates_older_than_seven_days_are_still_sealed_since_room_creation(gateway):
+ c,app,s=gateway;s.material_protocol=True
+ from backend import protocol_retention
+ day=(datetime.now(timezone.utc).date()-timedelta(days=10)).isoformat();at=archive.day_bounds(day)[0]
+ raw=json.dumps({'event_id':'$early-empty-room','room_id':'!direct','type':'m.room.member','state_key':who(s)['mxid'],'sender':who(s)['mxid'],'content':{'membership':'join'}})
+ archive.ingest_batch(s.archive_ingest,[('$early-empty-room','!direct',4,at,raw)],4,int(time.time()*1000))
+ protocol_retention.initialize(s);c.portal.call(day_packets.tick,app)
+ saved=day_packets.trusted(s,who(s),'!direct',day);assert saved['count']==0
+ assert saved['sha256']==day_packets.packet_hash(day_packets.header('!direct',day)|{'entries':[],'complete':True})
