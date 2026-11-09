@@ -245,6 +245,8 @@ def create_app(settings=None):
                 'profile_url':s.issuer+'/@'+quote(username,safe='')+'/',
                 'avatar_url':'/api/avatars/'+quote(username,safe='')+'?v='+str(avatar.stat().st_mtime_ns) if has_avatar else None}
 
+    app.state.public_profile=public_profile
+
     @app.post('/api/profiles')
     async def profiles(request:Request):
         session(request);data=await request.json();ids=data.get('mxids',[]);names=data.get('usernames',[])

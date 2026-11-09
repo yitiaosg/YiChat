@@ -83,7 +83,13 @@ def snapshot(app,s,who,event):
    try:meta=previews.metadata(s,url)
    except Exception:meta=None
   if meta:metas.append(meta)
- return {'id':event['event_id'],'sender':event['sender'],'name':policy.username(s,policy.subject(s,event['sender'])),'sent_at':event.get('origin_server_ts'),'content':content,'previews':metas}
+ username=policy.username(s,policy.subject(s,event['sender']))
+ from fastapi import HTTPException
+ try:profile=app.state.public_profile(username)
+ except HTTPException as exc:
+  if exc.status_code!=404:raise
+  profile={}
+ return {'id':event['event_id'],'sender':event['sender'],'username':username,'name':profile.get('nickname') or username,'avatar_url':profile.get('avatar_url'),'sent_at':event.get('origin_server_ts'),'content':content,'previews':metas}
 def sign(s,room,sender,content):
     value=archive.canonical([room,sender,content])
     return hmac.new(s.session_key.encode(),value,hashlib.sha256).hexdigest()

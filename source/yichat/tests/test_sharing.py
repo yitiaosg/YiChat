@@ -46,3 +46,15 @@ def test_identical_verified_uploads_share_physical_bytes(gateway):
  import os
  assert os.path.samefile(s.objects/a['id'],s.objects/b['id'])
  assert c.get('/api/files/'+a['id']+'/content').content==b'verified identical bytes'
+
+
+def test_record_snapshots_include_nickname_and_avatar(gateway):
+ c,app,s=gateway
+ with connect(s.site/'account.db') as db:db.execute('UPDATE users SET nickname=? WHERE username=?',('爱丽丝','alice'))
+ avatars=s.site/'static/avatar';avatars.mkdir(parents=True);(avatars/'alice.jpg').write_bytes(b'avatar bytes')
+ seed(s)
+ r=c.post('/api/sharing/!direct/selection',json={'ids':['$selected'],'mode':'combined','target':'!group'});assert r.status_code==200,r.text
+ content=r.json()['content'];payload=json.loads(content['org.yitiao.record_json']);item=payload['messages'][0]
+ assert item['username']=='alice' and item['name']=='爱丽丝'
+ assert item['avatar_url'].startswith('/api/avatars/alice?v=')
+ assert hashlib.sha256(content['org.yitiao.record_json'].encode()).hexdigest()==content['org.yitiao.record']
