@@ -1,42 +1,42 @@
 {
-  "tag": "android-20261109-v0.3.14",
-  "name": "YiChat Android 0.3.14",
-  "source_commit": "e64b7377885bb62bd7f6e46c975756fbaa55384c",
-  "notes": "Android 0.3.14 / versionCode 22，原签名覆盖升级。\n\n修复分享图片/聊天记录重复转账预览，以及记录卡片内外双重圆角；旧记录保持原哈希。WebSocket 单会话和账户级订阅均由服务器持续自动已读，无需 ack；已读位置持久保存、发送公开回执，并同步清除 YiChat 旧消息红点，最后一个相关订阅断开后恢复新消息未读。\n\nApp 主动备份未打开过的赠卡、转账、收款和聊天记录预览，按账户加密隔离，纳入加密导出/恢复；断网可查看卡面、消息气泡、记录小窗及全屏页面。显示最近完成备份时的状态。\n\n设置名称改为“禁止分享”。新增合并转发 API，以及会话禁止分享读取/设置 API；GitHub API 文档已更新。\n\n后端及真实 Synapse 集成142项、前端50项、Android JVM22项通过。浏览器验证 PNG/二维码、去重、直角、匿名入口和原生分享；离线特殊消息及真实全屏入口无业务 API 请求。签名、zipalign 16KiB、APK 内14个前端资源逐字节检查通过。未做物理手机验收。详见 PRODUCTION-0.3.14.md。\n\nSHA-256: aded062c96146ee95dc0ae49c26b78f29ca44347bef21f68837589b9733d9f65",
+  "tag": "android-20261109-v0.4.0",
+  "name": "YiChat Android 0.4.0",
+  "source_commit": "9efae9e4bab02c2e3c7ae46d8799d0782424605b",
+  "notes": "Android 0.4.0 / versionCode 23，原包名和签名覆盖升级。\n\n特殊消息、图片和文件保存原件，设备优先离线显示；赠卡、卡片和战绩保留分享时的数据。后台备份、冷启动恢复、附件分块校验，聊天记录不显示 SHA256。原件与单条摘要七天清理，GMT 次日00:05封存整日摘要，包含空日。\n\n新增离线 YCP 导出/导入、网页本地合并与连续最多七天校验、冲突双预览与二次确认；完整日期损坏先向服务器修复，再请求在线原生设备并重新核验。主站分享界面新增分享到 YiChat，粘贴分享 URL 保留。API 文档同步更新。\n\n后端完整313项及新增4项回归、前端56项、Android JVM26项通过；真实 Android 原生存储/Keystore/离线导出测试通过。网页冷缓存断网、特殊气泡、合并记录、PNG/二维码、公开入口及导入冲突已实测。签名和16KiB zipalign通过，APK内14个网页资源与生产构建一致。\n\n模拟器系统 UI 无响应且 WebView74过旧，Android现代界面验收受环境限制，未冒称通过。生产迁移、资金对账及详情见 PRODUCTION-0.4.0.md。\n\nSHA-256: 5735326676b7f23cdf9a8e1f1a9137ebffc0e0bf922f15ca4317103256b6d55f",
   "files": [
     {
       "name": "SHA256SUMS",
-      "bytes": 87,
-      "sha256": "a9f39b2aebd113eaf4a395c749b42ca46a7ecef75eaa89f2be8c3ce39f00f30f",
+      "bytes": 86,
+      "sha256": "0f31c9e02ff6550f0e12913ea7e21205e2909f40dcfc0662992dd23c72da550e",
       "parts": [
-        "release/0.3.14/SHA256SUMS.part-000"
+        "release/0.4.0/SHA256SUMS.part-000"
       ]
     },
     {
-      "name": "YiChat-0.3.14-22.apk",
-      "bytes": 9864598,
-      "sha256": "aded062c96146ee95dc0ae49c26b78f29ca44347bef21f68837589b9733d9f65",
+      "name": "YiChat-0.4.0-23.apk",
+      "bytes": 9924282,
+      "sha256": "5735326676b7f23cdf9a8e1f1a9137ebffc0e0bf922f15ca4317103256b6d55f",
       "parts": [
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-000",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-001",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-002",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-003",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-004",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-005",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-006",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-007",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-008",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-009",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-010",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-011",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-012",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-013",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-014",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-015",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-016",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-017",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-018",
-        "release/0.3.14/YiChat-0.3.14-22.apk.part-019"
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-000",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-001",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-002",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-003",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-004",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-005",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-006",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-007",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-008",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-009",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-010",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-011",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-012",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-013",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-014",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-015",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-016",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-017",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-018",
+        "release/0.4.0/YiChat-0.4.0-23.apk.part-019"
       ]
     }
   ]
