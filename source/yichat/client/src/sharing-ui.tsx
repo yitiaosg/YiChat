@@ -1,3 +1,4 @@
+import {selectionAllowed} from './message-selection';
 import {useEffect,useRef,useState} from 'preact/hooks';
 import html2canvas from 'html2canvas';
 import {chat} from './chat';
@@ -8,7 +9,7 @@ import {Media} from './conversation';
 import {ShareCard} from './previews';
 import {saveBlob} from './media';
 import {messageBody} from './message-display';
-export function canSelect(event:any){const c=event.getContent(),receipt=chat.history.receipts.get(event.getId());return !event.isRedacted()&&!event.isDecryptionFailure()&&!c['org.yitiao.record']&&!/https:\/\/chat\.yitiao\.org\/records\//.test(c.body||'')&&!!receipt&&Date.now()-receipt.received_ms>300000}
+export function canSelect(event:any){return selectionAllowed(event,chat.history.receipts.get(event.getId()))}
 export function SnapshotMessage({item,identity=true}:{item:any;identity?:boolean}){
  const profile=chat.profiles.get(item.sender),name=item.username?item.name:(profile?.nickname||item.name||chat.name(item.sender));
  const content=item.content,urls=(item.previews||[]).map((p:any)=>p.url),body=messageBody(content,urls);
