@@ -12,6 +12,9 @@
   <intent><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="https"/></intent>
  </queries>
  <application android:name=".YiChatApplication" android:theme="@style/AppTheme" android:label="YiChat" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false" android:supportsRtl="true">
+  <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.sharedfiles" android:exported="false" android:grantUriPermissions="true">
+   <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/shared_files"/>
+  </provider>
   <service android:name=".YiChatMessagingService" android:exported="false" android:directBootAware="true">
    <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT"/></intent-filter>
   </service>

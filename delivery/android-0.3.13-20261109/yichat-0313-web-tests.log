@@ -1,0 +1,298 @@
+
+> yichat-web@1.0.0 test
+> node --import tsx --test test/*.test.ts
+
+TAP version 13
+# Subtest: YIDT arithmetic keeps all sixteen decimals and large balances exact
+ok 1 - YIDT arithmetic keeps all sixteen decimals and large balances exact
+  ---
+  duration_ms: 6.896217
+  type: 'test'
+  ...
+# Subtest: Unicode messages count code points rather than UTF16 units
+ok 2 - Unicode messages count code points rather than UTF16 units
+  ---
+  duration_ms: 0.618827
+  type: 'test'
+  ...
+# Subtest: only exact preview routes are submitted, never entire private text
+ok 3 - only exact preview routes are submitted, never entire private text
+  ---
+  duration_ms: 5.061515
+  type: 'test'
+  ...
+# Subtest: 429 obeys the longer Retry-After / retry_after_ms and HTTP dates
+ok 4 - 429 obeys the longer Retry-After / retry_after_ms and HTTP dates
+  ---
+  duration_ms: 59.758297
+  type: 'test'
+  ...
+# Subtest: a completed gift stores only an owner-independent URL in the message
+ok 5 - a completed gift stores only an owner-independent URL in the message
+  ---
+  duration_ms: 3.47304
+  type: 'test'
+  ...
+# Subtest: failed, incomplete or mismatched transfers cannot announce a completed gift
+ok 6 - failed, incomplete or mismatched transfers cannot announce a completed gift
+  ---
+  duration_ms: 0.9542
+  type: 'test'
+  ...
+# Subtest: gift bubbles recognize legacy shares and authoritative business references
+ok 7 - gift bubbles recognize legacy shares and authoritative business references
+  ---
+  duration_ms: 0.602678
+  type: 'test'
+  ...
+# Subtest: peer packets require trusted digest and matching room and event identity
+ok 8 - peer packets require trusted digest and matching room and event identity
+  ---
+  duration_ms: 25.785664
+  type: 'test'
+  ...
+# Subtest: recognized previews hide the raw URL while preserving captions and other links
+ok 9 - recognized previews hide the raw URL while preserving captions and other links
+  ---
+  duration_ms: 6.370231
+  type: 'test'
+  ...
+# Subtest: native fetch and server FCM summaries use the same private/group wording
+ok 10 - native fetch and server FCM summaries use the same private/group wording
+  ---
+  duration_ms: 6.411499
+  type: 'test'
+  ...
+# Subtest: cards and media omit the outer bubble; plain text and disabled previews retain it
+ok 11 - cards and media omit the outer bubble; plain text and disabled previews retain it
+  ---
+  duration_ms: 1.0356
+  type: 'test'
+  ...
+# Subtest: chat reset isolates SDK sync and outbox caches by epoch
+ok 12 - chat reset isolates SDK sync and outbox caches by epoch
+  ---
+  duration_ms: 1.451312
+  type: 'test'
+  ...
+# Subtest: legacy cache cleanup preserves wallet/business vault and new chats
+ok 13 - legacy cache cleanup preserves wallet/business vault and new chats
+  ---
+  duration_ms: 1.829913
+  type: 'test'
+  ...
+# Subtest: cached messages remain selectable after reopening without incremental receipts
+ok 14 - cached messages remain selectable after reopening without incremental receipts
+  ---
+  duration_ms: 1.597712
+  type: 'test'
+  ...
+# Subtest: known receipt time remains authoritative and exactly five minutes is too recent
+ok 15 - known receipt time remains authoritative and exactly five minutes is too recent
+  ---
+  duration_ms: 0.686754
+  type: 'test'
+  ...
+# Subtest: redacted, failed and invalid timestamps stay unavailable
+ok 16 - redacted, failed and invalid timestamps stay unavailable
+  ---
+  duration_ms: 3.302355
+  type: 'test'
+  ...
+# Subtest: record links can be selected for ordinary forwarding
+ok 17 - record links can be selected for ordinary forwarding
+  ---
+  duration_ms: 0.28579
+  type: 'test'
+  ...
+# Subtest: verified plain private content becomes a notification message
+ok 18 - verified plain private content becomes a notification message
+  ---
+  duration_ms: 4.516194
+  type: 'test'
+  ...
+# Subtest: muted or read-only conversations are not fetched for previews
+ok 19 - muted or read-only conversations are not fetched for previews
+  ---
+  duration_ms: 22.276275
+  type: 'test'
+  ...
+# Subtest: retired ciphertext is rejected without invoking crypto or replacing placeholder
+ok 20 - retired ciphertext is rejected without invoking crypto or replacing placeholder
+  ---
+  duration_ms: 0.975418
+  type: 'test'
+  ...
+# Subtest: network errors and mismatched event identity cannot produce a replacement
+ok 21 - network errors and mismatched event identity cannot produce a replacement
+  ---
+  duration_ms: 0.64679
+  type: 'test'
+  ...
+# Subtest: attachments use labels without fetching or decrypting media
+ok 22 - attachments use labels without fetching or decrypting media
+  ---
+  duration_ms: 0.439395
+  type: 'test'
+  ...
+# Subtest: reopening App cache reads persisted preview without another request
+ok 23 - reopening App cache reads persisted preview without another request
+  ---
+  duration_ms: 2.07677
+  type: 'test'
+  ...
+# Subtest: scope keys fence account, device, room and URL
+ok 24 - scope keys fence account, device, room and URL
+  ---
+  duration_ms: 0.498585
+  type: 'test'
+  ...
+# Subtest: concurrent viewers share one request; manual refresh bypasses cache
+ok 25 - concurrent viewers share one request; manual refresh bypasses cache
+  ---
+  duration_ms: 13.086586
+  type: 'test'
+  ...
+# Subtest: mutable card expiry revalidates and a destroyed card replaces the cached art
+ok 26 - mutable card expiry revalidates and a destroyed card replaces the cached art
+  ---
+  duration_ms: 1.025351
+  type: 'test'
+  ...
+# Subtest: expired or inaccessible preview is never restored from stale disk data
+ok 27 - expired or inaccessible preview is never restored from stale disk data
+  ---
+  duration_ms: 1.230722
+  type: 'test'
+  ...
+# Subtest: storage errors fall back to network and do not fail successful preview
+ok 28 - storage errors fall back to network and do not fail successful preview
+  ---
+  duration_ms: 9.742954
+  type: 'test'
+  ...
+# Subtest: locking while a request is in flight prevents rendering or persisting it
+ok 29 - locking while a request is in flight prevents rendering or persisting it
+  ---
+  duration_ms: 59.081924
+  type: 'test'
+  ...
+# Subtest: bounded memory evicts old entries and oversized previews do not flush other entries
+ok 30 - bounded memory evicts old entries and oversized previews do not flush other entries
+  ---
+  duration_ms: 227.412032
+  type: 'test'
+  ...
+# Subtest: fixed results and mutable resources have explicit separate freshness bounds
+ok 31 - fixed results and mutable resources have explicit separate freshness bounds
+  ---
+  duration_ms: 0.780929
+  type: 'test'
+  ...
+# Subtest: record URL detection rejects unrelated hosts and malformed links
+ok 32 - record URL detection rejects unrelated hosts and malformed links
+  ---
+  duration_ms: 4.739729
+  type: 'test'
+  ...
+# Subtest: business messages cannot be re-authored while ordinary previews and records can
+ok 33 - business messages cannot be re-authored while ordinary previews and records can
+  ---
+  duration_ms: 1.69374
+  type: 'test'
+  ...
+# Subtest: public record canonical bytes must match the supplied SHA256
+ok 34 - public record canonical bytes must match the supplied SHA256
+  ---
+  duration_ms: 23.599891
+  type: 'test'
+  ...
+# (node:4018391) ExperimentalWarning: The MockTimers API is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: only right-to-left horizontal movement animates and replies
+ok 35 - only right-to-left horizontal movement animates and replies
+  ---
+  duration_ms: 7.03268
+  type: 'test'
+  ...
+# Subtest: a long press survives rerender, contextmenu does not deselect, and its click cannot activate a card
+ok 36 - a long press survives rerender, contextmenu does not deselect, and its click cannot activate a card
+  ---
+  duration_ms: 1.521932
+  type: 'test'
+  ...
+# Subtest: a cancelled or vertical scroll gesture cannot reply
+ok 37 - a cancelled or vertical scroll gesture cannot reply
+  ---
+  duration_ms: 0.35063
+  type: 'test'
+  ...
+# Subtest: mouse and pen presses enter selection without requiring a touch event
+ok 38 - mouse and pen presses enter selection without requiring a touch event
+  ---
+  duration_ms: 0.503173
+  type: 'test'
+  ...
+# Subtest: a checkbox click bypasses long-press click suppression
+ok 39 - a checkbox click bypasses long-press click suppression
+  ---
+  duration_ms: 0.624296
+  type: 'test'
+  ...
+# Subtest: a compatibility mouse event after a touch hold cannot erase the text range
+ok 40 - a compatibility mouse event after a touch hold cannot erase the text range
+  ---
+  duration_ms: 0.40469
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers none
+ok 41 - acknowledged upload recovers none
+  ---
+  duration_ms: 14.355439
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers start-ack
+ok 42 - acknowledged upload recovers start-ack
+  ---
+  duration_ms: 6.839351
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers chunk-ack
+ok 43 - acknowledged upload recovers chunk-ack
+  ---
+  duration_ms: 6.133744
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers before-chunk
+ok 44 - acknowledged upload recovers before-chunk
+  ---
+  duration_ms: 8.117632
+  type: 'test'
+  ...
+# Subtest: acknowledged upload recovers finish-ack
+ok 45 - acknowledged upload recovers finish-ack
+  ---
+  duration_ms: 9.746061
+  type: 'test'
+  ...
+# Subtest: forbidden upload fails without retrying or reporting completion
+ok 46 - forbidden upload fails without retrying or reporting completion
+  ---
+  duration_ms: 2.190891
+  type: 'test'
+  ...
+# Subtest: manual retry resumes acknowledged bytes after network retry budget is exhausted
+ok 47 - manual retry resumes acknowledged bytes after network retry budget is exhausted
+  ---
+  duration_ms: 8.681998
+  type: 'test'
+  ...
+1..47
+# tests 47
+# suites 0
+# pass 47
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2465.788822

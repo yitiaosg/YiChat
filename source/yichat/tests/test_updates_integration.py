@@ -48,6 +48,31 @@ def test_real_receipt_group_api_and_server_receipt_outbox(synapse):
   time.sleep(1.1)
   r=a.patch('/open/v1/groups/'+quote(group,safe=''),json={'name':'New Group'});assert r.status_code==200,r.text
   assert h.get(s.synapse+'/_matrix/client/v3/rooms/'+quote(group,safe='')+'/state/m.room.name',headers={'Authorization':'Bearer '+tokens['alice']['raw']}).json()['name']=='New Group'
+  # Reuse the same physical upload in a second real Synapse room and archive it.
+  import hashlib
+  uploaded=c.post('/api/files/'+quote(room,safe=''),content=b'real cross-room reused attachment');assert uploaded.status_code==200,uploaded.text
+  fid=uploaded.json()['id'];reused=c.post('/api/files/'+quote(group,safe='')+'/reuse',json={'sha256':hashlib.sha256(b'real cross-room reused attachment').hexdigest()});assert reused.status_code==200,reused.text
+  r=c.put('/_matrix/client/v3/rooms/'+quote(group,safe='')+'/send/m.room.message/real-reuse',json={'msgtype':'m.file','body':'reused.txt','url':uploaded.json()['url'],'org.yitiao.attachments':[fid]});assert r.status_code==200,r.text
+  event=r.json()['event_id'];found=None;until=time.monotonic()+10
+  while time.monotonic()<until:
+   with archive.connect(s.archive_reader) as pg:found=pg.execute('SELECT 1 FROM attachment_references WHERE event_id=%s AND file=%s AND room=%s',(event,fid,group)).fetchone()
+   if found:break
+   time.sleep(.2)
+  assert found,'Cross-room reference was not archived with its original file ID'
+  # Publication opens only when the real Matrix record message is accepted.
+  from backend import public_records
+  with archive.connect(s.archive_reader) as pg:source=pg.execute('SELECT body FROM events WHERE event_id=%s',(eid,)).fetchone()
+  publication=public_records.prepare(app,s,users['alice'],room,[json.loads(bytes(source['body']))],'both')
+  with connect(s.db) as db:db.execute('INSERT OR IGNORE INTO shared_record_rooms VALUES(?,?)',(publication['hash'],group))
+  assert c.get('/api/public-records/'+publication['hash']).status_code==404
+  message={'msgtype':'m.text','body':publication['url'],'org.yitiao.record':publication['hash'],'org.yitiao.record_json':publication['canonical']}
+  sent=c.put('/_matrix/client/v3/rooms/'+quote(group,safe='')+'/send/m.room.message/real-record-activate',json=message);assert sent.status_code==200,sent.text
+  until=time.monotonic()+8;published=False
+  while time.monotonic()<until:
+   response=c.get('/api/public-records/'+publication['hash'])
+   if response.status_code==200:published=True;break
+   time.sleep(.5)
+  assert published,'Accepted record message did not activate its public URL'
   f=app.state.funds
   with connect(s.ledger) as db:f.bank(db);f.move(db,None,users['alice']['subject'],f.y.units('5'),'isolated-fixture-credit')
   time.sleep(1.1)

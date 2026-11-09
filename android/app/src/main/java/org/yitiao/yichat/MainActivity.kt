@@ -359,6 +359,14 @@ class MainActivity : ComponentActivity() {
                         d.file.appendBytes(bytes);respond(reply)
                     }
                     "saveCancel" -> { downloads.remove(args.s("transfer"))?.file?.delete();respond(reply) }
+                    "shareFinish" -> {
+                        val d=requireNotNull(downloads.remove(args.s("transfer")))
+                        try {
+                            require(d.file.length()==d.expected) { "文件未完整传输" }
+                            val intent=withContext(Dispatchers.IO) { ImageShares.intent(this@MainActivity,d.file,d.mime,args.s("url")) }
+                            startActivity(Intent.createChooser(intent,"分享聊天图片"));respond(reply)
+                        } catch(e:Exception) { d.file.delete();throw e }
+                    }
                     "saveFinish" -> {
                         require(saving==null && exportConfig==null) { "请先完成当前文件选择" }
                         val d=requireNotNull(downloads.remove(args.s("transfer")));require(d.file.length()==d.expected) { "文件未完整传输" }

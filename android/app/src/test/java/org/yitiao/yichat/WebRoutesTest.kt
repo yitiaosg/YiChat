@@ -4,9 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WebRoutesTest {
-    @Test fun onlyChatRootStaysInsideTheApp() {
+    @Test fun chatRootAndRecordPagesStayInsideTheApp() {
         assertTrue(WebRoutes.chat("https://chat.yitiao.org/?order="+"a".repeat(32)))
         for(url in listOf("https://chat.yitiao.org/auth/login","https://chat.yitiao.org/orders/id","https://yitiao.org/","https://yidt.yitiao.org/","https://chat.yitiao.org.evil.test/","https://user@chat.yitiao.org/","file:///data/local/tmp/","javascript:alert(1)")) assertFalse(url,WebRoutes.chat(url))
+        assertTrue(WebRoutes.chat("https://chat.yitiao.org/records/"+"a".repeat(64)))
+        assertFalse(WebRoutes.chat("https://chat.yitiao.org/records/invalid"))
+        assertFalse(WebRoutes.chat("https://chat.yitiao.org/records/"+"a".repeat(64)+"?redirect=evil"))
         assertTrue(WebRoutes.external("https://yidt.yitiao.org/"))
         assertFalse(WebRoutes.external("intent://evil/"))
     }

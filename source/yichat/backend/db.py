@@ -85,6 +85,8 @@ def migrate(settings):
         c.executescript(open_api.SCHEMA)
         from . import sharing,server_messages
         c.executescript(sharing.SCHEMA+server_messages.SCHEMA)
+        from . import public_records
+        public_records.migrate(c)
         open_api.migrate(c)
         c.executescript(webpush.SCHEMA)
         c.execute("INSERT OR IGNORE INTO direct_pairs(first,second,room) SELECT min(owner,peer),max(owner,peer),room FROM rooms WHERE kind='direct' ORDER BY rowid")

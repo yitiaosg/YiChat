@@ -184,6 +184,8 @@ class YiChatModule:
 
     async def on_new_event(self,event,state):
         groups.apply(self.s,unfreeze(event.content),event.event_id)
+        from .public_records import activate_message
+        activate_message(self.s,event.room_id,unfreeze(event.content))
         if event.type in ('m.room.message','m.room.encrypted'):
             with transaction(self.s.db) as c:c.execute('UPDATE direct_visibility SET visible=1 WHERE room=?',(event.room_id,))
         if event.content.get(archive.ATTACHMENT_KEY):
@@ -282,10 +284,19 @@ class YiChatModule:
             rows=[row for row in rows if not policy.retired(self.s,row[1])]
             for eid,rid,_,_,raw in rows:
                 accepted=json.loads(raw);groups.apply(self.s,accepted.get('content',{}),eid)
+                from .public_records import activate_message
+                activate_message(self.s,rid,accepted.get('content',{}))
                 if accepted.get('type') in ('m.room.message','m.room.encrypted'):
                     with transaction(self.s.db) as c:c.execute('UPDATE direct_visibility SET visible=1 WHERE room=?',(rid,))
             await defer_to_thread(reactor,history.record_rows,self.s,rows)
-            await defer_to_thread(reactor,archive.ingest_batch,self.s.archive_ingest,rows,through,at,fences)
+            # Policy-admitted references can reuse the original upload receipt in
+            # another room. Carry the server's grants, never a client's claim.
+            reuse=[]
+            rooms=sorted({row[1] for row in rows})
+            if rooms:
+                with connect(self.s.db) as c:
+                    reuse=[tuple(r) for r in c.execute('SELECT g.file,g.room,i.mxid,g.expires FROM file_reuse_grants g JOIN identities i ON i.subject=g.uid WHERE g.room IN ('+','.join('?' for _ in rooms)+')',rooms)]
+            await defer_to_thread(reactor,archive.ingest_batch,self.s.archive_ingest,rows,through,at,fences,reuse)
             await defer_to_thread(reactor,history.backfill,self.s)
             self.ready=True
             if time.time()-getattr(self,'retirement_at',0)>15:

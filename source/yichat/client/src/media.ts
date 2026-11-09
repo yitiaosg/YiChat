@@ -1,7 +1,7 @@
 import {transferFile,type TransferState} from './upload-transfer';
 import { requests, path, ApiError, retryDelay, sleep } from './api';
 import { chat } from './chat';
-import {isApp,appSave,appCall} from './app';
+import {isApp,appSave,appShare,appCall} from './app';
 export type Upload={id:string;file:File;progress:number;state:string;error?:string;abort:AbortController;content?:any;attachment?:string;room:string;transfer?:TransferState};
 let tail:Promise<any>=Promise.resolve();
 export function uploadFile(upload:Upload,changed:()=>void){
@@ -38,10 +38,14 @@ const urls=new Set<string>();
 export function releaseUrl(url:string){URL.revokeObjectURL(url);urls.delete(url)}
 export function blobUrl(blob:Blob){const url=URL.createObjectURL(blob);urls.add(url);return url}
 window.addEventListener('yc:locked',()=>{for(const url of urls)URL.revokeObjectURL(url);urls.clear()});
-export async function attachment(content:any,signal:AbortSignal){
+export async function attachment(content:any,signal:AbortSignal,publicRecord?:string){
   if(content.file)throw Error('旧加密附件已清空，请使用新会话中的附件');
   const mxc=content.url;
   const match=/^mxc:\/\/chat\.yitiao\.org\/([a-f0-9]{48})$/.exec(mxc||'');if(!match)throw Error('附件地址不受支持');
+  if(publicRecord){
+    const response=await requests.fetch('/api/public-records/'+path(publicRecord)+'/files/'+match[1]+'/content',{signal});if(!response.ok)throw new ApiError(response.status,await response.json());
+    const type=String(content.info?.mimetype||'application/octet-stream');return new Blob([await response.arrayBuffer()],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});
+  }
   // File IDs are content-addressed: a stored chat image never changes.
   const key='file:'+match[1],image=content.msgtype==='m.image',vault=chat.businessVault;
   if(image){const stored=await vault.image(key).catch(()=>undefined);if(stored)return stored}
@@ -61,4 +65,12 @@ export async function attachment(content:any,signal:AbortSignal){
   if(image&&!signal.aborted)void vault.saveImage(key,blob).catch(()=>{});
   return blob;
 }
-export async function saveBlob(blob:Blob,name:string){if(isApp){await appSave(blob,name);return}const url=blobUrl(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>releaseUrl(url),30000)}
+export async function saveBlob(blob:Blob,name:string){if(isApp){await appSave(blob,name);return}const url=blobUrl(blob),a=document.createElement('a');a.href=url;a.download=name;a.hidden=true;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>releaseUrl(url),30000)}
+
+export async function shareImage(blob:Blob,name:string,url:string){
+ if(isApp){await appShare(blob,name,url);return '已打开系统分享菜单'}
+ const file=new File([blob],name,{type:'image/png'});
+ if(navigator.share&&navigator.canShare?.({files:[file]})){await navigator.share({files:[file],title:'聊天记录',text:url});return '已打开分享菜单'}
+ if(typeof ClipboardItem!=='undefined'&&navigator.clipboard?.write){await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);return '图片已复制，可粘贴到其他应用分享'}
+ throw Error('此浏览器不支持图片分享，请下载图片后分享');
+}

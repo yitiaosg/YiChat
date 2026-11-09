@@ -1,6 +1,7 @@
+import {recordHash} from './record-model';
 import {shareUrls} from './api';
 export function standaloneContent(content:Record<string,any>,previews:string[]=[],gift=false){
- return gift||previews.length>0||['m.image','m.audio','m.video','m.file'].includes(content.msgtype);
+ return !!recordHash(content)||gift||previews.length>0||['m.image','m.audio','m.video','m.file'].includes(content.msgtype);
 }
 // Only remove a URL when that exact resource has a preview in this message.
 // Keep captions, other websites, unrecognized routes and unrendered extra URLs.
@@ -14,7 +15,7 @@ export function messageBody(content:Record<string,any>,previews:string[]=[]):str
 }
 export function messageCaption(content:Record<string,any>):string {
  const urls=content['org.yitiao.no_preview']?[]:shareUrls(content.body||'');
- if(content['org.yitiao.record'])return '[聊天记录]';
+ if(recordHash(content))return '[聊天记录]';
  const body=messageBody(content,urls);if(body&&!body.startsWith('https://'))return body;
  const share=content['org.yitiao.share'];
  const media:Record<string,string>={'m.image':'[图片]','m.audio':'[语音]','m.video':'[视频]','m.file':'[文件]'};

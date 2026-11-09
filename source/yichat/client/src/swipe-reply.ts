@@ -31,6 +31,7 @@ export function swipeReply(reply:()=>void,longPress?:(node:HTMLElement)=>void,se
  onPointerCancel(e:PointerEvent){const node=e.currentTarget as HTMLElement,g=gestures.get(node);if(g){g.cancelled=true;g.ended=true}clear(node,g)},
  onPointerLeave(e:PointerEvent){if(e.pointerType!=='mouse')return;const node=e.currentTarget as HTMLElement,g=gestures.get(node);if(g&&!g.held){g.cancelled=true;g.ended=true;clear(node,g)}},
  onContextMenu(e:MouseEvent){if((e.target as HTMLElement).closest(controls))return;e.preventDefault();const node=e.currentTarget as HTMLElement;hold(node,gestures.get(node))},
+ onMouseDown(e:MouseEvent){if((e.target as HTMLElement).closest('.message-selection-control'))return;const g=gestures.get(e.currentTarget as HTMLElement);if(g?.held&&Date.now()<g.suppressUntil)e.preventDefault()},
  onClickCapture(e:MouseEvent){if((e.target as HTMLElement).closest('.message-selection-control'))return;const g=gestures.get(e.currentTarget as HTMLElement);if(g&&Date.now()<g.suppressUntil){e.preventDefault();e.stopPropagation();g.suppressUntil=0;return}selectTap?.(e)}
  };
 }

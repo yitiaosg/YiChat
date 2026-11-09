@@ -16,7 +16,7 @@ object WebRoutes {
     val ORIGIN = if(BuildConfig.DEBUG && BuildConfig.GATEWAY=="http://127.0.0.1:18018") BuildConfig.GATEWAY else "https://chat.yitiao.org"
     private val origin = URI(ORIGIN)
     fun chat(value: String): Boolean = runCatching {
-        val u=URI(value);trusted(value) && u.path=="/" && u.fragment==null
+        val u=URI(value);trusted(value) && u.fragment==null && (u.path=="/" || (u.rawPath==u.path && u.path.matches(Regex("/records/[a-f0-9]{64}")) && u.rawQuery==null))
     }.getOrDefault(false)
     fun trusted(value: String): Boolean = runCatching {
         val u=URI(value);u.scheme==origin.scheme && u.host==origin.host && u.port==origin.port && u.rawUserInfo==null

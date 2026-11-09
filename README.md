@@ -1,6 +1,6 @@
 # YiChat
 
-当前版本 **Android 0.3.12 / versionCode 20**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.3.13 / versionCode 21**，包名 `org.yitiao.yichat.mobile`。
 
 [最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.8 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261108-v0.3.8/YiChat-0.3.8-16.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
@@ -83,6 +83,6 @@ export YICHAT_FIREBASE_CONFIG=/private/path/google-services.json
 
 [钱包、转发与主题更新记录](PRODUCTION-0.3.9.md) · [最新开发者 API 文档](source/yichat/docs/OPEN-API.md)。
 
-最新安装包为0.3.10 / code 18，修正主题色Logo图形，见 [0.3.10记录](PRODUCTION-0.3.10.md)。
+0.3.10 / code 18 修正主题色Logo图形，见 [0.3.10记录](PRODUCTION-0.3.10.md)。
 
-最新安装包为 0.3.12 / code 20，多选可用性、右侧复选框和 Web 免打扰修复见 [0.3.12记录](PRODUCTION-0.3.12.md)。
+最新安装包为 0.3.13 / code 21，共用公开链接/二维码、聊天气泡布局、转发规则和即时多选见 [0.3.13记录](PRODUCTION-0.3.13.md)。

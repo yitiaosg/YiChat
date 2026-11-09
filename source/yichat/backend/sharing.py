@@ -3,13 +3,13 @@ import hashlib,hmac,json,re,secrets,time
 from fastapi import Request
 from .db import connect,transaction
 from .security import fail
-from . import policy,membership,archive,previews,conversations
+from . import policy,membership,archive,previews,conversations,public_records
 SCHEMA='''CREATE TABLE IF NOT EXISTS room_share_preferences(room TEXT NOT NULL,uid TEXT NOT NULL,blocked INTEGER NOT NULL,PRIMARY KEY(room,uid));
 CREATE TABLE IF NOT EXISTS shared_records(hash TEXT PRIMARY KEY,payload TEXT NOT NULL,created REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS shared_record_rooms(hash TEXT NOT NULL,room TEXT NOT NULL,PRIMARY KEY(hash,room));
-CREATE TABLE IF NOT EXISTS file_reuse_grants(file TEXT NOT NULL,room TEXT NOT NULL,uid TEXT NOT NULL,expires REAL NOT NULL,PRIMARY KEY(file,room,uid));'''
+CREATE TABLE IF NOT EXISTS file_reuse_grants(file TEXT NOT NULL,room TEXT NOT NULL,uid TEXT NOT NULL,expires REAL NOT NULL,PRIMARY KEY(file,room,uid));'''+public_records.SCHEMA
 def migrate(s):
- with connect(s.db) as c:c.executescript(SCHEMA)
+ with connect(s.db) as c:c.executescript(SCHEMA);public_records.migrate(c)
 def access(s,who,room):
  info=policy.room(s,room)
  with connect(s.ledger) as c:membership.require(c,room,who['mxid'])
@@ -38,11 +38,18 @@ def eligible(s,who,room,ids):
    raw=bytes(row['body'])
    if hashlib.sha256(raw).hexdigest()!=row['body_sha256']:fail(503,'消息存证校验失败')
    event=json.loads(raw);content=event['content']
-   if content.get('org.yitiao.record') or '/records/' in str(content.get('body','')):fail(400,'聊天记录消息不能参与多选或再次合并')
    with connect(s.db) as c:
     if c.execute('SELECT 1 FROM history_receipts WHERE room=? AND redacts=?',(room,row['event_id'])).fetchone():fail(410,'不能选择已撤回消息')
    result.append(event)
  return result
+def record_message(content):
+ return bool(content.get('org.yitiao.record') or re.search(r'https://chat\.yitiao\.org/records/[a-f0-9]{64}(?![a-zA-Z0-9/?#])',str(content.get('body',''))))
+def individual_allowed(content):
+ share=content.get('org.yitiao.share') or {};business=content.get('org.yitiao.business') or {}
+ if share.get('type') in ('order','receipt','gift') or business.get('kind') in ('order','receipt','gift'):return False
+ if re.search(r'https://chat\.yitiao\.org/(orders|gifts)/[A-Za-z0-9_-]{32}',str(content.get('body',''))+' '+str(share.get('url',''))):return False
+ previous=content.get('org.yitiao.forward_snapshot')
+ return individual_allowed(previous['content']) if isinstance(previous,dict) and isinstance(previous.get('content'),dict) else True
 def file_ids(content):
  ids=set(content.get('org.yitiao.attachments',[]));url=content.get('url','');m=re.fullmatch(r'mxc://chat\.yitiao\.org/([a-f0-9]{48})',url) if isinstance(url,str) else None
  if m:ids.add(m[1])
@@ -56,11 +63,14 @@ def grant_files(s,who,room,contents):
     c.execute('INSERT INTO file_reuse_grants VALUES(?,?,?,?) ON CONFLICT(file,room,uid) DO UPDATE SET expires=max(expires,excluded.expires)',(fid,room,who['subject'],row['expires']))
 def snapshot(app,s,who,event):
  content=event['content'];urls=[]
+ previous=content.get('org.yitiao.forward_snapshot')
+ frozen=previous if isinstance(previous,dict) and isinstance(previous.get('content'),dict) else None
+ if frozen:content=frozen['content']
  share=content.get('org.yitiao.share') if isinstance(content.get('org.yitiao.share'),dict) else {}
  from .notification_summary import URL,TRAILING
  for u in URL.findall(content.get('body',''))+[str(share.get('url',''))]:
   u=u.rstrip(TRAILING)
-  if previews.parse(u):urls.append(u)
+  if previews.parse(u) and not content.get('org.yitiao.no_preview'):urls.append(u)
  metas=[]
  gift=re.search(r'https://chat\.yitiao\.org/gifts/([a-f0-9]{32})',str(content.get('body',''))+' '+str(share.get('url','')))
  gid=gift[1] if gift else content.get('org.yitiao.business',{}).get('id') if content.get('org.yitiao.business',{}).get('kind')=='gift' else None
@@ -83,6 +93,10 @@ def snapshot(app,s,who,event):
    try:meta=previews.metadata(s,url)
    except Exception:meta=None
   if meta:metas.append(meta)
+ if frozen:
+  metas=json.loads(json.dumps(frozen.get('previews',[])))
+  for meta in metas:
+   if meta.get('type')=='order':meta['data']['actions']={};meta['data']['authorize_url']=None
  username=policy.username(s,policy.subject(s,event['sender']))
  from fastapi import HTTPException
  try:profile=app.state.public_profile(username)
@@ -104,6 +118,7 @@ def validate(s,room,sender,content):
         if not isinstance(proof,str) or not hmac.compare_digest(proof,sign(s,room,sender,unsigned)):fail(403,'转发快照签名无效')
 
 def install(app,s,session):
+ public_records.install(app,s)
  @app.get('/api/sharing/{room}')
  async def preferences(request:Request,room:str):return sharing(s,session(request),room)
  @app.put('/api/sharing/{room}')
@@ -119,30 +134,34 @@ def install(app,s,session):
  @app.post('/api/sharing/{room}/selection')
  async def selection(request:Request,room:str):
   who=session(request);data=await request.json();events=eligible(s,who,room,data.get('ids'));mode=data.get('mode','image')
-  if mode not in ('image','individual','combined'):fail(400,'分享方式无效')
+  if mode not in ('image','individual','combined','prepare'):fail(400,'分享方式无效')
   if mode!='individual' and not sharing(s,who,room)['allowed']:fail(403,'此会话已禁止分享图片和合并记录')
   if mode=='image' and len(events)>=50:fail(400,'长图最多49条消息')
-  items=[snapshot(app,s,who,e) for e in events]
-  if mode=='image':return {'messages':items}
-  target=data.get('target');info=access(s,who,target);policy.require_send(s,info,who['mxid'])
-  grant_files(s,who,target,[e['content'] for e in events])
+  # Reusing a known file ID is not itself proof of permission to publish it.
+  for fid in set().union(*(file_ids(e['content']) for e in events)):
+   with connect(s.db) as c:row=c.execute('SELECT * FROM files WHERE id=?',(fid,)).fetchone()
+   if not row or row['removed'] or row['expires']<=time.time() or not (s.objects/fid).is_file():fail(410,'所选附件已删除或过期')
+   await app.state.file_access(who,row)
   if mode=='individual':
-   messages=[]
-   for item in items:
-    content={k:v for k,v in item['content'].items() if k not in ('org.yitiao.business','m.relates_to','org.yitiao.server_event','org.yitiao.forward_snapshot','org.yitiao.forward_proof')}
-    content['org.yitiao.attachments']=sorted(file_ids(content));content['org.yitiao.forward_snapshot']=item
-    content['org.yitiao.forward_proof']=sign(s,target,who['mxid'],content)
-    if len(archive.canonical(content))>60000:fail(413,'单条转发消息过大，请减少预览内容')
-    messages.append(content)
+   if any(not individual_allowed(e['content']) for e in events):fail(400,'转账、收款、红包和赠卡消息不能逐条转发')
+   target=data.get('target');info=access(s,who,target);policy.require_send(s,info,who['mxid'])
+   grant_files(s,who,target,[e['content'] for e in events]);messages=[]
+   for event in events:
+    original=event['content'];content={k:v for k,v in original.items() if k in ('msgtype','body','url','info','format','formatted_body','org.yitiao.no_preview')}
+    if original.get('org.yitiao.share',{}).get('url'):content['org.yitiao.share']={'url':original['org.yitiao.share']['url']}
+    content['org.yitiao.attachments']=sorted(file_ids(original));messages.append(content)
    return {'messages':messages}
-  payload={'version':1,'messages':items};canonical=archive.canonical(payload)
-  if len(canonical)>48000:fail(413,'合并记录过大，请减少选择的消息')
-  h=hashlib.sha256(canonical).hexdigest();url='https://chat.yitiao.org/records/'+h
-  with transaction(s.db) as c:
-   c.execute('INSERT INTO shared_records VALUES(?,?,?) ON CONFLICT(hash) DO UPDATE SET created=excluded.created',(h,canonical.decode(),time.time()));c.execute('INSERT OR IGNORE INTO shared_record_rooms VALUES(?,?)',(h,target))
-  content={'msgtype':'m.text','body':url,'org.yitiao.record':h,'org.yitiao.record_json':canonical.decode(),'org.yitiao.attachments':sorted(set().union(*(file_ids(e['content']) for e in events)))}
-  if len(archive.canonical(content))>60000:fail(413,'合并记录过大，请减少选择的消息')
-  return {'hash':h,'content':content}
+  if any(record_message(e['content']) for e in events):fail(400,'聊天记录不能再次合并或生成分享图片，可逐条转发原链接')
+  display=public_records.identity(data)
+  if mode=='prepare':return public_records.draft(app,s,who,room,events,display)
+  record=public_records.prepare(app,s,who,room,events,display,activate=mode=='image')
+  if mode=='image':return record|{'messages':record['payload']['messages']}
+  target=data.get('target');info=access(s,who,target);policy.require_send(s,info,who['mxid'])
+  grant_files(s,who,target,[e['content'] for e in events]);h=record['hash']
+  with transaction(s.db) as c:c.execute('INSERT OR IGNORE INTO shared_record_rooms VALUES(?,?)',(h,target))
+  content={'msgtype':'m.text','body':record['url'],'org.yitiao.record':h,'org.yitiao.record_json':record['canonical'],'org.yitiao.attachments':sorted(set().union(*(file_ids(e['content']) for e in events)))}
+  if len(archive.canonical(content))>60000:fail(413,'合并记录过大，请减少选择的消息；仍可生成分享图片')
+  return record|{'content':content}
  @app.get('/api/records/{h}')
  async def record(request:Request,h:str,room:str):
   who=session(request);access(s,who,room)

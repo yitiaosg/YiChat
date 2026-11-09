@@ -1,3 +1,4 @@
+import {RecordPage} from './record-view';
 import {useAppearance,AppearanceSettings} from './local-theme';
 import {installNotificationContent} from './notification-content';
 import {ConversationRow} from './conversation-row';
@@ -54,4 +55,5 @@ function App(){
  {returnGift&&<Modal title="赠送的卡片" close={()=>setReturnGift(undefined)}><GiftCard id={returnGift.id} room={returnGift.room}/></Modal>}{returnOrder&&<Modal title="返回会话 · 确认转账 / 红包" close={()=>setReturnOrder(undefined)}><p class="small muted">已回到原会话。请核对金额和费用后明确确认入金；返回聊天本身不会扣款。</p><OrderCard initial={returnOrder} room={returnOrder.room} confirmFund onFunded={()=>setReturnOrder(undefined)} onCancelled={()=>setReturnOrder(undefined)}/></Modal>}{dialog==='app-settings'&&isApp&&<AppSettings close={()=>setDialog('')} audit={()=>setDialog('record-audit')}/>}{dialog==='record-audit'&&isApp&&<RecordAudit initial={active} close={()=>setDialog('')}/>}{dialog==='appearance'&&isApp&&<AppearanceSettings close={()=>setDialog('')}/>}{dialog==='wallet'&&<Wallet close={()=>setDialog('')}/>}{dialog==='new'&&<NewChat close={()=>setDialog('')} open={open} initial={initial}/>}{dialog==='security'&&<Security close={()=>setDialog('')}/>}{dialog==='business'&&room&&info&&<Business key={active} room={active} info={info} close={()=>setDialog('')}/>}{dialog==='archives'&&active&&<Archives room={active} close={()=>setDialog('')}/>}
  </main>
 }
-render(<App/>,document.getElementById('app')!);
+const publicRecord=/^\/records\/([a-f0-9]{64})$/.exec(location.pathname);
+render(publicRecord?<RecordPage hash={publicRecord[1]}/>:<App/>,document.getElementById('app')!);

@@ -108,7 +108,7 @@ def create_app(settings=None):
                 host=request.client.host if request.client else 'unknown'
                 if host in ('127.0.0.1','::1'):
                     host=request.headers.get('x-forwarded-for',host).split(',')[-1].strip()
-                if token and not request.url.path.startswith('/auth/'):
+                if token and not request.url.path.startswith(('/auth/','/api/public-records/')):
                     who=None
                     try:who=authenticate(s,token)
                     except HTTPException as exc:
@@ -708,7 +708,7 @@ def create_app(settings=None):
     push.install(app,s,session)
     # Web-only browser notifications, the developer API and download links.
     # None of these change any existing route or App behaviour.
-    app.state.store_upload=store_upload;app.state.serve_file=serve_file
+    app.state.store_upload=store_upload;app.state.serve_file=serve_file;app.state.file_access=file_access
     from . import webpush,open_api,downloads
     webpush.install(app,s)
     open_api.install(app,s)
@@ -730,6 +730,11 @@ def create_app(settings=None):
     webroot=Path(os.getenv('YICHAT_WEB_ROOT',str(Path(__file__).parent.parent/'client'/'dist')))
     from .card_reads import install as install_card_reads
     install_card_reads(app,s,session)
+
+    @app.get('/records/{h}')
+    async def record_landing(h:str):
+        if not re.fullmatch('[a-f0-9]{64}',h):fail(404,'聊天记录不存在')
+        return await landing()
 
     @app.get('/')
     async def landing():
@@ -841,6 +846,8 @@ async def maintenance(app):
             if app.state.funds.enabled() and time.time()-last_audit>300:
                 await asyncio.to_thread(app.state.funds.reconcile);last_audit=time.time()
             with transaction(s.db) as db:
+                from .public_records import cleanup as cleanup_records
+                cleanup_records(db)
                 db.execute('DELETE FROM shared_record_rooms WHERE hash IN (SELECT hash FROM shared_records WHERE created<?)',(time.time()-30*86400,))
                 db.execute('DELETE FROM shared_records WHERE created<?',(time.time()-30*86400,))
             await asyncio.to_thread(app.state.funds.tick)

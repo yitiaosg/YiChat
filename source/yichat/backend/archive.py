@@ -52,8 +52,8 @@ def artifact_path(root,room,day,spec):
     return Path(root)/sha256(room.encode())/day/('v1-'+spec+'.zip')
 
 
-def ingest_batch(dsn,rows,through,observed_ms,fences=()):
-    try:return _ingest_batch(dsn,rows,through,observed_ms,fences)
+def ingest_batch(dsn,rows,through,observed_ms,fences=(),reuse=()):
+    try:return _ingest_batch(dsn,rows,through,observed_ms,fences,reuse)
     except LateSealedEvent as e:
         with connect(dsn) as c:
             c.execute('INSERT INTO archive_gaps VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING',('late:'+e.event_id,e.room,e.day,'Late accepted source event after sealing; complete-date exports quarantined'))
@@ -61,13 +61,14 @@ def ingest_batch(dsn,rows,through,observed_ms,fences=()):
         raise
 
 
-def _ingest_batch(dsn,rows,through,observed_ms,fences=()):
+def _ingest_batch(dsn,rows,through,observed_ms,fences=(),reuse=()):
     """Append-only ingest and cursor advance commit together; every worker deduplicates.
 
     rows: (event_id, room, stream_ordering, received_ts, original persisted JSON).
     A fence is captured after UTC midnight from the global allocated stream ID,
     and is usable only when Synapse's contiguous persisted watermark reaches it.
     """
+    grants={tuple(g[:3]):g[3] for g in reuse}
     with connect(dsn) as c:
         c.execute("SELECT pg_advisory_xact_lock(17919,1)")
         checkpoint=c.execute("SELECT * FROM checkpoints WHERE source='synapse'").fetchone()
@@ -90,7 +91,8 @@ def _ingest_batch(dsn,rows,through,observed_ms,fences=()):
                 (event_id,room,seq,received,day,event['sender'],event['type'],event.get('state_key'),body,sha256(body)))
             for fid in event.get('content',{}).get(ATTACHMENT_KEY,[]):
                 receipt=c.execute('SELECT room,uploader FROM attachments WHERE id=%s',(fid,)).fetchone()
-                if not receipt or receipt['room']!=room or receipt['uploader']!=event['sender']:
+                grant=grants.get((fid,room,event['sender']),0)
+                if not receipt or ((receipt['room']!=room or receipt['uploader']!=event['sender']) and grant*1000<received):
                     raise RuntimeError('Accepted attachment declaration has no matching authenticated upload')
                 c.execute('INSERT INTO attachment_references VALUES(%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING',(fid,event_id,room,day,received))
                 c.execute('UPDATE attachments SET last_ref_ms=greatest(coalesce(last_ref_ms,0),%s) WHERE id=%s',(received,fid))

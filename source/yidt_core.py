@@ -18,8 +18,10 @@ SCALE = 10**16
 CENT = 10**14
 GAS = 39062500000000
 SUPPLY = 2**32 * SCALE
-SERVICES = {'ycards':'YCards', 'parachute':'跳伞', 'daily':'每日签到', 'wallet':'钱包转账', 'yichat':'YiChat'}
+SERVICES = {'ycards':'YCards', 'parachute':'跳伞', 'doudizhu':'斗地主', 'daily':'每日签到', 'wallet':'钱包转账', 'yichat':'YiChat'}
 class Error(ValueError): pass
+class PoolInsufficient(Error):
+    def __init__(self):super().__init__('资金池不足，请与管理员联系')
 class PaymentRequired(Error):
     def __init__(self, service, amount, reason):
         self.service,self.amount,self.reason=service,amount,reason
@@ -42,6 +44,12 @@ def units(value):
 def fmt(n):
     n=int(n);sign='-' if n<0 else '';a,b=divmod(abs(n),SCALE)
     return sign+str(a)+(('.'+str(b).zfill(16).rstrip('0')) if b else '')
+
+def fmt_balance(n):
+    """Round atomic units to two display decimals without float conversion."""
+    n=int(n);cents=(abs(n)+CENT//2)//CENT
+    sign='-' if n<0 and cents else ''
+    return f'{sign}{cents//100}.{cents%100:02d}'
 
 def canonical(obj):return json.dumps(obj,sort_keys=True,separators=(',',':'),ensure_ascii=False)
 def utcday():return datetime.now(timezone.utc).date().isoformat()
@@ -74,9 +82,132 @@ def init(c):
     '''CREATE TABLE IF NOT EXISTS yidt_routes(service TEXT,reference TEXT,user TEXT,address TEXT,PRIMARY KEY(service,reference,user))''',
     '''CREATE TABLE IF NOT EXISTS yidt_account_flows(token TEXT PRIMARY KEY,user TEXT NOT NULL,sid TEXT NOT NULL,expires REAL NOT NULL,method TEXT,return_to TEXT NOT NULL,state TEXT NOT NULL)''',
     '''CREATE TABLE IF NOT EXISTS yidt_reauth(token TEXT PRIMARY KEY,user TEXT,sid TEXT,expires REAL,used INTEGER NOT NULL DEFAULT 0)''',
-    '''CREATE TABLE IF NOT EXISTS yidt_backup_challenges(token TEXT PRIMARY KEY,user TEXT,address TEXT,answer TEXT,expires REAL,attempts INTEGER NOT NULL DEFAULT 0)'''
+    '''CREATE TABLE IF NOT EXISTS yidt_backup_challenges(token TEXT PRIMARY KEY,user TEXT,address TEXT,answer TEXT,expires REAL,attempts INTEGER NOT NULL DEFAULT 0)''',
+    '''CREATE TABLE IF NOT EXISTS yidt_admin_transfers(
+        request_key TEXT PRIMARY KEY,user TEXT NOT NULL,payload_hash TEXT NOT NULL,
+        tx TEXT NOT NULL REFERENCES yidt_transactions(hash))'''
     ]
     for s in statements:c.execute(s)
+    # Grants belong to an account's imported wallet. Other importers keep theirs.
+    c.execute('''CREATE TRIGGER IF NOT EXISTS yidt_member_remove_bindings
+        AFTER DELETE ON yidt_members
+        BEGIN DELETE FROM yidt_bindings WHERE user=OLD.user AND address=OLD.address; END''')
+    c.execute('''DELETE FROM yidt_bindings WHERE NOT EXISTS (
+        SELECT 1 FROM yidt_members m
+        WHERE m.user=yidt_bindings.user AND m.address=yidt_bindings.address)''')
+    init_blocks(c)
+
+
+def init_blocks(c):
+    """Add block storage without changing any existing transaction or its hash."""
+    c.execute('''CREATE TABLE IF NOT EXISTS yidt_blocks(
+        height INTEGER PRIMARY KEY CHECK(height>=0),hash TEXT UNIQUE,
+        previous TEXT NOT NULL,capacity INTEGER NOT NULL CHECK(capacity=100+height),
+        tx_count INTEGER NOT NULL DEFAULT 0 CHECK(tx_count>=0 AND tx_count<=capacity),
+        created TEXT NOT NULL,locked_at TEXT,payload TEXT,
+        CHECK((hash IS NULL AND locked_at IS NULL AND payload IS NULL AND tx_count<capacity)
+           OR (hash IS NOT NULL AND locked_at IS NOT NULL AND payload IS NOT NULL AND tx_count=capacity)))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS yidt_block_transactions(
+        tx INTEGER PRIMARY KEY REFERENCES yidt_transactions(id),
+        height INTEGER NOT NULL REFERENCES yidt_blocks(height))''')
+    c.execute('CREATE INDEX IF NOT EXISTS yidt_block_height ON yidt_block_transactions(height,tx)')
+    # Enforce freezing even for accidental SQL writes outside the ledger helpers.
+    c.execute('''CREATE TRIGGER IF NOT EXISTS yidt_locked_block_insert BEFORE INSERT ON yidt_blocks
+        WHEN EXISTS(SELECT 1 FROM yidt_blocks WHERE hash IS NOT NULL AND (height=NEW.height OR hash=NEW.hash))
+        BEGIN SELECT RAISE(ABORT,'Cannot replace a locked block'); END''')
+    c.execute('''CREATE TRIGGER IF NOT EXISTS yidt_locked_tx_insert BEFORE INSERT ON yidt_transactions
+        WHEN EXISTS(SELECT 1 FROM yidt_transactions t JOIN yidt_block_transactions m ON m.tx=t.id
+                    JOIN yidt_blocks b USING(height) WHERE b.hash IS NOT NULL AND (t.id=NEW.id OR t.hash=NEW.hash))
+        BEGIN SELECT RAISE(ABORT,'Cannot replace a locked transaction'); END''')
+    c.execute('''CREATE TRIGGER IF NOT EXISTS yidt_locked_member_insert BEFORE INSERT ON yidt_block_transactions
+        WHEN EXISTS(SELECT 1 FROM yidt_block_transactions m JOIN yidt_blocks b USING(height)
+                    WHERE m.tx=NEW.tx AND b.hash IS NOT NULL)
+        BEGIN SELECT RAISE(ABORT,'Cannot replace locked block membership'); END''')
+    for action in ('UPDATE','DELETE'):
+        c.execute(f'''CREATE TRIGGER IF NOT EXISTS yidt_locked_block_{action.lower()}
+            BEFORE {action} ON yidt_blocks WHEN OLD.hash IS NOT NULL
+            BEGIN SELECT RAISE(ABORT,'Locked block is immutable'); END''')
+        c.execute(f'''CREATE TRIGGER IF NOT EXISTS yidt_locked_tx_{action.lower()}
+            BEFORE {action} ON yidt_transactions
+            WHEN EXISTS(SELECT 1 FROM yidt_block_transactions m JOIN yidt_blocks b USING(height)
+                        WHERE m.tx=OLD.id AND b.hash IS NOT NULL)
+            BEGIN SELECT RAISE(ABORT,'Locked transaction is immutable'); END''')
+        c.execute(f'''CREATE TRIGGER IF NOT EXISTS yidt_locked_member_{action.lower()}
+            BEFORE {action} ON yidt_block_transactions
+            WHEN EXISTS(SELECT 1 FROM yidt_blocks WHERE height=OLD.height AND hash IS NOT NULL)
+            BEGIN SELECT RAISE(ABORT,'Locked block membership is immutable'); END''')
+    for action in ('INSERT','UPDATE'):
+        c.execute(f'''CREATE TRIGGER IF NOT EXISTS yidt_locked_member_target_{action.lower()}
+            BEFORE {action} ON yidt_block_transactions
+            WHEN EXISTS(SELECT 1 FROM yidt_blocks WHERE height=NEW.height AND hash IS NOT NULL)
+            BEGIN SELECT RAISE(ABORT,'Cannot append to a locked block'); END''')
+    for action in ('INSERT','UPDATE','DELETE'):
+        condition=' OR '.join(f'''EXISTS(SELECT 1 FROM yidt_block_transactions m JOIN yidt_blocks b USING(height)
+            WHERE m.tx={row}.tx AND b.hash IS NOT NULL)''' for row in
+            (('NEW',) if action=='INSERT' else ('OLD',) if action=='DELETE' else ('OLD','NEW')))
+        c.execute(f'''CREATE TRIGGER IF NOT EXISTS yidt_locked_posting_{action.lower()}
+            BEFORE {action} ON yidt_postings WHEN {condition}
+            BEGIN SELECT RAISE(ABORT,'Locked postings are immutable'); END''')
+
+
+def block_payload(c,block):
+    transactions=[]
+    for row in c.execute('''SELECT t.* FROM yidt_transactions t
+            JOIN yidt_block_transactions m ON m.tx=t.id WHERE m.height=? ORDER BY t.id''',(block['height'],)):
+        item=dict(row)
+        item['postings']=[dict(p) for p in c.execute(
+            'SELECT address,delta FROM yidt_postings WHERE tx=? ORDER BY address',(row['id'],))]
+        transactions.append(item)
+    return canonical(dict(version=1,height=block['height'],previous=block['previous'],
+                          capacity=block['capacity'],created=block['created'],transactions=transactions))
+
+
+def append_to_block(c,tx):
+    row=c.execute('SELECT * FROM yidt_transactions WHERE id=?',(tx,)).fetchone()
+    block=c.execute('SELECT * FROM yidt_blocks ORDER BY height DESC LIMIT 1').fetchone()
+    if block is None:
+        c.execute('INSERT INTO yidt_blocks(height,previous,capacity,created) VALUES(0,?,100,?)',('0'*64,row['created']))
+        block=c.execute('SELECT * FROM yidt_blocks WHERE height=0').fetchone()
+    if block['hash'] is not None:raise Error('当前区块已锁定')
+    c.execute('INSERT INTO yidt_block_transactions(tx,height) VALUES(?,?)',(tx,block['height']))
+    count=block['tx_count']+1
+    if count==block['capacity']:
+        # Snapshot every transaction field and posting only after the final posting exists.
+        payload=block_payload(c,block)
+        digest=hashlib.sha256(payload.encode('utf-8')).hexdigest()
+        c.execute('UPDATE yidt_blocks SET tx_count=?,hash=?,locked_at=?,payload=? WHERE height=?',
+                  (count,digest,row['created'],payload,block['height']))
+        height=block['height']+1
+        c.execute('INSERT INTO yidt_blocks(height,previous,capacity,created) VALUES(?,?,?,?)',
+                  (height,digest,100+height,row['created']))
+    else:c.execute('UPDATE yidt_blocks SET tx_count=? WHERE height=?',(count,block['height']))
+
+
+def migrate_blocks(c):
+    # Caller holds BEGIN IMMEDIATE; ordering and boundaries do not depend on ID gaps.
+    pending=c.execute('''SELECT t.id FROM yidt_transactions t LEFT JOIN yidt_block_transactions m ON m.tx=t.id
+                         WHERE m.tx IS NULL ORDER BY t.id''').fetchall()
+    for row in pending:append_to_block(c,row['id'])
+
+
+def verify_blocks(c):
+    previous='0'*64;assigned=[]
+    blocks=c.execute('SELECT * FROM yidt_blocks ORDER BY height').fetchall()
+    if not blocks:raise Error('缺少创世区块')
+    for height,block in enumerate(blocks):
+        ids=[r[0] for r in c.execute('SELECT tx FROM yidt_block_transactions WHERE height=? ORDER BY tx',(height,))]
+        if (block['height']!=height or block['capacity']!=100+height or block['previous']!=previous
+                or block['tx_count']!=len(ids)):raise Error('区块顺序或交易数量校验失败')
+        if block['hash'] is not None:
+            payload=block_payload(c,block)
+            if (len(ids)!=100+height or block['payload']!=payload
+                    or hashlib.sha256(payload.encode('utf-8')).hexdigest()!=block['hash']):raise Error('区块哈希校验失败')
+            previous=block['hash']
+        elif height!=len(blocks)-1 or len(ids)>=100+height:raise Error('活跃区块校验失败')
+        assigned.extend(ids)
+    if blocks[-1]['hash'] is not None:raise Error('缺少活跃区块')
+    if assigned!=[r[0] for r in c.execute('SELECT id FROM yidt_transactions ORDER BY id')]:raise Error('交易区块归属校验失败')
+    return previous
 
 def cipher():
     if not KEY_PATH.exists():
@@ -102,6 +233,47 @@ def member(c,user,address):
     if not c.execute('SELECT 1 FROM yidt_members WHERE user=? AND address=?',(user,address)).fetchone():raise Error('请先导入此钱包')
     return wallet(c,address)
 
+def new_wallet(c,words,private):
+    address='yidt-'+''.join(secrets.choice('abcdefghijklmnopqrstuvwxyz0123456789') for _ in range(16))
+    encrypted=cipher().encrypt(canonical({'mnemonic':words,'private_key':private}).encode()).decode()
+    c.execute('INSERT INTO yidt_wallets(address,balance,secret,key_hash,mnemonic_hash,created) VALUES(?,?,?,?,?,?)',
+              (address,'0',encrypted,hashlib.sha256(bytes.fromhex(private)).hexdigest(),hashlib.sha256(words.encode()).hexdigest(),stamp()))
+    return address
+
+def init_parachute_pool(c):
+    """Create and fund the service wallet exactly once in the caller's transaction."""
+    row=c.execute("SELECT value FROM yidt_meta WHERE key='parachute_wallet'").fetchone()
+    if row:
+        wallet(c,row['value'])
+        return row['value']
+    mn=Mnemonic('english');words=mn.generate(128)
+    private=hashlib.sha256(mn.to_seed(words)+b'YIDT wallet v1').hexdigest()
+    address=new_wallet(c,words,private)
+    # Official transfers include gas in their amount; the pool receives exactly 100000.
+    tx=transfer(c,OFFICIAL,address,100000*SCALE+GAS,'pool_funding','parachute:initial','Parachute 初始资金')
+    c.executemany('INSERT INTO yidt_meta(key,value) VALUES(?,?)',[
+        ('parachute_wallet',address),('parachute_initial_tx',tx['hash'])])
+    return address
+
+def init_doudizhu_pool(c):
+    """Dedicated pool, exactly 200000 YIDT, with an idempotent audited funding transfer."""
+    row=c.execute("SELECT value FROM yidt_meta WHERE key='doudizhu_wallet'").fetchone()
+    if row:
+        return wallet(c,row['value'])['address']
+    mn=Mnemonic('english');words=mn.generate(128)
+    private=hashlib.sha256(mn.to_seed(words)+b'YIDT wallet v1').hexdigest()
+    address=new_wallet(c,words,private)
+    tx=transfer(c,OFFICIAL,address,200000*SCALE+GAS,'pool_funding','doudizhu:initial','斗地主初始资金')
+    c.executemany('INSERT INTO yidt_meta(key,value) VALUES(?,?)',[
+        ('doudizhu_wallet',address),('doudizhu_initial_tx',tx['hash'])])
+    return address
+
+def service_address(c,service):
+    if service not in ('parachute','doudizhu'):return OFFICIAL
+    row=c.execute('SELECT value FROM yidt_meta WHERE key=?',(service+'_wallet',)).fetchone()
+    if not row:raise Error(SERVICES[service]+'资金池尚未初始化，请与管理员联系')
+    return wallet(c,row['value'])['address']
+
 def create_wallet(c,user,import_secret=None):
     limit=1 if role(user)=='guest' else 16
     if c.execute('SELECT COUNT(*) FROM yidt_members WHERE user=?',(user,)).fetchone()[0]>=limit:raise Error(f'当前账户最多持有 {limit} 个钱包')
@@ -120,10 +292,7 @@ def create_wallet(c,user,import_secret=None):
     if old:address=old['address']
     else:
         if import_secret and words is None:raise Error('此私钥未对应已存在的 YIDT 钱包，请使用原助记词创建或导入')
-        address='yidt-'+''.join(secrets.choice('abcdefghijklmnopqrstuvwxyz0123456789') for _ in range(16))
-        encrypted=cipher().encrypt(canonical({'mnemonic':words,'private_key':private}).encode()).decode()
-        c.execute('INSERT INTO yidt_wallets(address,balance,secret,key_hash,mnemonic_hash,created) VALUES(?,?,?,?,?,?)',
-                  (address,'0',encrypted,kh,hashlib.sha256(words.encode()).hexdigest(),stamp()))
+        address=new_wallet(c,words,private)
     if c.execute('SELECT 1 FROM yidt_members WHERE user=? AND address=?',(user,address)).fetchone():raise Error('当前账户已导入该钱包')
     names={r[0] for r in c.execute('SELECT name FROM yidt_members WHERE user=?',(user,))};i=1
     while f'wallet {i}' in names:i+=1
@@ -142,6 +311,7 @@ def _record(c,source,destination,amount,debit,credit,gas,kind,reference,note,cha
         if after<0:raise Error('钱包余额不足')
         c.execute('UPDATE yidt_wallets SET balance=? WHERE address=?',(str(after),address))
         c.execute('INSERT INTO yidt_postings VALUES(?,?,?)',(tx,address,str(delta)))
+    append_to_block(c,tx)
     return dict(hash=digest,amount=fmt(amount),debit=fmt(debit),credit=fmt(credit),gas=fmt(gas))
 
 def quote(c,source,amount,official=False):
@@ -156,16 +326,18 @@ def quote(c,source,amount,official=False):
     if available<debit or credit<=0:raise Error('余额或转账金额不足以支付 gas')
     return debit,credit
 
-def transfer(c,source,destination,amount,kind='transfer',reference=None,note=''):
+def transfer(c,source,destination,amount,kind='transfer',reference=None,note='',*,gas_included=False):
     wallet(c,destination)
     if source==destination:raise Error('不能向相同钱包转账')
-    debit,credit=quote(c,source,amount)
+    debit,credit=quote(c,source,amount,official=gas_included)
     changes={}
     for a,n in ((source,-debit),(destination,credit),(OFFICIAL,GAS)):changes[a]=changes.get(a,0)+n
     if sum(changes.values())!=0:raise RuntimeError('Unbalanced transfer')
     return _record(c,source,destination,amount,debit,credit,GAS,kind,reference,note[:500],changes)
 
-def binding(c,user,service):return c.execute('SELECT * FROM yidt_bindings WHERE user=? AND service=?',(user,service)).fetchone()
+def binding(c,user,service):
+    return c.execute('''SELECT b.* FROM yidt_bindings b JOIN yidt_members m
+        ON m.user=b.user AND m.address=b.address WHERE b.user=? AND b.service=?''',(user,service)).fetchone()
 def bound_address(c,user,service):
     b=binding(c,user,service)
     if not b:raise Error('绑定 YIDT 钱包以继续')
@@ -190,7 +362,7 @@ def service_debit(c,user,service,amount,reason,reference):
         raise Error('支付授权失效或订单已变化，请重新确认')
     b=binding(c,user,service)
     if not b or b['address']!=row['address'] or b['created']!=row['binding_stamp']:raise Error('钱包绑定已变化，请重新授权')
-    result=transfer(c,b['address'],OFFICIAL,amount,'payment',reference,reason)
+    result=transfer(c,b['address'],service_address(c,service),amount,'payment',reference,reason)
     c.execute("UPDATE yidt_intents SET state='spent',tx=? WHERE id=?",(result['hash'],token))
     c.execute('INSERT INTO yidt_routes VALUES(?,?,?,?) ON CONFLICT(service,reference,user) DO UPDATE SET address=excluded.address',(service,str(reference),user,b['address']))
     g.yidt_tx=result['hash']
@@ -200,7 +372,9 @@ def service_credit(c,user,service,amount,reason,reference,address=None):
     if amount<=GAS:return None
     route=c.execute('SELECT address FROM yidt_routes WHERE service=? AND reference=? AND user=?',(service,str(reference),user)).fetchone()
     target=address or (route['address'] if route else bound_address(c,user,service))
-    return transfer(c,OFFICIAL,target,amount,'payout',str(reference),reason)
+    source=service_address(c,service)
+    if service in ('parachute','doudizhu') and int(wallet(c,source)['balance'])<amount:raise PoolInsufficient()
+    return transfer(c,source,target,amount,'payout',str(reference),reason,gas_included=service in ('parachute','doudizhu'))
 
 def pin_ok(c,user,pin):
     r=c.execute('SELECT * FROM yidt_pins WHERE user=?',(user,)).fetchone()
@@ -258,7 +432,7 @@ def escrow_set(c,service,reference,user,address,value):
     c.execute('INSERT INTO yidt_meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,str((int(row[0]) if row else 0)+value-before)))
     c.execute('INSERT INTO yidt_escrow VALUES(?,?,?,?,?) ON CONFLICT(service,reference,user) DO UPDATE SET address=excluded.address,units=excluded.units',(service,reference,user,address,str(value)))
 
-def verify_chain(c):
+def verify_chain(c,include_blocks=True):
     previous='0'*64;balances={}
     for r in c.execute('SELECT * FROM yidt_transactions ORDER BY id'):
         d={k:r[k] for k in ('previous','created','source','destination','amount','debit','credit','gas','kind','reference','note')}
@@ -274,12 +448,16 @@ def verify_chain(c):
     for r in c.execute('SELECT address,balance FROM yidt_wallets'):
         if balances.get(r['address'],0)!=int(r['balance']) or int(r['balance'])<0:raise Error('钱包余额校验失败')
     if sum(balances.values())!=SUPPLY:raise Error('总量不符')
+    if include_blocks:verify_blocks(c)
     return previous
 
 def migrate():
     with connect() as c:
         c.execute('BEGIN IMMEDIATE');init(c)
-        if c.execute("SELECT 1 FROM yidt_meta WHERE key='migrated'").fetchone():return verify_chain(c)
+        if c.execute("SELECT 1 FROM yidt_meta WHERE key='migrated'").fetchone():
+            verify_chain(c,include_blocks=False);migrate_blocks(c);verify_blocks(c)
+            init_parachute_pool(c)
+            return verify_chain(c)
         c.execute('INSERT INTO yidt_wallets(address,balance,created) VALUES(?,?,?)',(OFFICIAL,'0',stamp()))
         _record(c,None,OFFICIAL,SUPPLY,0,SUPPLY,0,'genesis',None,'YIDT fixed supply',{OFFICIAL:SUPPLY})
         with sqlite3.connect(ACCOUNT_DB) as ac:users=[r[0] for r in ac.execute('SELECT username FROM users')]
@@ -291,6 +469,7 @@ def migrate():
             if old and old['last_checkin']:
                 c.execute('INSERT INTO yidt_daily(user,last_day,streak) VALUES(?,?,?)',(user,old['last_checkin'][:10],old['streak']))
         c.execute("INSERT INTO yidt_meta VALUES('migrated',?)",(stamp(),))
+        init_parachute_pool(c)
         return verify_chain(c)
 
 if __name__=='__main__':print(migrate())

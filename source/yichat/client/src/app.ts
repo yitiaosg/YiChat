@@ -11,10 +11,13 @@ export function appCall<T=any>(method:string,args:Record<string,unknown>={}):Pro
  if(!port)return Promise.reject(Error('此功能仅在 YiChat App 中提供'));
  return new Promise((resolve,reject)=>{const id=String(++serial),timer=setTimeout(()=>{pending.delete(id);reject(Error('App 操作已超时，请重试'))},600000);pending.set(id,{resolve,reject,timer});port.postMessage(JSON.stringify({id,method,args}))});
 }
-export async function appSave(blob:Blob,name:string){
+async function appTransfer(blob:Blob,name:string,finish:string,url?:string){
  const {transfer}=await appCall('saveStart',{name,mime:blob.type||'application/octet-stream',bytes:blob.size});
  try{
   for(let offset=0;offset<blob.size;offset+=49152){const bytes=new Uint8Array(await blob.slice(offset,offset+49152).arrayBuffer());const data=btoa(String.fromCharCode(...bytes));await appCall('saveChunk',{transfer,data})}
-  const result=await appCall('saveFinish',{transfer});if(result?.cancelled)throw new DOMException('已取消保存','AbortError');
+  const result=await appCall(finish,{transfer,...(url?{url}:{})});if(result?.cancelled)throw new DOMException('已取消保存','AbortError');
  }catch(e){await appCall('saveCancel',{transfer}).catch(()=>{});throw e}
 }
+
+export const appSave=(blob:Blob,name:string)=>appTransfer(blob,name,'saveFinish');
+export const appShare=(blob:Blob,name:string,url:string)=>appTransfer(blob,name,'shareFinish',url);
