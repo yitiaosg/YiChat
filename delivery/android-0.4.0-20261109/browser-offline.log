@@ -1,0 +1,2 @@
+PASS actual main cold SDK cache rebuilds room+packets and original transfer/gift with zero API calls
+PASS standalone decrypts and previews package locally

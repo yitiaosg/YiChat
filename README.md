@@ -94,4 +94,4 @@ export YICHAT_FIREBASE_CONFIG=/private/path/google-services.json
 
 0.3.10 / code 18 修正主题色Logo图形，见 [0.3.10记录](PRODUCTION-0.3.10.md)。
 
-最新安装包为 0.3.14 / code 22，自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。
+历史 0.3.14 的自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。当前 0.4.0 的部署和完整测试记录见 [0.4.0记录](PRODUCTION-0.4.0.md)。
