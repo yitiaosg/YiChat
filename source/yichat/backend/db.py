@@ -68,8 +68,8 @@ def migrate(settings):
         c.executescript(SCHEMA)
         # Existing rooms really are encrypted. Preserve history and crypto state.
         c.execute("INSERT OR IGNORE INTO room_modes SELECT room,CASE WHEN kind='direct' THEN 'direct' ELSE 'legacy_encrypted' END,0 FROM rooms")
-        c.execute('UPDATE rooms SET days=30')
-        c.execute('UPDATE files SET expires=max(expires,(CAST(completed/86400 AS INTEGER)+31)*86400)')
+        c.execute('UPDATE rooms SET days=?',(7 if settings.material_protocol else 30,))
+        if not settings.material_protocol:c.execute('UPDATE files SET expires=max(expires,(CAST(completed/86400 AS INTEGER)+31)*86400)')
         from . import groups,group_avatars,record_audit,conversations,direct,push,uploads
         c.executescript(groups.SCHEMA)
         c.executescript(group_avatars.SCHEMA)
@@ -83,6 +83,8 @@ def migrate(settings):
         c.executescript(uploads.SCHEMA)
         from . import open_api,webpush
         c.executescript(open_api.SCHEMA)
+        from . import materials,day_packets,protocol_retention
+        c.executescript(materials.SCHEMA+day_packets.SCHEMA+protocol_retention.SCHEMA)
         from . import sharing,server_messages
         c.executescript(sharing.SCHEMA+server_messages.SCHEMA)
         from . import public_records

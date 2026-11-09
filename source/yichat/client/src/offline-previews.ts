@@ -13,4 +13,7 @@ export async function withOfflinePreview<T>(room:string,resource:string,load:()=
   throw e;
  }
 }
-export const loadRecord=(hash:string)=>withOfflinePreview('', 'record:'+hash,()=>requests.api('/api/public-records/'+path(hash)));
+export async function loadRecord(hash:string){
+ if(isApp){const local=await appCall<any>('messagePreview',{room:'',resource:'record:'+hash}).catch(()=>null);if(local?.canonical){const {verifyRecord}=await import('./record-model');await verifyRecord(hash,local.canonical);return local}}
+ return withOfflinePreview('', 'record:'+hash,()=>requests.api('/api/public-records/'+path(hash)));
+}

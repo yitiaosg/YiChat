@@ -115,6 +115,7 @@ class MainActivity : ComponentActivity() {
         WebViewCompat.addWebMessageListener(web,"YiChatApp",setOf(WebRoutes.ORIGIN)) { _,message,origin,mainFrame,proxy ->
             if(mainFrame && origin.toString().trimEnd('/')==WebRoutes.ORIGIN) receive(message.data,proxy)
         }
+        graph.protocolStore.onDayChanged={state->val token=graph.store.account?.token;web.post{if(graph.store.account?.token==token)web.evaluateJavascript("window.dispatchEvent(new CustomEvent('yc:packet-state',{detail:"+state.toString()+"}))",null)}}
         web.webViewClient=object:WebViewClient() {
             override fun shouldInterceptRequest(view:WebView,request:WebResourceRequest):WebResourceResponse? {
                 if(request.method!="GET")return null
@@ -176,7 +177,7 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while(isActive) {
                     withContext(Dispatchers.IO) {
-                        runCatching { graph.restore();if(graph.auth.account!=null) { if(online()) { graph.history.catchUp();graph.history.exchange() };graph.backup.saveInternal() } }
+                        runCatching { graph.restore();if(graph.auth.account!=null) { if(online()) { graph.history.catchUp();graph.history.exchange();graph.protocol.sync() };graph.backup.saveInternal() } }
                     }
                     delay(60000)
                 }
@@ -285,7 +286,25 @@ class MainActivity : ComponentActivity() {
             try {
                 val args=data.o("args")
                 when(data.s("method")) {
-                    "messagePreview" -> respond(reply,withContext(Dispatchers.IO){graph.recordFiles.previews.read(args.s("room"),args.s("resource"))?:JsonNull})
+                    "protocolBootstrap" -> respond(reply,withContext(Dispatchers.IO){graph.protocol.bootstrap()})
+                    "protocolUiSave" -> {withContext(Dispatchers.IO){graph.protocol.saveUi(args)};respond(reply)}
+                    "materialRead" -> respond(reply,withContext(Dispatchers.IO){graph.messageMaterials.read(args.s("event"))?:JsonNull})
+                    "materialEnsure" -> respond(reply,withContext(Dispatchers.IO){graph.messageMaterials.ensure(args.s("event"))})
+                    "materialSave" -> respond(reply,withContext(Dispatchers.IO){graph.messageMaterials.save(buildJsonObject{put("meta",args.o("meta"));put("canonical",args.s("canonical"))})})
+                    "protocolCheckDay" -> {val value=withContext(Dispatchers.IO){graph.dayPackets.checkDay(args.s("room"),args.s("day"))};respond(reply,value);web.evaluateJavascript("window.dispatchEvent(new Event('yc:packet-updated'))",null)}
+                    "protocolDay" -> respond(reply,withContext(Dispatchers.IO){graph.dayPackets.collect(args.s("room"),args.s("day"),args.b("include_data"))})
+                    "packetImportResolve" -> {val value=withContext(Dispatchers.IO){graph.dayPackets.resolve(args.s("import"),args.s("room"),args.s("day"),args.s("choice"),args.b("confirmed"))};respond(reply,value);web.evaluateJavascript("window.dispatchEvent(new Event('yc:packet-updated'))",null)}
+                    "packetExport" -> {
+                        require(saving==null&&downloads.isEmpty()){"请先完成当前下载"}
+                        val file=withContext(Dispatchers.IO){val bundle=graph.dayPackets.export(args.a("rooms").map{it.jsonPrimitive.content},args.s("start"),args.s("end"));val bytes=DataPackageCodec.encode(bundle,args.s("password"));val dir=File(cacheDir,"web-downloads").apply{mkdirs()};File(dir,UUID.randomUUID().toString()).apply{writeBytes(bytes)}}
+                        val d=Download(file,"YiChat-${args.s("start")}-${args.s("end")}.ycp","application/octet-stream",file.length());saving=d to reply
+                        saveDocument.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(d.mime).putExtra(Intent.EXTRA_TITLE,d.name))
+                    }
+                    "packetImportFinish" -> {
+                        val d=requireNotNull(downloads.remove(args.s("transfer")));require(d.file.length()==d.expected){"数据包传输尚未完成"}
+                        try{val plan=withContext(Dispatchers.IO){graph.dayPackets.inspect(DataPackageCodec.decode(d.file.readBytes(),args.s("password")))};respond(reply,plan);web.evaluateJavascript("window.dispatchEvent(new Event('yc:packet-updated'))",null)}finally{d.file.delete()}
+                    }
+                    "messagePreview" -> respond(reply,withContext(Dispatchers.IO){(if(args.s("resource").startsWith("record:"))graph.protocolStore.get("public-record|"+args.s("resource").removePrefix("record:")) else null)?:graph.recordFiles.previews.read(args.s("room"),args.s("resource"))?:JsonNull})
                     "recordFileAvailable" -> respond(reply,buildJsonObject { put("available",graph.recordFiles.available(args.s("id"))) })
                     "systemThemeColor" -> {
                         val color=if(android.os.Build.VERSION.SDK_INT>=31) getColor(android.R.color.system_accent1_500) else 0xff1479b8.toInt()
@@ -317,7 +336,7 @@ class MainActivity : ComponentActivity() {
                     "session" -> {
                         val a=withContext(Dispatchers.IO) { graph.restore() }
                         respond(reply,buildJsonObject { put("online",online());put("version",BuildConfig.VERSION_NAME);put("capabilities",buildJsonObject{put("notifications",true);put("backgroundNotifications",true)});put("pendingLogout",graph.vault.get("web.pending-logout")!=null);put("session",a?.let { buildJsonObject {
-                            put("uid",it.uid);put("user",it.user);put("mxid",it.mxid);put("device",it.device);put("device_id",it.device);put("token",it.token)
+                            put("uid",it.uid);put("user",it.user);put("mxid",it.mxid);put("device",it.device);put("device_id",it.device);put("token",it.token);put("material_protocol",2)
                         } } ?: JsonNull) })
                     }
                     "login" -> { login(!args.b("newDevice"));respond(reply) }
@@ -343,10 +362,10 @@ class MainActivity : ComponentActivity() {
                         require(days in 1..3650 && password.length in 12..1024) { "请输入1至3650个整天和至少12字符的独立口令" }
                         exportConfig=ExportConfig(requireNotNull(graph.auth.account).storage,password,days,reply);directoryPicker.launch(null)
                     }
-                    "saveStart" -> {
+                    "saveStart", "packetImportStart" -> {
                         require(downloads.isEmpty() && saving==null) { "请先完成当前下载" }
                         val bytes=args["bytes"]?.jsonPrimitive?.longOrNull ?: -1
-                        require(bytes in 0..100000000) { "实际下载文件上限100MB" }
+                        require(bytes in 0..(if(data.s("method")=="packetImportStart")128L*1024*1024 else 100000000L)) { "文件超出本机传输上限" }
                         val name=args.s("name").replace(Regex("[\\\\/\\p{Cntrl}]"),"_").take(120).ifBlank { "YiChat-download" }
                         val mime=args.s("mime").takeIf { it.matches(Regex("[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+")) } ?: "application/octet-stream"
                         val key=UUID.randomUUID().toString();val dir=File(cacheDir,"web-downloads").apply { mkdirs() }

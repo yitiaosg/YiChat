@@ -142,6 +142,9 @@ async def purge_history(s,http,room,day,now_ms):
 
 
 async def run_once(s):
+    if s.material_protocol:
+        from .protocol_retention import run_once as protocol_retention
+        return await protocol_retention(s)
     # A recently healthy PG checkpoint alone cannot attest that a restarted
     # source has finished rollback/recovery checks. Require the live module too.
     async with httpx.AsyncClient(headers={'Authorization':'Bearer '+s.admin_token},trust_env=False,timeout=10) as probe:

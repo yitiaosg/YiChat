@@ -48,6 +48,40 @@ class IngestionFenceResource(DirectServeJsonResource):
         return 200,{'sequence':sequence}
 
 
+class MaterialExpiryResource(DirectServeJsonResource):
+    def __init__(self,module):
+        super().__init__(clock=module.api._hs.get_clock());self.module=module
+    async def _async_render_POST(self,request):
+        import hmac
+        from synapse.http.servlet import parse_json_object_from_request
+        auth=request.getHeader('Authorization') or ''
+        if not self.module.s.admin_token or not hmac.compare_digest(auth,'Bearer '+self.module.s.admin_token):raise SynapseError(403,'Service authentication required')
+        data=parse_json_object_from_request(request);ids=data.get('events')
+        if not isinstance(ids,list) or not 1<=len(ids)<=100 or any(not isinstance(e,str) or not e.startswith('$') for e in ids):raise SynapseError(400,'Invalid expiry batch')
+        result=[]
+        for eid in ids:
+            with connect(self.module.s.db) as c:job=c.execute("SELECT * FROM protocol_expiry_jobs WHERE event=? AND state='pending'",(eid,)).fetchone()
+            if not job:continue
+            event=await self.module.api._store.get_event(eid,allow_none=True)
+            if event:
+                if event.is_state() or event.room_id!=job['room'] or event.type not in ('m.room.message','m.room.redaction'):raise SynapseError(403,'Only staged timeline bodies may expire')
+                if job['kind']=='expiry':
+                    with connect(self.module.s.db) as c:
+                        receipt=c.execute('SELECT received_ms FROM history_receipts WHERE event_id=?',(eid,)).fetchone()
+                        sealed=receipt and c.execute('SELECT 1 FROM packet_day_roots WHERE room=? AND day=?',(job['room'],str(archive.utcday(receipt['received_ms'])))).fetchone()
+                    if not receipt or not sealed or receipt['received_ms']+7*86400000>int(time.time()*1000):raise SynapseError(403,'Only sealed seven-day-expired messages may expire')
+                if job['kind']=='legacy':
+                    from .materials import legacy_url,KEY
+                    content=unfreeze(event.content)
+                    if content.get(KEY) or content.get('msgtype') in ('m.image','m.file','m.video','m.audio') or not legacy_url(content):raise SynapseError(403,'Legacy migration cannot expire this event')
+                # Pinned Synapse's own expiry primitive censors event JSON and
+                # invalidates caches/replication; no direct source-table writes.
+                await self.module.api._store.expire_event(eid)
+            with transaction(self.module.s.db) as c:c.execute("UPDATE protocol_expiry_jobs SET state='censored' WHERE event=?",(eid,))
+            result.append(eid)
+        return 200,{'expired':result}
+
+
 class YiChatModule:
     @staticmethod
     def parse_config(config):return config
@@ -61,6 +95,7 @@ class YiChatModule:
         self.instance=module_api._hs.get_instance_name()
         self.initialized_rooms=set()
         module_api.register_web_resource('/_synapse/client/yichat/fence',IngestionFenceResource(self))
+        module_api.register_web_resource('/_synapse/client/yichat/material-expiry',MaterialExpiryResource(self))
         with transaction(self.s.ledger) as c:
             c.execute('INSERT INTO yichat_membership_workers VALUES(?,?) ON CONFLICT(instance) DO UPDATE SET boot=excluded.boot',(self.instance,self.boot))
         module_api.register_third_party_rules_callbacks(
@@ -134,6 +169,12 @@ class YiChatModule:
                 if info['kind']=='group' and event.is_state() and event.type in ('m.room.power_levels','m.room.name','m.room.topic','m.room.avatar') and not control:
                     with connect(self.s.db) as c:rank=groups.role(c,event.room_id,event.sender)
                     if event.type=='m.room.avatar' or (event.type=='m.room.power_levels' and ('m.room.power_levels','') in state) or rank not in ('owner','admin'):raise HTTPException(403,'请通过群管理接口修改权限或群资料')
+                if self.s.material_protocol and event.type=='m.room.message':
+                    from . import materials,server_messages,api_grants
+                    content=unfreeze(event.content)
+                    if materials.recognized(content):raise HTTPException(403,'特殊消息和文件必须通过服务器分享接口发送')
+                    if content.get(materials.KEY) and not (server_messages.granted(self.s,event.room_id,event.sender,event.type,content) or api_grants.granted(self.s,event.room_id,event.sender,event.type,content)):
+                        raise HTTPException(403,'原始消息必须由服务器发布')
                 policy.validate_event(self.s,info,event.type,unfreeze(event.content),event.sender,event.state_key if event.is_state() else None,control)
                 if event.type in ('m.room.message','m.room.encrypted'):history.business_reference(self.s,event.room_id,event.sender,unfreeze(event.content))
                 if event.type=='m.room.redaction':await self.validate_redaction(event)
@@ -170,7 +211,9 @@ class YiChatModule:
             txn.execute('SELECT received_ts FROM events WHERE event_id=?',(target,))
             row=txn.fetchone();return row[0] if row else None
         at=await self.api.run_db_interaction('yichat_redaction_accept_time',accepted)
-        if at is None or not 0<=int(time.time()*1000)-at<=300000:
+        now=int(time.time()*1000)
+        day_final=archive.day_bounds(archive.utcday(at))[1]+300000 if at is not None else 0
+        if at is None or now>=day_final or not 0<=now-at<=300000:
             raise HTTPException(403,{'code':'YICHAT_REDACTION_WINDOW','error':'消息只能在发送后5分钟内撤回'})
 
     def check_archive(self):
@@ -270,7 +313,8 @@ class YiChatModule:
             safe=generator.get_current_token()
             with archive.connect(self.s.archive_ingest) as c:
                 first=c.execute('SELECT min(day) d FROM (SELECT day FROM events UNION SELECT day FROM attachments) a').fetchone()['d']
-            cursor=await defer_to_thread(reactor,archive.reconcile_source_position,self.s.archive_ingest,allocated)
+            with connect(self.s.db) as c:accepted_floor=c.execute('SELECT coalesce(max(sequence),0) FROM history_receipts').fetchone()[0] if self.s.material_protocol else 0
+            cursor=await defer_to_thread(reactor,archive.reconcile_source_position,self.s.archive_ingest,allocated,accepted_floor)
             def fetch(txn):
                 txn.execute('SELECT e.event_id,e.room_id,e.stream_ordering,e.received_ts,j.json FROM events e JOIN event_json j ON j.event_id=e.event_id WHERE e.stream_ordering>? AND e.stream_ordering<=? AND e.outlier=0 AND e.rejection_reason IS NULL ORDER BY e.stream_ordering LIMIT 1000',(cursor,safe))
                 return list(txn.fetchall())

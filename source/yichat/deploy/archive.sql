@@ -58,4 +58,4 @@ GRANT INSERT,UPDATE ON checkpoints TO yc_ingest;
 GRANT INSERT ON archives,archive_audit TO yc_seal;
 GRANT INSERT,UPDATE ON archive_jobs TO yc_seal;
 GRANT UPDATE ON archive_audit TO yc_seal,yc_cleanup;
-GRANT DELETE ON events,attachments TO yc_cleanup;
+GRANT DELETE ON events,attachments,attachment_references TO yc_cleanup;

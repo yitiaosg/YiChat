@@ -268,7 +268,7 @@ GET /open/v1/files/{attachment_id}
 - **每次请求只下载一个文件**，计入一次限速。需要多个文件时逐个请求。
 - 响应是文件的原始字节：`Content-Type: application/octet-stream`，`Content-Disposition: attachment`，`Content-Length` 为文件大小。文件名和原始类型请使用 `attachment.name` 和 `attachment.mimetype`。
 - 你可以下载：自己上传的文件，以及你作为成员期间看到的消息中的文件。
-- 文件按 YiChat 的 30 天规则保存，到期后返回 `410`。服务器正在同步时返回 `503`，按 `Retry-After` 重试。
+- 文件按 YiChat 的 7 天规则保存，到期后返回 `410`。服务器正在同步时返回 `503`，按 `Retry-After` 重试。
 
 ```bash
 curl -H "Authorization: Bearer $YICHAT_KEY" -o cat.png \
@@ -361,7 +361,7 @@ curl -H "Authorization: Bearer $YICHAT_KEY" -H 'Content-Type: application/pdf' \
   "https://chat.yitiao.org/open/v1/conversations/$ID/files?name=report.pdf&type=file"
 ```
 
-上传较大的文件需要一些时间（上传速度约 500 KB/秒），请把客户端超时设得足够长。上传完成但发送失败时（例如中途被禁言），文件不会出现在会话中，会在 30 天后清理。
+上传较大的文件需要一些时间（上传速度约 500 KB/秒），请把客户端超时设得足够长。上传完成但发送失败时（例如中途被禁言），文件不会出现在会话中，会在 7 天后清理。
 
 ### 发送规则
 
@@ -561,7 +561,7 @@ Authorization: Bearer yck_…
 
 ## 数据范围与隐私
 
-- **只能读取服务器上保存的消息**：附件和消息正文按 YiChat 的 30 天规则保存，超过保存期的消息查询不到，文件也无法下载。
+- **只能读取服务器上保存的消息**：附件和消息正文按 YiChat 的 7 天规则保存，超过保存期的消息查询不到，文件也无法下载。
 - **成员期间**：只能看到你作为成员期间的消息和文件，与在 App 中能看到的内容一致。
 - **旧版加密会话**：服务器无法读取正文，只返回 `encrypted: true`，也不能发送。
 - **撤回**：已撤回的消息只返回 `redacted: true`，不返回内容。用“读写”Key 可以撤回消息，规则见[撤回消息](#撤回消息)。
@@ -828,3 +828,17 @@ websocat -H "Authorization: Bearer $YICHAT_KEY" \
 ```
 
 `allowed` 是会话当前是否允许分享，`blocked_by_me` 是当前账户设置，`can_set` 是该账户是否可修改。私聊及当前成员不超过五人的群聊，每个成员都可设置；只要一个成员开启，所有人都不能分享图片或合并转发。超过五人的群聊仅群主可设置，其他成员修改返回403。关闭自己的设置后，其他成员仍可能使 `allowed` 为 false。界面名称统一为“禁止分享”；逐条转发仍遵守原有规则。
+
+
+## 原始特殊消息 v2（0.4.0）
+
+读取消息新增 `material`，同时在 `content.org.yitiao.material` 中返回原件描述：`{version:2,id,kind,sha256}`。这里的 `sha256` 是原始 JSON 文件的摘要，最终含服务器分享时间的单条摘要须通过下述核验接口获取。消息本身不再是依赖外站实时内容的 URL 预览；卡片、赠卡、游戏战绩、转账、红包、收款和聊天记录保存原始数据，七天后原件与单条摘要一起删除，整日摘要保留。
+
+- `POST /open/v1/conversations/{room}/share`：读写密钥；JSON 为 `{"url":"白名单站内分享 URL","txn_id":"幂等键"}`，也可用 `content` 替代 `url`。服务器捕获原件并以本人身份发布，返回 `event_id`。普通发消息接口粘贴支持的 URL、原有上传文件/照片接口也自动走原件模式。已有引用消息字段保持支持。
+- `POST /open/v1/materials/check`：读取权限；`{"messages":[{"event_id":"$id","payload_sha256":"本地原件SHA256","sha256":"本地最终单条摘要"}]}`，每次1～100条。返回 `ok/replace/expired`、服务器时间摘要元数据及必要时的 `download`。内容一致不会重复分发原件。
+- `GET /open/v1/materials/{id}?event={event_id}`：返回原始规范 JSON 字节，纳入原有上传/下载共用1次/秒预算。
+- `POST /open/v1/materials/{event_id}/confirm`：客户端重新计算实际原件的 `payload_sha256` 以及含分享时间的 `sha256`，服务器返回 `ok/mismatch`。
+
+上述接口使用相同 Bearer API 密钥、账户限速、密钥作用域及历史会话权限。请求键必须在重试时复用，不能用于不同内容。客户端不能伪造 `org.yitiao.material`；原件描述必须由服务器生成。
+
+整日 GMT 摘要、离线导出/导入、网页数据包合并与连续最多7日实际内容核验规范见 [MATERIAL-PROTOCOL-V2.md](MATERIAL-PROTOCOL-V2.md)。网页独立工具地址为 `https://chat.yitiao.org/data-packages`。

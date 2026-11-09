@@ -1,0 +1,99 @@
+{
+  "packets": {
+    "text": {
+      "day": "2026-11-08",
+      "format": "yichat-day-packet-v2",
+      "immutable_at": "1794182700000",
+      "room_id": "!r",
+      "version": "2",
+      "complete": true,
+      "entries": [
+        {
+          "event_id": "$text",
+          "room_id": "!r",
+          "sender": "@a:x",
+          "type": "m.room.message",
+          "received_ms": "1794096500000",
+          "sequence": "1",
+          "raw": "{\"content\":{\"body\":\"原始文字 👋 1.0\",\"msgtype\":\"m.text\",\"test_numeric\":1.0},\"event_id\":\"$text\",\"origin_server_ts\":1794096500000,\"room_id\":\"!r\",\"sender\":\"@a:x\",\"type\":\"m.room.message\"}\n",
+          "files": []
+        }
+      ]
+    },
+    "empty": {
+      "day": "2026-11-08",
+      "format": "yichat-day-packet-v2",
+      "immutable_at": "1794182700000",
+      "room_id": "!r",
+      "version": "2",
+      "complete": true,
+      "entries": []
+    },
+    "media": {
+      "day": "2026-11-08",
+      "format": "yichat-day-packet-v2",
+      "immutable_at": "1794182700000",
+      "room_id": "!r",
+      "version": "2",
+      "complete": true,
+      "entries": [
+        {
+          "event_id": "$text",
+          "room_id": "!r",
+          "sender": "@a:x",
+          "type": "m.room.message",
+          "received_ms": "1794096500000",
+          "sequence": "1",
+          "raw": "{\"content\":{\"body\":\"a.png\",\"msgtype\":\"m.image\",\"url\":\"mxc://chat.yitiao.org/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"event_id\":\"$text\",\"origin_server_ts\":1794096500000,\"room_id\":\"!r\",\"sender\":\"@a:x\",\"type\":\"m.room.message\"}\n",
+          "files": [
+            {
+              "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": "18",
+              "sha256": "858eebaaf1c53640e171d71b97ba7fdfb186ccd586599520929d65631cdfc8c5",
+              "data": "YWN0dWFsIGltYWdlIGJ5dGVz"
+            }
+          ]
+        }
+      ]
+    },
+    "special": {
+      "day": "2026-11-08",
+      "format": "yichat-day-packet-v2",
+      "immutable_at": "1794182700000",
+      "room_id": "!r",
+      "version": "2",
+      "complete": true,
+      "entries": [
+        {
+          "event_id": "$card",
+          "room_id": "!r",
+          "sender": "@a:x",
+          "type": "m.room.message",
+          "received_ms": "1794096500000",
+          "sequence": "1",
+          "raw": "{\"content\":{\"body\":\"分享闪卡\",\"msgtype\":\"m.text\",\"org.yitiao.material\":{\"id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"kind\":\"share\",\"sha256\":\"a9d46bb6960617183a367d66ecccd2091b008c46ed740961d18c778498470fd2\",\"version\":2}},\"event_id\":\"$card\",\"origin_server_ts\":1794096500000,\"room_id\":\"!r\",\"sender\":\"@a:x\",\"type\":\"m.room.message\"}\n",
+          "files": [],
+          "material": {
+            "event_id": "$card",
+            "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "room_id": "!r",
+            "sender": "@a:x",
+            "shared_at": "1794096500000",
+            "payload_sha256": "a9d46bb6960617183a367d66ecccd2091b008c46ed740961d18c778498470fd2",
+            "sha256": "104befa407c0be0e9accdea7e8b29840ed4f633f2dfcb93b29924d45c608cfd4",
+            "finalized": true,
+            "files": [],
+            "kind": "share",
+            "canonical": "{\"content\":{\"body\":\"原始闪卡\",\"design\":{\"layers\":[],\"mask\":null,\"width_mm\":85.6},\"msgtype\":\"m.text\"},\"files\":[],\"kind\":\"share\",\"previews\":[{\"data\":{\"name\":\"原始闪卡\",\"size\":1.0},\"type\":\"card\"}],\"version\":2}\n"
+          }
+        }
+      ]
+    }
+  },
+  "sha256": {
+    "text": "2380273f302ad7a6339732e4a7ea23a5aee381fc20f63063ffe28dd01460f591",
+    "empty": "147440f304903782c4e5916a382fe23a49405bda55f92d61df61df9391715dd5",
+    "media": "e458000f17796cdeefcbe385a65738b1807e7339248cafa23c700c28137bdac3",
+    "special": "fbbe257e02ab29f5f75ced5a14fe2cd66dd9fe036c7d84bea03fbae631fc8bd5"
+  }
+}

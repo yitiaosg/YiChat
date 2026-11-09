@@ -43,7 +43,7 @@ export function Business({room,info,close}:{room:string;info:RoomInfo;close:()=>
   const result=await requests.api('/api/orders',{...op.payload,key:op.key});op.result=result;op.state='created';await chat.saveBusiness();if(result.internal){await chat.announceOrder(result);close()}else setOrder(result);setConfirm(false);
  }
  async function announce(op=operation){
-  await chat.send(op.room,giftMessage(op),[],op.txn);op.state='announced';await chat.saveBusiness();close();
+  if(!op.result?.server_published)await chat.send(op.room,giftMessage(op),[],op.txn);op.state='announced';await chat.saveBusiness();close();
  }
  async function gift(){if(operation?.type==='gift'){if(!operation.result){try{operation.result=await requests.api('/api/cards/gifts/by-key/'+path(operation.key));if(operation.result.room!==operation.payload.room||operation.result.instance!==operation.payload.instance)throw Error('原赠送请求与结果不匹配')}catch(e:any){if(e.status!==404)throw e;operation.result=await requests.api('/api/cards/gifts',{...operation.payload,key:operation.key})}operation.state='transferred';await chat.saveBusiness()}setConfirm(false);await announce(operation);return}if(!card||!recipient)throw Error('请选择卡片和接收者');let op=operation;if(!op){op={type:'gift',room,key:crypto.randomUUID(),txn:crypto.randomUUID(),payload:{room,instance:card.id,recipient},card:{name:card.name,cid:card.cid},state:'pending'};chat.business.push(op);setOperation(op);await chat.saveBusiness()}
   if(op.type!=='gift')throw Error('先处理上次订单');if(!op.result){op.result=await requests.api('/api/cards/gifts',{...op.payload,key:op.key});op.state='transferred';await chat.saveBusiness()}setConfirm(false);await announce(op);

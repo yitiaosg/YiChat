@@ -69,7 +69,7 @@ def synapse(env,tmp_path):
         if os.environ.get('YICHAT_NOTIFICATION_PAGING_TEST')=='1':config['rc_room_creation']={'per_second':50,'burst_count':100}
         config['modules']=[{'module':'backend.synapse_module.YiChatModule','config':{
             'root':str(s.root),'site':str(s.site),'synapse':s.synapse,'session_key':s.session_key,'admin_token':s.admin_token,
-            'archive_ingest':s.archive_ingest,'archive_reader':s.archive_reader}}]
+            'archive_ingest':s.archive_ingest,'archive_reader':s.archive_reader,'material_protocol':s.material_protocol}}]
         process=start()
         yield s,f,u,h,process,logpath,start,stop
     finally:
@@ -128,10 +128,10 @@ def test_native_matrix_enforces_policy_and_durable_recovery(synapse):
         assert normal.status_code==200,normal.text
         withdrawn=h.put(s.synapse+gp+'/redact/'+quote(normal.json()['event_id'],safe='')+'/redaction-normal-action',headers=raw,json={})
         assert withdrawn.status_code==200,withdrawn.text
+        from test_chat_wallet import deposit
+        deposit(s,app.state.funds,u)
         order=c.post('/api/orders',json={'room':gid,'amount':'0.01','count':1,'title':'immutable order','key':'native-order-redaction-test'})
         assert order.status_code==200,order.text
-        with connect(s.ledger) as db:db.execute("UPDATE yidt_intents SET state='approved' WHERE id=(SELECT intent FROM yichat_orders WHERE id=?)",(order.json()['id'],))
-        funded=c.post('/api/orders/'+order.json()['id']+'/fund',json={});assert funded.status_code==200,funded.text
         business=h.put(s.synapse+gp+'/send/m.room.message/business',headers=raw,json={'msgtype':'m.text','body':'https://chat.yitiao.org/orders/'+order.json()['id'],'org.yitiao.business':{'kind':'order','id':order.json()['id']}})
         assert business.status_code==200,business.text
         refused=h.put(s.synapse+gp+'/redact/'+quote(business.json()['event_id'],safe='')+'/redact-business-action',headers=raw,json={})

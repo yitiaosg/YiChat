@@ -9,14 +9,14 @@ CREATE TABLE IF NOT EXISTS conversation_entries(subject TEXT NOT NULL,room TEXT 
 CREATE TABLE IF NOT EXISTS retired_rooms(room TEXT PRIMARY KEY,retired_ms INTEGER NOT NULL);'''
 
 def deleted(c,subject,room):
-    return bool(c.execute("SELECT 1 FROM conversation_entries e WHERE subject=? AND room=? AND deleted=1 AND NOT EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=e.room AND h.sequence>e.hidden_sequence AND h.type IN ('m.room.message','m.room.encrypted'))",(subject,room)).fetchone())
+    return bool(c.execute("SELECT 1 FROM conversation_entries e WHERE subject=? AND room=? AND deleted=1 AND NOT EXISTS(SELECT 1 FROM history_receipts h WHERE h.room=e.room AND h.sequence>e.hidden_sequence AND h.sha256<>'' AND h.type IN ('m.room.message','m.room.encrypted'))",(subject,room)).fetchone())
 
 def entry_preference(c,subject,room):
     row=c.execute('SELECT room,pinned,archived,muted,read_sequence FROM conversation_preferences WHERE subject=? AND room=?',(subject,room)).fetchone()
     result=dict(row) if row else {'room':room,'pinned':0,'archived':0,'muted':0,'read_sequence':0}
-    read=c.execute("SELECT event_id FROM history_receipts WHERE room=? AND sequence<=? AND type IN ('m.room.message','m.room.encrypted') ORDER BY sequence DESC LIMIT 1",(room,result['read_sequence'])).fetchone()
-    latest=c.execute("SELECT event_id FROM history_receipts WHERE room=? AND type IN ('m.room.message','m.room.encrypted') ORDER BY sequence DESC LIMIT 1",(room,)).fetchone()
-    count=c.execute("SELECT count(*) FROM history_receipts h JOIN identities i ON i.subject=? WHERE h.room=? AND h.sequence>? AND h.sender<>i.mxid AND h.type IN ('m.room.message','m.room.encrypted') AND NOT EXISTS(SELECT 1 FROM history_receipts r WHERE r.room=h.room AND r.redacts=h.event_id)",(subject,room,result['read_sequence'])).fetchone()[0]
+    read=c.execute("SELECT event_id FROM history_receipts WHERE room=? AND sequence<=? AND sha256<>'' AND type IN ('m.room.message','m.room.encrypted') ORDER BY sequence DESC LIMIT 1",(room,result['read_sequence'])).fetchone()
+    latest=c.execute("SELECT event_id FROM history_receipts WHERE room=? AND sha256<>'' AND type IN ('m.room.message','m.room.encrypted') ORDER BY sequence DESC LIMIT 1",(room,)).fetchone()
+    count=c.execute("SELECT count(*) FROM history_receipts h JOIN identities i ON i.subject=? WHERE h.room=? AND h.sequence>? AND h.sender<>i.mxid AND h.sha256<>'' AND h.type IN ('m.room.message','m.room.encrypted') AND NOT EXISTS(SELECT 1 FROM history_receipts r WHERE r.room=h.room AND r.redacts=h.event_id)",(subject,room,result['read_sequence'])).fetchone()[0]
     return result|{'read_event':read[0] if read else None,'latest_event':latest[0] if latest else None,'unread_count':count,'deleted':deleted(c,subject,room)}
 
 async def accepted_fence(app,s):
@@ -49,7 +49,7 @@ def install(app,s,session):
         with transaction(s.db) as c:
             c.execute('INSERT OR IGNORE INTO conversation_preferences(subject,room) VALUES(?,?)',(who['subject'],room))
             if fence is not None:
-                empty=not c.execute("SELECT 1 FROM history_receipts WHERE room=? AND type IN ('m.room.message','m.room.encrypted','m.room.redaction') LIMIT 1",(room,)).fetchone()
+                empty=not c.execute("SELECT 1 FROM history_receipts WHERE room=? AND sha256<>'' AND type IN ('m.room.message','m.room.encrypted','m.room.redaction') LIMIT 1",(room,)).fetchone()
                 c.execute('INSERT INTO conversation_entries(subject,room,deleted,hidden_sequence) VALUES(?,?,?,?) ON CONFLICT(subject,room) DO UPDATE SET deleted=excluded.deleted,hidden_sequence=excluded.hidden_sequence',(who['subject'],room,int(empty),fence))
                 if empty:data['archived']=False
             elif data.get('archived') is False:c.execute('UPDATE conversation_entries SET deleted=0 WHERE subject=? AND room=?',(who['subject'],room))
@@ -89,7 +89,7 @@ def notification_hints(s,who,after):
         if after is None:return {'cursor':str(high),'rooms':[]}
         if not 0<=after<=9223372036854775807:fail(400,'无效通知游标')
         if after>high:fail(503,'通知存证游标尚未追平，请稍后重试')
-        records=c.execute("SELECT h.room,h.event_id event,h.sequence,r.kind FROM history_receipts h JOIN rooms r ON r.room=h.room LEFT JOIN conversation_preferences p ON p.room=h.room AND p.subject=? WHERE h.sequence>? AND h.sender<>? AND h.type IN ('m.room.message','m.room.encrypted') AND h.received_ms>? AND coalesce(p.archived,0)=0 AND coalesce(p.muted,0)=0 AND h.sequence>coalesce(p.read_sequence,0) AND h.redacts IS NULL AND NOT EXISTS(SELECT 1 FROM history_receipts r WHERE r.room=h.room AND r.redacts=h.event_id) ORDER BY h.sequence LIMIT 200",(who['subject'],after,who['mxid'],int((time.time()-86400)*1000))).fetchall()
+        records=c.execute("SELECT h.room,h.event_id event,h.sequence,r.kind FROM history_receipts h JOIN rooms r ON r.room=h.room LEFT JOIN conversation_preferences p ON p.room=h.room AND p.subject=? WHERE h.sequence>? AND h.sender<>? AND h.sha256<>'' AND h.type IN ('m.room.message','m.room.encrypted') AND h.received_ms>? AND coalesce(p.archived,0)=0 AND coalesce(p.muted,0)=0 AND h.sequence>coalesce(p.read_sequence,0) AND h.redacts IS NULL AND NOT EXISTS(SELECT 1 FROM history_receipts r WHERE r.room=h.room AND r.redacts=h.event_id) ORDER BY h.sequence LIMIT 200",(who['subject'],after,who['mxid'],int((time.time()-86400)*1000))).fetchall()
     with connect(s.ledger) as c:
         live={r['room'] for r in c.execute("SELECT room FROM yichat_memberships WHERE mxid=? AND membership='join' AND pending_event IS NULL",(who['mxid'],))}
         ended={r['room'] for r in c.execute('SELECT room FROM yichat_group_lifecycle WHERE dissolved_ms IS NOT NULL')}
@@ -117,7 +117,7 @@ def unread_notification_events(s,who,room,through):
             LEFT JOIN conversation_preferences p ON p.subject=? AND p.room=h.room
             WHERE h.room=? AND h.sequence<=? AND h.sequence>coalesce(p.read_sequence,0)
             AND coalesce(p.muted,0)=0 AND coalesce(p.archived,0)=0
-            AND h.sender<>? AND h.received_ms>? AND h.type IN ('m.room.message','m.room.encrypted')
+            AND h.sender<>? AND h.received_ms>? AND h.sha256<>'' AND h.type IN ('m.room.message','m.room.encrypted')
             AND NOT EXISTS(SELECT 1 FROM history_receipts r WHERE r.room=h.room AND r.redacts=h.event_id)
             ORDER BY h.sequence DESC LIMIT 20""",(who['subject'],room,target['sequence'],who['mxid'],int((time.time()-86400)*1000))).fetchall()
     ids=[r['event_id'] for r in reversed(rows)]

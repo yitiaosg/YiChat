@@ -14,7 +14,7 @@ def load_env(path):
 def main():
     load_env(Path('/etc/yichat/yichat.env'))
     action=sys.argv[1] if len(sys.argv)>1 else 'status'
-    if action=='archive-once':load_env(Path('/etc/yichat/archive-worker.env'))
+    if action in ('archive-once','material-migrate'):load_env(Path('/etc/yichat/archive-worker.env'))
     from .config import Settings
     from .db import migrate,connect
     from .chat_wallet import Funds
@@ -25,6 +25,9 @@ def main():
         migrate(s);policy.migrate_identities(s);f.migrate();migrate_assets(s)
         print('YiChat schema v2 ready; immutable account IDs and original Matrix identities preserved.')
     elif action=='reconcile':print(json.dumps(f.reconcile(),ensure_ascii=False,indent=2))
+    elif action=='material-migrate':
+        from .protocol_retention import run_once
+        print(json.dumps(asyncio.run(run_once(s,migration=True))))
     elif action=='archive-once':
         from .archive_worker import run_once
         asyncio.run(run_once(s));print('Archive worker pass finished; inspect job states and journal for failures.')

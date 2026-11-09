@@ -2,7 +2,7 @@ import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 const origin=process.env.CHAT_TEST_ORIGIN,tokens=JSON.parse(process.env.CHAT_TEST_TOKENS);
-const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,args:['--no-sandbox']});
 const contexts=[],wire=[],errors=[],requests=[],checks=[];
 async function setup(user,app=false){
  const context=await browser.newContext({acceptDownloads:true,...(app?{viewport:{width:412,height:915}}:{})});contexts.push(context);
@@ -85,7 +85,7 @@ try{
  await check('App persists encrypted previews across page closure and offline reopening without refetching',async()=>{
   let app=await setup('alice2',true),previewRequests=0;const context=app.context();
   context.on('request',r=>{if(new URL(r.url()).pathname==='/api/preview')previewRequests++});
-  await app.locator('.room-row').first().click();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline .game-art').evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline canvas.game-art').waitFor();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline .share-card').last().evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline .card-art canvas.yc-canvas').last().waitFor();
+  await app.locator('.room-row').first().click();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline').dispatchEvent('wheel',{deltaY:-1});await app.locator('.timeline .game-art').evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline canvas.game-art').waitFor();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline').dispatchEvent('wheel',{deltaY:-1});await app.locator('.timeline .share-card').last().evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline .card-art canvas.yc-canvas').last().waitFor();
   const stored=await app.evaluate(async()=>{
    const dbs=(await indexedDB.databases()).filter(d=>d.name.startsWith('yc-vault:')&&!d.name.includes('business'));let result=[];
    for(const {name} of dbs){const db=await new Promise(resolve=>{const r=indexedDB.open(name);r.onsuccess=()=>resolve(r.result)});const rows=await new Promise(resolve=>{const r=db.transaction('previews').objectStore('previews').getAll();r.onsuccess=()=>resolve(r.result)});result.push(...rows.map(row=>({encrypted:row.data instanceof ArrayBuffer&&row.iv instanceof Uint8Array,hashed:/^[a-f0-9]{64}$/.test(row.id),plain:JSON.stringify(row).includes('极光纪念卡')})));db.close()}
@@ -95,7 +95,7 @@ try{
   await app.waitForTimeout(1800);await app.screenshot({path:'artifacts/preview-cards-mobile.png',fullPage:true});
   await app.evaluate(()=>localStorage.setItem('test:offline','1'));await app.close();
   const before=previewRequests;app=await context.newPage();app.setDefaultTimeout(25000);app.on('pageerror',e=>errors.push(e.message));
-  await app.goto(origin);await app.locator('.sidebar').waitFor();await app.locator('.room-row').first().click();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline .game-art').evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline canvas.game-art').waitFor();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline .share-card').last().evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline .card-art canvas.yc-canvas').last().waitFor();
+  await app.goto(origin);await app.locator('.sidebar').waitFor();await app.locator('.room-row').first().click();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline').dispatchEvent('wheel',{deltaY:-1});await app.locator('.timeline .game-art').evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline canvas.game-art').waitFor();await app.locator('.timeline').hover();await app.mouse.wheel(0,-200);await app.waitForTimeout(200);await app.locator('.timeline').dispatchEvent('wheel',{deltaY:-1});await app.locator('.timeline .share-card').last().evaluate(node=>node.scrollIntoView({block:'center'}));await app.locator('.timeline .card-art canvas.yc-canvas').last().waitFor();
   assert.equal(previewRequests,before,'reopened App uses encrypted local preview rows');
   await context.route('**/api/preview',async route=>{previewRequests++;await route.fulfill({json:null})});
   await app.locator('.timeline .share-card[data-share-type="card"]').first().getByRole('button',{name:'刷新卡片状态'}).click();

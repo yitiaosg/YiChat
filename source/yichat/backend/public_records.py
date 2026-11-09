@@ -2,7 +2,7 @@
 import hashlib,json,re,time
 from pathlib import Path
 from fastapi import Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse,Response
 from .db import connect,transaction
 from .security import fail
 from . import archive
@@ -116,6 +116,11 @@ def install(app,s):
  async def avatar(h:str,index:int):
   record=public(s,h);items=record['payload']['messages']
   if not 0<=index<len(items):fail(404,'头像不存在')
+  embedded=items[index].get('avatar_data','')
+  if isinstance(embedded,str) and len(embedded)<=180000 and re.fullmatch(r'data:image/jpeg;base64,[A-Za-z0-9+/=]+',embedded):
+   import base64
+   try:return Response(base64.b64decode(embedded.split(',',1)[1],validate=True),media_type='image/jpeg',headers={'Cache-Control':'no-store'})
+   except ValueError:fail(503,'原始头像数据损坏')
   username=items[index].get('username')
   if not username:
    from . import policy

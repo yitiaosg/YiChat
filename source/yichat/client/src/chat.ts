@@ -1,3 +1,7 @@
+import {legacySpecial} from './message-display';
+import {nativeBootstrap,replaceNativeDay} from './native-bootstrap';
+import {gmtDay,immutableAt} from './packet-protocol';
+import {ensureMaterial} from './material-store';
 import {unreadCount} from './unread-count';
 import * as sdk from 'matrix-js-sdk';
 import {MESSAGE_EPOCH,chatStoreScope,clearLegacyChatStores} from './message-policy';
@@ -18,7 +22,7 @@ export class Chat {
   private preferencePending=new Set<string>();private preferenceRevision=0;private preferenceVersions=new Map<string,number>();
   appNotifications=false;activeRoom='';preferences=new Map<string,{pinned?:boolean;archived?:boolean;muted?:boolean;deleted?:boolean;read_sequence?:number;read_event?:string;latest_event?:string;unread_count?:number}>();
   rooms: sdk.Room[]=[];info=new Map<string,RoomInfo>();profiles=new Map<string,Profile>();outbox:Outgoing[]=[];business:any[]=[];
-  offline=false;private saveTimer?:ReturnType<typeof setTimeout>;
+  nativeProtocol=false;offline=false;private saveTimer?:ReturnType<typeof setTimeout>;private uiSaveTimer?:ReturnType<typeof setTimeout>;
   private listeners=new Set<()=>void>();private release?:()=>void;private closed=false;private refreshTimer?:ReturnType<typeof setTimeout>;private channel?:BroadcastChannel;
   readonly outer=new Map<string,string[]>();private outerBusiness=new Map<string,any>();private profileTimes=new Map<string,number>();private inflight=new Set<string>();private profileFlight?:Promise<void>;
   subscribe=(fn:()=>void)=>{this.listeners.add(fn);return()=>this.listeners.delete(fn)};
@@ -43,7 +47,7 @@ export class Chat {
       }
       if(!active){this.phase='other-tab';this.changed();return}
       this.channel=new BroadcastChannel('yc:lifecycle');this.channel.onmessage=e=>{if(e.data==='notification-preempt'&&this.notificationMode)this.lock('loading');if(e.data==='logout')this.lock('login');if(e.data==='release')this.lock('other-tab')};
-      const app=isApp?await appCall('session'):undefined;this.appNotifications=app?.capabilities?.notifications===true;
+      const app=isApp?await appCall('session'):undefined;this.nativeProtocol=app?.session?.material_protocol===2;this.appNotifications=app?.capabilities?.notifications===true;
       if(isApp&&!app.session){this.phase='login';this.error=app.pendingLogout?'已锁定本地数据，服务器退出将在联网后完成。':'';this.changed();return}
       if(app?.session)requests.token=app.session.token;
       if(app?.session&&(!app.online||!navigator.onLine)){this.session=app.session;this.offline=true}
@@ -76,6 +80,9 @@ export class Chat {
         },
         verificationMethods:[]});
       if(isApp)await store.startup();
+      if(isApp)await nativeBootstrap(this);
+      window.addEventListener('yc:packet-updated',()=>void nativeBootstrap(this).catch(()=>{}));
+      window.addEventListener('yc:packet-state',(event)=>{if(this.closed)return;const state=(event as CustomEvent).detail,key=state.room_id+'|'+state.day,prior=this.packetStates.get(key);this.packetStates.set(key,state.state);this.changed();if(state.state==='untrusted'||state.state==='ok'&&prior==='mismatch')void replaceNativeDay(this,state.room_id,state.day).catch(e=>this.fail(e))});
       this.client.on(sdk.ClientEvent.Sync,(state,_prev,data)=>{
         const reconnect=isApp&&this.offline&&state==='SYNCING';if(reconnect)this.offline=false;
         this.sync=this.offline?'离线 · 本机缓存':state==='PREPARED'||state==='SYNCING'?'已连接':state==='ERROR'?'连接中断，正在重试':'正在同步';
@@ -83,22 +90,27 @@ export class Chat {
         if(isApp&&['PREPARED','SYNCING'].includes(state)){clearTimeout(this.saveTimer);this.saveTimer=setTimeout(()=>void store.save(true).catch(()=>{}),1200)}
       });
       const update=()=>{this.updateRooms()};
-      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{update();if(room&&!toStart&&data.liveEvent&&this.preferences.get(room.roomId)?.deleted&&['m.room.message','m.room.encrypted'].includes(event.getWireType()))this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Name,update);this.client.on(sdk.RoomEvent.Receipt,()=>{update();this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Redaction,update);
+      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{update();if(event.getContent()['org.yitiao.material'])void ensureMaterial(event.getId()!).catch(()=>{});if(room&&!toStart&&data.liveEvent&&this.preferences.get(room.roomId)?.deleted&&['m.room.message','m.room.encrypted'].includes(event.getWireType()))this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Name,()=>{update();if(isApp&&this.phase==='ready'&&this.info.size){clearTimeout(this.uiSaveTimer);this.uiSaveTimer=setTimeout(()=>void this.saveNativeUi().catch(()=>{}),500)}});this.client.on(sdk.RoomEvent.Receipt,()=>{update();this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Redaction,update);
       this.client.on(sdk.MatrixEventEvent.Decrypted,update);this.client.on(sdk.RoomEvent.MyMembership,()=>{this.scheduleRefresh();update()});this.client.on(sdk.ClientEvent.Room,()=>{this.scheduleRefresh();update()});
 
       this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{if(this.notificationMode||!isApp||!this.appNotifications||this.phase!=='ready'||toStart||!data.liveEvent||!room||event.getSender()===this.session?.mxid||!['m.room.message','m.room.encrypted'].includes(event.getWireType()))return;const p=this.preferences.get(room.roomId);if(!p?.archived&&!p?.muted&&!this.readOnly(room.roomId)&&(document.hidden||this.activeRoom!==room.roomId))void appCall('notifyRoom',{room:room.roomId,event:event.getId(),label:this.roomName(room),kind:this.info.get(room.roomId)?.kind==='group'?'group':'private'}).catch(()=>{})});
       const filter=new sdk.Filter(this.session.mxid);filter.setIncludeLeaveRooms(true);
-      await this.client.startClient({filter,initialSyncLimit:40,lazyLoadMembers:true,pendingEventOrdering:sdk.PendingEventOrdering.Detached});
-      if(isApp){window.addEventListener('yc:background',()=>void store.save(true).catch(()=>{}));if(this.offline){this.phase='ready';this.sync='离线 · 本机缓存';this.history.status='离线 · 撤回更新待联网核对';this.changed()}}
+      const starting=this.client.startClient({filter,initialSyncLimit:40,lazyLoadMembers:true,pendingEventOrdering:sdk.PendingEventOrdering.Detached});
+      if(isApp&&this.offline){this.phase='ready';this.sync='离线 · 本机原始数据';this.updateRooms();void starting.catch(()=>{})}else await starting;
+      if(isApp){if(this.offline){this.phase='ready';this.updateRooms()}window.addEventListener('yc:background',()=>void store.save(true).catch(()=>{}));if(this.offline){this.phase='ready';this.sync='离线 · 本机缓存';this.history.status='离线 · 撤回更新待联网核对';this.changed()}}
       if(!this.notificationMode)this.watchSession();
       window.addEventListener('pagehide',()=>this.lock('loading'),{once:true});
     }catch(e:any){if(!this.closed){this.phase='error';this.error=e.message;this.changed()}}
   }
+  untrustedEntries=new Map<string,any>();packetStates=new Map<string,string>();private checkingDays=new Set<string>();
+  packetDay(event:sdk.MatrixEvent){return gmtDay(Number(this.history.receipts.get(event.getId()!)?.received_ms||event.getUnsigned()['org.yitiao.received_ms']||event.getTs()))}
+  async checkPacketDay(room:string,day:string){const key=room+'|'+day;if(!isApp||!this.nativeProtocol||this.offline||!navigator.onLine||Date.now()<immutableAt(day)||this.checkingDays.has(key))return;this.checkingDays.add(key);try{const result=await appCall('protocolCheckDay',{room,day});if(['repaired','ok'].includes(result.state)){this.packetStates.set(key,'ok');if(result.state==='repaired')await replaceNativeDay(this,room,day)}else if(result.state==='peer_required')this.packetStates.set(key,'mismatch');this.changed()}catch(e:any){if(!this.offline)this.fail(e)}finally{this.checkingDays.delete(key)}}
   fail(e:any){if(e?.name!=='AbortError'){this.error=e.message||String(e);this.changed()}}
   unreadCount(room:sdk.Room){return unreadCount(room,this.preferences.get(room.roomId))}
   updateRooms(){if(!this.client||this.closed)return;this.rooms=this.client.getRooms().filter(r=>!this.preferences.get(r.roomId)?.deleted&&(r.getMyMembership()==='invite'||(['join','leave'].includes(r.getMyMembership())&&this.info.has(r.roomId)))).sort((a,b)=>Number(!!this.preferences.get(b.roomId)?.pinned)-Number(!!this.preferences.get(a.roomId)?.pinned)||b.getLastActiveTimestamp()-a.getLastActiveTimestamp());this.changed()}
   scheduleRefresh(){if(this.notificationMode||this.offline||this.closed)return;clearTimeout(this.refreshTimer);this.refreshTimer=setTimeout(()=>void this.refresh().catch(e=>this.fail(e)),800)}
-  async refresh(){const revision=this.preferenceRevision;const [rows,prefs]:[RoomInfo[],any[]]=await Promise.all([requests.single('rooms',()=>requests.api('/api/rooms')),requests.single('preferences',()=>requests.api('/api/conversations/preferences'))]);if(this.closed)return;for(const r of rows){const old=this.info.get(r.room);if(old?.dissolved_at)r.dissolved_at=old.dissolved_at;if(old?.peer_deleted)r.peer_deleted=true;if((old?.revision||0)>(r.revision||0)){r.owner=old!.owner;r.revision=old!.revision}}this.info=new Map(rows.map(r=>[r.room,r]));const fresh=new Map(prefs.map(r=>[r.room,r]));for(const [id,version] of this.preferenceVersions)if(version>revision||this.preferencePending.has(id)){if(this.preferences.has(id))fresh.set(id,this.preferences.get(id));else fresh.delete(id)};this.preferences=fresh;this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp)await this.businessVault.saveState('app-ui',{info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences]});else await this.businessVault.saveState('profiles',[...this.profiles]).catch(()=>{});if(isApp&&!this.notificationMode)void appCall('notificationNames',{rooms:this.rooms.filter(r=>r.getMyMembership()==='join').map(r=>({room:r.roomId,label:this.roomName(r)}))}).catch(()=>{})}
+  async refresh(){const revision=this.preferenceRevision;const [rows,prefs]:[RoomInfo[],any[]]=await Promise.all([requests.single('rooms',()=>requests.api('/api/rooms')),requests.single('preferences',()=>requests.api('/api/conversations/preferences'))]);if(this.closed)return;for(const r of rows){const old=this.info.get(r.room);if(old?.dissolved_at)r.dissolved_at=old.dissolved_at;if(old?.peer_deleted)r.peer_deleted=true;if((old?.revision||0)>(r.revision||0)){r.owner=old!.owner;r.revision=old!.revision}}this.info=new Map(rows.map(r=>[r.room,r]));const fresh=new Map(prefs.map(r=>[r.room,r]));for(const [id,version] of this.preferenceVersions)if(version>revision||this.preferencePending.has(id)){if(this.preferences.has(id))fresh.set(id,this.preferences.get(id));else fresh.delete(id)};this.preferences=fresh;this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp){await this.saveNativeUi()}else await this.businessVault.saveState('profiles',[...this.profiles]).catch(()=>{});if(isApp&&!this.notificationMode)void appCall('notificationNames',{rooms:this.rooms.filter(r=>r.getMyMembership()==='join').map(r=>({room:r.roomId,label:this.roomName(r)}))}).catch(()=>{})}
+  private async saveNativeUi(){if(this.closed)return;const ui={info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences],room_names:this.client.getRooms().map(room=>[room.roomId,room.name])};await this.businessVault.saveState('app-ui',ui);if(!this.closed)await appCall('protocolUiSave',ui).catch(()=>{})}
   async loadProfiles(mxids:string[],usernames:string[]=[]):Promise<void>{
     if(this.offline||!navigator.onLine)return;
     const missing=[...new Set(mxids)].filter(id=>!this.profiles.has(id)||(this.profileTimes.get(id)||0)<Date.now()-300000).slice(0,100);if(!missing.length)return;
@@ -108,7 +120,7 @@ export class Chat {
   }
   name(mxid?:string){return mxid?(this.profiles.get(mxid)?.nickname||this.client?.getUser(mxid)?.displayName||mxid):'未知用户'}
   roomName(room:sdk.Room){const info=this.info.get(room.roomId);if(info?.kind==='direct')return this.name(info.owner===this.session.mxid?info.peer!:info.owner);return room.name||'会话'}
-  timeline(room:sdk.Room){return this.history.timeline(room)}
+  timeline(room:sdk.Room){const events=this.history.timeline(room);return this.session?.material_protocol===2?events.filter(e=>!legacySpecial(e.getContent())&&(e.getType()!=='m.room.message'||Object.keys(e.getContent()).length>0)):events}
   findEvent(room:sdk.Room,id:string){return room.findEventById(id)}
   // App only: page older messages from the native automatic packet backup
   // (not the WebView sync cache) when offline or past the server's retention.
@@ -182,6 +194,7 @@ export class Chat {
       if(this.info.get(row.room)?.encryption!=='plain'||this.client.getRoom(row.room)?.hasEncryptionStateEvent())throw Error('旧加密会话已停用，请重新打开会话');
       if(this.info.get(row.room)?.kind==='direct')await requests.api('/api/rooms/'+path(row.room)+'/prepare',{});
       const old=this.client.getRoom(row.room)?.getPendingEvents().find(e=>e.getTxnId()===row.txn);
+      if(row.content['org.yitiao.material'])throw Error('原始消息必须使用服务器分享请求，不能直接重发引用');
       if(old)await this.client.resendEvent(old,this.client.getRoom(row.room)!);else await this.client.sendEvent(row.room,sdk.EventType.RoomMessage,row.content,row.txn);
       this.outbox=this.outbox.filter(x=>x.txn!==row.txn);await this.persist();
     }catch(e:any){row.state='failed';row.error=e.data?.error||e.message||'发送失败';await this.persist()}

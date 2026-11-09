@@ -1,0 +1,6 @@
+import {useState} from 'preact/hooks';import {Send} from 'lucide-preact';import {chat} from './chat';import {requests,path} from './api';import {Modal,ErrorText} from './shared';
+export function ShareToChat({url,close,open}:{url:string;close:()=>void;open:(room:string)=>void}){
+ const [room,setRoom]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[txn]=useState(()=>crypto.randomUUID());
+ async function send(){setBusy(true);setError('');try{if(chat.info.get(room)?.kind==='direct')await requests.api('/api/rooms/'+path(room)+'/prepare',{});await requests.api('/api/messages/'+path(room)+'/share',{url,txn_id:txn});close();open(room)}catch(e:any){setError(e.message)}finally{setBusy(false)}}
+ return <Modal title="分享到 YiChat" close={close}><p class="small">发送时保存原始分享内容，之后可从本机离线查看。</p><p class="small muted" style={{overflowWrap:'anywhere'}}>{url}</p><label>发送到<select aria-label="分享到会话" value={room} onChange={e=>setRoom(e.currentTarget.value)}><option value="">选择会话</option>{chat.rooms.filter(r=>!chat.readOnly(r.roomId)).map(r=><option value={r.roomId}>{chat.roomName(r)}</option>)}</select></label><button class="primary" disabled={busy||!room||chat.offline} onClick={()=>void send()}><Send size={16}/>{busy?'正在发送…':'确认分享'}</button>{error&&<ErrorText>{error}</ErrorText>}</Modal>;
+}

@@ -91,7 +91,7 @@ def finalize(s,uid):
     try:os.fsync(directory)
     finally:os.close(directory)
     archive.record_attachment(s.archive_ingest,uid,row['room'],row['mxid'],int(row['completed']*1000),total,digest.hexdigest())
-    expires=(int(row['completed']//86400)+31)*86400
+    expires=row['completed']+7*86400 if s.material_protocol else (int(row['completed']//86400)+31)*86400
     with transaction(s.db) as c:
         c.execute('INSERT OR IGNORE INTO files VALUES(?,?,?,?,?,?,0)',(uid,row['room'],row['subject'],total,row['completed'],expires))
         c.execute('INSERT OR IGNORE INTO file_hashes VALUES(?,?)',(uid,digest.hexdigest()))

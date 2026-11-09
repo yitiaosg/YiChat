@@ -66,7 +66,7 @@ def test_hold_android_fixture(synapse):
                 token=secrets.token_urlsafe(48);proof=secrets.token_urlsafe(48)
                 with connect(s.db) as db:
                     db.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0,0)',(digest(token),who['subject'],name,who['sid'],who['mxid'],auth['device_id'],app.state.cipher.encrypt(auth['access_token'].encode()).decode(),time.time()+7200))
-                    db.execute('INSERT INTO native_devices VALUES(?,?,?,?,?)',(digest(proof),who['subject'],who['mxid'],auth['device_id'],time.time()))
+                    db.execute('INSERT INTO native_devices(proof_hash,subject,mxid,device,created) VALUES(?,?,?,?,?)',(digest(proof),who['subject'],who['mxid'],auth['device_id'],time.time()))
                 accounts[name]={'uid':who['subject'],'user':name,'mxid':who['mxid'],'device':auth['device_id'],'token':token,'proof':proof}
         c.portal.call(seed)
     server_app=create_app(s)

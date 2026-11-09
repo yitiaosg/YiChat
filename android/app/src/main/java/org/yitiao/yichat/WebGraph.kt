@@ -64,6 +64,11 @@ class Graph(val context: Application) {
     val backup = BackupRepository(context, store, history, vault,recordFiles)
     val records = RecordAudit(store,vault)
     val localTimeline = LocalTimeline(store,vault)
+    val protocolStore=ProtocolStore(context,store,vault)
+    val messageMaterials=MessageMaterials(store,gateway,protocolStore,recordFiles)
+    val dayPackets=DayPacketRepository(store,gateway,vault,protocolStore,messageMaterials,recordFiles)
+    val protocol=MessageProtocol(store,gateway,vault,protocolStore,messageMaterials,dayPackets,localTimeline)
+    init { backup.portablePackets={dayPackets.exportKnown()} }
     val updates = AppUpdates(context)
     val notifications = Notifications(context,this)
     val notificationContent = NotificationContent(context,this)
@@ -80,7 +85,7 @@ class Graph(val context: Application) {
     }
     suspend fun activate(a: Account) {
         store.open(a); resetChatEpoch(a); backup.activate(); notifications.resume()
-        scope.launch { runCatching { history.catchUp(true); backup.saveInternal() } }
+        scope.launch { runCatching { history.catchUp(true); protocol.sync();backup.saveInternal() } }
     }
     // Explicit server-wide chat reset. Preserve credentials, wallet/business
     // operations, backup settings and at-rest protection. Do not import old chats.
@@ -116,7 +121,7 @@ class Graph(val context: Application) {
     suspend fun lock() {
         WorkManager.getInstance(context).cancelUniqueWork("yichat-web-backup")
         WorkManager.getInstance(context).cancelUniqueWork("yichat-web-export")
-        notifications.stop();auth.lock(); store.close()
+        dayPackets.clearImports();notifications.stop();auth.lock(); store.close()
     }
     suspend fun logout() {
         auth.account?.token?.let { vault.put("web.pending-logout", it.toByteArray()) }

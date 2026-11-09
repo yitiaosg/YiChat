@@ -54,7 +54,9 @@ def test_real_receipt_group_api_and_server_receipt_outbox(synapse,monkeypatch):
   assert synced.get('unread_notifications',{}).get('notification_count',0)==0
   assert any(e.get('type')=='m.fully_read' and e.get('content',{}).get('event_id')==eid for e in synced.get('account_data',{}).get('events',[]))
   r=a.post('/open/v1/conversations/'+quote(room,safe='')+'/messages',json={'text':'unread after unsubscribe'});assert r.status_code==200,r.text
-  time.sleep(.6);assert preference()['read_event']==eid and preference()['unread_count']>=1
+  until=time.monotonic()+10
+  while preference()['unread_count']<1 and time.monotonic()<until:time.sleep(.1)
+  assert preference()['read_event']==eid and preference()['unread_count']>=1
   # Account-wide subscriptions count too, even without reading a delivered frame.
   with b.websocket_connect('/open/v1/stream') as ws:
    assert ws.receive_json()['type']=='ready'

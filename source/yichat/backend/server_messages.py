@@ -1,5 +1,5 @@
 """Durable, idempotent announcement outbox for server-computed order receipts."""
-import json,time,hashlib,logging
+import json,time,hashlib,logging,asyncio
 from urllib.parse import quote
 from .db import connect,transaction
 from . import api_grants,policy
@@ -18,7 +18,19 @@ def queue(s,order,receipt=False):
  url='https://chat.yitiao.org/orders/'+order['id'];kind='receipt' if receipt else 'order';aid=kind+':'+order['id']
  content={'msgtype':'m.text','body':('已收款 · ' if receipt else '')+url,'org.yitiao.share':{'type':kind,'url':url,'id':order['id']},'org.yitiao.business':{'kind':'order','id':order['id']},'org.yitiao.server_event':aid}
  with transaction(s.db) as c:c.execute('INSERT OR IGNORE INTO server_announcements(id,room,sender,content) VALUES(?,?,?,?)',(aid,order['room'],identity[0],json.dumps(content,ensure_ascii=False)))
+def queue_gift(s,gid):
+ with connect(s.ledger) as c:row=c.execute('SELECT * FROM yichat_card_gifts WHERE id=?',(gid,)).fetchone()
+ if not row:return
+ with connect(s.db) as c:identity=c.execute('SELECT mxid FROM identities WHERE subject=?',(row['sender_uid'],)).fetchone()
+ if not identity:return
+ aid='gift:'+gid;content={'msgtype':'m.text','body':'https://chat.yitiao.org/gifts/'+gid,'org.yitiao.business':{'kind':'gift','id':gid},'org.yitiao.server_event':aid}
+ with transaction(s.db) as c:c.execute('INSERT OR IGNORE INTO server_announcements(id,room,sender,content) VALUES(?,?,?,?)',(aid,row['room'],identity[0],json.dumps(content,ensure_ascii=False)))
+
 async def tick(app):
+ if not hasattr(app.state,'announcement_lock'):app.state.announcement_lock=asyncio.Lock()
+ async with app.state.announcement_lock:return await _tick(app)
+
+async def _tick(app):
  s=app.state.settings
  # Cursor-based recovery covers the commit/queue crash gap without rescanning history.
  for kind in ('order','receipt'):
@@ -30,10 +42,24 @@ async def tick(app):
   for row in rows:
    queue(s,dict(row),kind=='receipt')
    with transaction(s.db) as c:c.execute('INSERT INTO server_scan_cursor VALUES(?,?) ON CONFLICT(kind) DO UPDATE SET last_row=excluded.last_row',(kind,row['scan_row']))
+ if s.material_protocol:
+  with connect(s.db) as c:cursor=c.execute("SELECT last_row FROM server_scan_cursor WHERE kind='gift'").fetchone()
+  with connect(s.ledger) as c:gifts=c.execute("SELECT g.rowid scan_row,g.id FROM yichat_card_gifts g JOIN yichat_gift_renderings r ON r.id=g.id WHERE g.rowid>? AND g.created>strftime('%s','now')-604800 ORDER BY g.rowid LIMIT 100",(cursor[0] if cursor else 0,)).fetchall()
+  for gift in gifts:
+   queue_gift(s,gift['id'])
+   with transaction(s.db) as c:c.execute("INSERT INTO server_scan_cursor VALUES('gift',?) ON CONFLICT(kind) DO UPDATE SET last_row=excluded.last_row",(gift['scan_row'],))
  with connect(s.db) as c:jobs=c.execute('SELECT * FROM server_announcements WHERE event IS NULL LIMIT 20').fetchall()
  for job in jobs:
   try:
-   content=json.loads(job['content']);policy.require_send(s,policy.room(s,job['room']),job['sender'])
+   content=json.loads(job['content'])
+   if s.material_protocol:
+    from . import materials
+    if materials.recognized(content):
+     uid=policy.subject(s,job['sender']);who={'subject':uid,'mxid':job['sender'],'username':policy.username(s,uid)}
+     frozen=await materials.prepare(app,s,who,job['room'],content)
+     frozen.update({k:v for k,v in content.items() if k in ('org.yitiao.server_event','org.yitiao.request_hash')});content=frozen
+     with transaction(s.db) as c:c.execute('UPDATE server_announcements SET content=? WHERE id=?',(json.dumps(content,ensure_ascii=False),job['id']))
+   policy.require_send(s,policy.room(s,job['room']),job['sender'])
    # A prior accepted event is authoritative even if the response was lost.
    from . import archive
    with archive.connect(s.archive_reader) as pg:found=pg.execute("SELECT event_id FROM events WHERE room=%s AND sender=%s AND type='m.room.message' AND convert_from(body,'UTF8')::jsonb->'content'->>'org.yitiao.server_event'=%s LIMIT 1",(job['room'],job['sender'],job['id'])).fetchone()

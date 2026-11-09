@@ -4,6 +4,7 @@ export function recordHash(content:any):string|undefined{
  return String(content?.body||'').match(/https:\/\/chat\.yitiao\.org\/records\/([a-f0-9]{64})(?=$|[\s，。！？、；：）】》」』.,!;:)])/u)?.[1];
 }
 export function individualAllowed(content:any):boolean{
+ if(['gift','order','receipt'].includes(content?.['org.yitiao.material_type']))return false;
  const share=content?.['org.yitiao.share']||{},business=content?.['org.yitiao.business']||{};
  if(['order','receipt','gift'].includes(share.type)||['order','receipt','gift'].includes(business.kind)||/https:\/\/chat\.yitiao\.org\/(orders|gifts)\/[A-Za-z0-9_-]{32}/.test(String(content?.body||'')+' '+String(share.url||'')))return false;
  const previous=content?.['org.yitiao.forward_snapshot'];return previous?.content?individualAllowed(previous.content):true;
@@ -19,3 +20,5 @@ export async function verifyRecord(hash:string,raw:string){
 export function distinctPreviews(previews:any[]=[]){
  const seen=new Set<string>();return previews.filter(p=>{const key=String(p.type||'')+'|'+String(p.url||'')+'|'+String(p.data?.id||'')+'|'+String(!!p.receipt);if(seen.has(key))return false;seen.add(key);return true});
 }
+
+export const isRecord=(content:any)=>content?.['org.yitiao.material']?.kind==='record'||!!recordHash(content);

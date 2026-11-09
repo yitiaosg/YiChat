@@ -33,6 +33,9 @@ def create_app(settings=None):
         app.state.funds.migrate()
         from . import server_messages
         server_messages.migrate(s)
+        if s.material_protocol:
+            from .protocol_retention import initialize as initialize_protocol
+            await asyncio.to_thread(initialize_protocol,s)
         from .assets import migrate as migrate_assets
         migrate_assets(s)
         from .push import FCMSender
@@ -81,10 +84,10 @@ def create_app(settings=None):
                 raise HTTPException(503,{'errcode':'M_UNKNOWN','code':'YICHAT_HISTORY_PENDING','error':'历史权限证据正在同步，请稍后重试'},headers={'Retry-After':'1'})
             refs=c.execute('SELECT room,received_ms FROM attachment_references WHERE file=%s ORDER BY received_ms DESC',(row['id'],)).fetchall()
             if who['subject']==row['uploader']:
-                return max([row['expires']]+[(r['received_ms']//86400000+31)*86400 for r in refs])
+                return max([row['expires']]+[(r['received_ms']/1000+7*86400 if s.material_protocol else (r['received_ms']//86400000+31)*86400) for r in refs])
             for ref in refs:
                 at=ref['received_ms']
-                if archive.allowed(c,ref['room'],who['mxid'],at,at+1):return (at//86400000+31)*86400
+                if archive.allowed(c,ref['room'],who['mxid'],at,at+1):return at/1000+7*86400 if s.material_protocol else (at//86400000+31)*86400
             fail(403,'没有此附件已接受消息的历史访问权限')
 
     def error_response(exc):
@@ -132,7 +135,9 @@ def create_app(settings=None):
             except ValueError:fail(400,'无效请求长度')
             is_upload=request.method=='POST' and (request.url.path.startswith('/api/files/') or request.url.path in ('/_matrix/media/v3/upload','/_matrix/client/v1/media/upload') or bool(re.fullmatch(r'/open/v1/conversations/[^/]+/files',request.url.path)) or bool(re.fullmatch(r'/api/groups/[^/]+/avatar',request.url.path)))
             if request.method=='PUT' and re.fullmatch(r'/open/v1/groups/[^/]+/avatar',request.url.path):is_upload=True
-            if not is_upload and length>262144: fail(413,'请求体过大')
+            packet_upload=request.url.path in ('/api/packets/verify','/api/packets/exchange') and request.method=='POST'
+            if packet_upload and length>128*1024*1024:fail(413,'数据包超过128MB')
+            if not is_upload and not packet_upload and length>262144: fail(413,'请求体过大')
             response=await call_next(request)
         except HTTPException as e:response=error_response(e)
         except Exception:
@@ -213,7 +218,7 @@ def create_app(settings=None):
     @app.get('/api/session')
     async def me(request:Request):
         who=session(request)
-        return {'uid':who['subject'],'user':who['username'],'mxid':who['mxid'],'device':who['device'],'token':request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('yc_session'),'expires':who['expires'],'user_id':who['mxid'],'device_id':who['device'],'home_server':s.server_name,'message_epoch':s.message_epoch,'e2ee':False,'funds_enabled':app.state.funds.enabled(),'upload_rate':s.upload_rate,'max_file':s.max_file,'packet_ttl':s.packet_ttl,'retention':{'days':30,'timezone':'GMT+0','basis':'utc_day_end','cleanup_requires_sealed_archive':True}}
+        return {'uid':who['subject'],'user':who['username'],'mxid':who['mxid'],'device':who['device'],'token':request.headers.get('authorization','').removeprefix('Bearer ') or request.cookies.get('yc_session'),'expires':who['expires'],'user_id':who['mxid'],'device_id':who['device'],'home_server':s.server_name,'message_epoch':s.message_epoch,'e2ee':False,'funds_enabled':app.state.funds.enabled(),'upload_rate':s.upload_rate,'max_file':s.max_file,'packet_ttl':s.packet_ttl,'material_protocol':2 if s.material_protocol else 1,'retention':{'days':7 if s.material_protocol else 30,'timezone':'GMT+0','basis':'utc_day_end','cleanup_requires_sealed_archive':True}}
 
     @app.post('/api/logout')
     async def logout(request:Request):
@@ -297,7 +302,7 @@ def create_app(settings=None):
                 info=room_info(rid)
                 with connect(s.db) as db:
                     hidden=conversations.deleted(db,who['subject'],rid)
-                    has_messages=bool(db.execute("SELECT 1 FROM history_receipts WHERE room=? AND type IN ('m.room.message','m.room.encrypted','m.room.redaction') LIMIT 1",(rid,)).fetchone())
+                    has_messages=bool(db.execute("SELECT 1 FROM history_receipts WHERE room=? AND sha256<>'' AND type IN ('m.room.message','m.room.encrypted','m.room.redaction') LIMIT 1",(rid,)).fetchone())
                 if not hidden and direct.visible(s,info,who['mxid']):result.append(dict(info,has_messages=has_messages,membership=memberships.get(rid,'join'),peer_deleted=info['kind']=='direct' and lifecycle.purged(s,info['peer'] if info['owner']==who['mxid'] else info['owner']),dissolved_at=lifecycle.status(s,rid)))
             except HTTPException as exc:
                 if exc.status_code not in (403,404):raise
@@ -449,7 +454,7 @@ def create_app(settings=None):
                 f.flush();os.fsync(f.fileno())
             await app.state.matrix.membership(who,room)
             require_send(who,info)
-            completed=time.time();expires=(int(completed//86400)+1+30)*86400
+            completed=time.time();expires=completed+7*86400 if s.material_protocol else (int(completed//86400)+1+30)*86400
             target.rename(s.objects/fid)
             directory=os.open(s.objects,os.O_RDONLY);os.fsync(directory);os.close(directory)
             with transaction(s.db) as c:
@@ -666,6 +671,11 @@ def create_app(settings=None):
                         try:data[archive.ATTACHMENT_KEY]=json.loads(declared)
                         except (ValueError,TypeError):fail(400,'无效附件声明')
                         body=json.dumps(data,ensure_ascii=False,separators=(',',':')).encode()
+                    if s.material_protocol and parts[1]=='m.room.message' and materials.recognized(data):
+                        result=await materials.publish(app,s,who,room,data,parts[2])
+                        if native_meta:
+                            with transaction(s.db) as c:c.execute('UPDATE native_transactions SET event=? WHERE subject=? AND device=? AND room=? AND txn=?',(result['event_id'],who['subject'],who['device'],room,parts[2]))
+                        return {'event_id':result['event_id']}
                     policy.validate_event(s,info,parts[1],data,who['mxid'])
                 elif action.startswith('state/'):
                     parts=action.split('/')
@@ -716,6 +726,8 @@ def create_app(settings=None):
     group_avatars.install(app,s,session)
     from . import sharing
     sharing.install(app,s,session)
+    from . import materials,day_packets
+    materials.install(app,s,session);day_packets.install(app,s,session)
     from .record_audit import install as install_record_audit
     install_record_audit(app,s,session)
 
@@ -730,6 +742,9 @@ def create_app(settings=None):
     webroot=Path(os.getenv('YICHAT_WEB_ROOT',str(Path(__file__).parent.parent/'client'/'dist')))
     from .card_reads import install as install_card_reads
     install_card_reads(app,s,session)
+
+    @app.get('/data-packages')
+    async def packet_tools_landing():return await landing()
 
     @app.get('/records/{h}')
     async def record_landing(h:str):
@@ -853,6 +868,10 @@ async def maintenance(app):
             await asyncio.to_thread(app.state.funds.tick)
             from .server_messages import tick as announce
             await announce(app)
+            if s.material_protocol and time.time()-getattr(app.state,'last_packet_tick',0)>15:
+                app.state.last_packet_tick=time.time()
+                from .day_packets import tick as packet_tick
+                await packet_tick(app)
         except asyncio.CancelledError:raise
         except Exception:log.exception('YiChat 后台任务失败')
         await asyncio.sleep(1)

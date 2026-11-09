@@ -1,10 +1,19 @@
 # YiChat
 
-当前版本 **Android 0.3.14 / versionCode 22**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.4.0 / versionCode 23**，包名 `org.yitiao.yichat.mobile`。
 
-[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.3.8 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261108-v0.3.8/YiChat-0.3.8-16.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
+[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.4.0 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261109-v0.4.0/YiChat-0.4.0-23.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
+
+## 0.4.0 更新
+
+- 特殊分享、转账/收款/红包、赠卡、游戏战绩、合并记录保存发送时的原始材料；图片和文件保存原始字节及摘要。赠卡在所有权变更事务中保存卡面，来源售出、拍卖或销毁后，已经保存的消息仍可离线显示。
+- 服务器发布新特殊消息；粘贴原有站内分享 URL 仍然可用。设备先显示本地原件，联网比较摘要，一致时不重复下载。App 后台主动保存原件，SDK/WebView 缓存为空时也可重建本地会话。
+- 服务器原始消息和单条摘要保留七天，整日摘要长期保留。日期统一 GMT，次日00:05封存，包括空日期；整日校验失败时整天灰色，并从服务器或校验通过的在线 App 成员补齐。
+- App 可完全离线导出已不可撤回日期的 YCP 压缩加密混淆包。网页 [数据包工具](https://chat.yitiao.org/data-packages) 本地合并包并保留多个会话，可上传一个会话连续最多七个 GMT 整日重新校验实际字节。App 导入校验双方，有效版本覆盖整天；双方不符时预览、二次确认，仍保持灰色。
+- 原有分享界面增加“分享到 YiChat”；API 增加原始分享、原件下载与校验。旧 URL 特殊消息按要求一次性删除，普通图片/文件和资金账本保留。
+- [协议与接口规范](source/yichat/docs/MATERIAL-PROTOCOL-V2.md) · [API 文档](source/yichat/docs/OPEN-API.md)。此前保留30天和动态 URL 预览的说明仅对应历史版本。
 
 ## 0.3.8 更新（仅 Android App）
 

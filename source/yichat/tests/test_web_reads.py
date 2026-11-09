@@ -76,6 +76,7 @@ def test_room_creation_optional_key_reconciles_ticket_without_creating_twice(gat
         if url.endswith('/createRoom'):
             ticket=data['creation_content']['org.yitiao.ticket']
             policy.register_room(s,ticket,'!created')
+            with connect(s.ledger) as db:db.execute("INSERT OR IGNORE INTO yichat_memberships VALUES(?,?,'join','fixture-created',NULL,NULL,NULL)",('!created','@alice:chat.yitiao.org'))
             return {'room_id':'!created'}
         return {}
     app.state.matrix.call=AsyncMock(side_effect=create)

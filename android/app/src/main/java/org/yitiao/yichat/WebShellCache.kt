@@ -16,7 +16,7 @@ object WebRoutes {
     val ORIGIN = if(BuildConfig.DEBUG && BuildConfig.GATEWAY=="http://127.0.0.1:18018") BuildConfig.GATEWAY else "https://chat.yitiao.org"
     private val origin = URI(ORIGIN)
     fun chat(value: String): Boolean = runCatching {
-        val u=URI(value);trusted(value) && u.fragment==null && (u.path=="/" || (u.rawPath==u.path && u.path.matches(Regex("/records/[a-f0-9]{64}")) && u.rawQuery==null))
+        val u=URI(value);trusted(value) && u.fragment==null && (u.path in setOf("/","/data-packages") || (u.rawPath==u.path && u.path.matches(Regex("/records/[a-f0-9]{64}")) && u.rawQuery==null))
     }.getOrDefault(false)
     fun trusted(value: String): Boolean = runCatching {
         val u=URI(value);u.scheme==origin.scheme && u.host==origin.host && u.port==origin.port && u.rawUserInfo==null
@@ -26,7 +26,7 @@ object WebRoutes {
     fun shellPath(value:String):String? = runCatching {
         if(!trusted(value))return@runCatching null
         val u=URI(value);val path=u.rawPath
-        when { chat(value) && path.startsWith("/records/")->"/"
+        when { chat(value) && (path.startsWith("/records/")||path=="/data-packages")->"/"
             path=="/" || path=="/notification.html" || publicAsset(path)->path
             else->null }
     }.getOrNull()

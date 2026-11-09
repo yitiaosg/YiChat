@@ -69,7 +69,7 @@ def test_real_group_management_auto_direct_and_privacy(synapse,version):
         policy.social.mutate(s.accounts,u['bob']['subject'],u['alice']['subject'],'unblock')
         ok(req('alice','POST','/api/rooms/'+dmq+'/prepare',{}));assert u['bob']['mxid'] in groups.joined(s,dm)
         assert not ok(req('bob','GET','/api/rooms'))
-        ok(req('alice','PUT','/_matrix/client/v3/rooms/'+dmq+'/send/m.room.encrypted/first',{'algorithm':'m.megolm.v1.aes-sha2','ciphertext':'OPAQUE','session_id':'fixture','sender_key':'fixture','device_id':'fixture'}))
+        ok(req('alice','PUT','/_matrix/client/v3/rooms/'+dmq+'/send/m.room.message/first',{'msgtype':'m.text','body':'First accepted private message'}))
         assert any(r['room']==dm for r in ok(req('bob','GET','/api/rooms')))
         assert dm in ok(req('bob','GET','/_matrix/client/v3/sync?timeout=0&since='+sync['next_batch']))['rooms']['join']
         assert ok(req('alice','POST','/api/rooms',{'kind':'direct','users':['bob'],'key':'launch-direct-create-002'}))['room_id']==dm

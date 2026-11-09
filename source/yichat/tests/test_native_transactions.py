@@ -7,7 +7,8 @@ def native(c,s):
     c.cookies.clear();c.headers.pop('Origin',None);c.headers['Authorization']='Bearer session-token'
     with connect(s.db) as db:
         who=db.execute("SELECT * FROM sessions WHERE username='alice' LIMIT 1").fetchone()
-        db.execute('INSERT INTO native_devices VALUES(?,?,?,?,?)',('fixture-proof',who['subject'],who['mxid'],who['device'],time.time()))
+        db.execute("UPDATE room_modes SET encryption='plain' WHERE room='!direct'")
+        db.execute('INSERT INTO native_devices(proof_hash,subject,mxid,device,created) VALUES(?,?,?,?,?)',('fixture-proof',who['subject'],who['mxid'],who['device'],time.time()))
 
 def test_metadata_binds_room_device_txn_and_original_ciphertext(gateway):
     c,app,s=gateway;native(c,s)
@@ -20,8 +21,8 @@ def test_metadata_binds_room_device_txn_and_original_ciphertext(gateway):
     def handler(req):
         seen.append(json.loads(req.content));return httpx.Response(200,json={'event_id':'$original'})
     app.state.http=httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    opaque={'algorithm':'m.megolm.v1.aes-sha2','ciphertext':'unchanged','session_id':'native'}
-    sent=c.put('/_matrix/client/v3/rooms/!direct/send/m.room.encrypted/stable-sdk-txn',json=opaque)
+    opaque={'msgtype':'m.text','body':'unchanged plaintext'}
+    sent=c.put('/_matrix/client/v3/rooms/!direct/send/m.room.message/stable-sdk-txn',json=opaque)
     assert sent.status_code==200,sent.text
     assert seen[0]==opaque|{'org.yitiao.attachments':[fid]}
     status=c.get(path);assert status.status_code==200 and status.json()['event_id']=='$original'
@@ -52,7 +53,7 @@ def test_native_admission_paces_business_and_rust_routes_together(gateway):
 
 def test_native_yidt_return_is_fixed_and_cancel_still_invalidates(env):
     s,f,u=env
-    o=f.create(u['alice'],{'room':'!test:chat.yitiao.org','kind':'direct'},{'key':'native-return-fixture-key','amount':'0.01'},'bob',native_return=True)
+    o=f.create(u['alice'],{'room':'!test:chat.yitiao.org','kind':'direct'},{'key':'native-return-fixture-key','amount':'0.01'},'bob',native_return='android')
     with connect(s.ledger) as db:
         row=db.execute('SELECT * FROM yidt_intents WHERE id=(SELECT intent FROM yichat_orders WHERE id=?)',(o['id'],)).fetchone()
         assert row['return_url']==s.origin+'/app/return?order='+o['id'] and row['state']=='pending'

@@ -24,6 +24,7 @@ import javax.crypto.spec.SecretKeySpec
 
 /** Versioned, portable scrypt + AES-GCM backup; never exports Keystore wraps. */
 class BackupRepository(private val context: Context, private val matrix: PacketStore, private val history: HistoryRepository, private val vault: SecureStore,private val recordFiles:RecordFiles?=null) {
+    var portablePackets:(suspend ()->JsonObject)?=null
     private val mutex = Mutex()
     val status = MutableStateFlow("自动备份保存在应用内部")
     val exportStatus = MutableStateFlow("未启用外部导出")
@@ -112,10 +113,14 @@ class BackupRepository(private val context: Context, private val matrix: PacketS
         val a = requireNotNull(matrix.account)
         val tree = Uri.parse(requireNotNull(vault.get("${a.storage}.backup-tree")) { "请先选择备份目录" }.decodeToString())
         val password = requireNotNull(vault.get("${a.storage}.backup-pass"))
-        val content = packetContent(a)
-        val packed = try { PortableBackup.encrypt(content, password) } finally { password.fill(0); content.fill(0) }
+        val provider=portablePackets
+        val packed=if(provider!=null)try{DataPackageCodec.encode(provider(),password.decodeToString())}finally{password.fill(0)} else {
+            val content=packetContent(a)
+            try{PortableBackup.encrypt(content,password)}finally{password.fill(0);content.fill(0)}
+        }
+        check(matrix.account?.token==a.token){"导出账号已改变"}
         val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
-        val uri = requireNotNull(DocumentsContract.createDocument(context.contentResolver, parent, "application/octet-stream", "YiChat-${java.time.Instant.now().toEpochMilli()}.ycb"))
+        val uri = requireNotNull(DocumentsContract.createDocument(context.contentResolver, parent, "application/octet-stream", "YiChat-${java.time.Instant.now().toEpochMilli()}.${if(provider!=null)"ycp" else "ycb"}"))
         try { requireNotNull(context.contentResolver.openOutputStream(uri, "wt")).use { it.write(packed); it.flush() } }
         catch (e: Exception) { runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }; throw e }
         exportStatus.value = "外部加密导出成功 · ${localTime(System.currentTimeMillis())}"; uri
@@ -175,7 +180,7 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val graph = (applicationContext as YiChatApplication).graph
         return try {
             if (!prepareBackup(graph, inputData.getString("account"))) return Result.success()
-            graph.history.catchUp(); graph.backup.saveInternal(force = true); Result.success()
+            graph.history.catchUp(); graph.protocol.sync(); graph.backup.saveInternal(force = true); Result.success()
         }
         catch (e: CancellationException) { throw e }
         catch (e: GatewayError) { if(e.status==401) { graph.lock();return Result.success() };graph.backup.status.value="内部备份未完成，将重试";Result.retry() }
@@ -189,7 +194,7 @@ class ExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             if (!prepareBackup(graph, inputData.getString("account"))) return Result.success()
             val account = requireNotNull(graph.store.account)
             if (graph.vault.get("${account.storage}.export-days") == null) return Result.success()
-            graph.backup.export(); Result.success()
+            graph.history.catchUp(); graph.protocol.sync(); graph.backup.export(); Result.success()
         }
         catch (e: CancellationException) { throw e }
         catch (e: GatewayError) { if(e.status==401) { graph.lock();return Result.success() };graph.backup.exportStatus.value="外部导出未完成，将重试";Result.retry() }

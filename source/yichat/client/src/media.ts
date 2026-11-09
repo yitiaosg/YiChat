@@ -1,3 +1,4 @@
+import {unbase64,sha256} from './packet-protocol';
 import {transferFile,type TransferState} from './upload-transfer';
 import { requests, path, ApiError, retryDelay, sleep } from './api';
 import { chat } from './chat';
@@ -39,6 +40,7 @@ export function releaseUrl(url:string){URL.revokeObjectURL(url);urls.delete(url)
 export function blobUrl(blob:Blob){const url=URL.createObjectURL(blob);urls.add(url);return url}
 window.addEventListener('yc:locked',()=>{for(const url of urls)URL.revokeObjectURL(url);urls.clear()});
 export async function attachment(content:any,signal:AbortSignal,publicRecord?:string){
+  if(content['org.yitiao.local_file']){const f=content['org.yitiao.local_file'],bytes=unbase64(f.data);if(bytes.byteLength!==Number(f.bytes)||await sha256(bytes)!==f.sha256)throw Error('数据包附件校验失败');const type=String(content.info?.mimetype||'application/octet-stream');return new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'})}
   if(content.file)throw Error('旧加密附件已清空，请使用新会话中的附件');
   const mxc=content.url;
   const match=/^mxc:\/\/chat\.yitiao\.org\/([a-f0-9]{48})$/.exec(mxc||'');if(!match)throw Error('附件地址不受支持');

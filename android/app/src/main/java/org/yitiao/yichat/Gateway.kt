@@ -34,6 +34,11 @@ class Gateway(val base: String = BuildConfig.GATEWAY) {
     private val cooldown = AtomicLong(0)
     private val uploadMutex = Mutex()
     @Volatile private var uploadCall: Call? = null
+    suspend fun document(path:String):String=withContext(Dispatchers.IO) {
+        require(path.startsWith("/api/materials/")){"原始消息地址无效"}
+        val request=Request.Builder().url(base+path).header("Authorization","Bearer "+requireNotNull(token)).get().build()
+        readHttp.newCall(request).execute().use{r->val text=r.body?.string().orEmpty();if(!r.isSuccessful){val e=runCatching{json.parseToJsonElement(text).jsonObject}.getOrNull();throw GatewayError(r.code,e?.s("error")?:"原始消息暂不可用")};require(text.toByteArray().size<=32*1024*1024);text}
+    }
     fun cancelUpload() { uploadCall?.cancel() }
     suspend fun upload(room: String, file: File, progress: (Long, Long) -> Unit): JsonObject = uploadMutex.withLock {
         require(file.length() <= 100000000) { "实际上传字节不得超过100000000" }
@@ -85,7 +90,10 @@ class Gateway(val base: String = BuildConfig.GATEWAY) {
         return withContext(Dispatchers.IO) {
             val request = Request.Builder().url(base + path).header("Accept", "application/json")
             if (authenticated) request.header("Authorization", "Bearer " + requireNotNull(token) { "请先登录" })
-            val bodyBytes=(data?.toString() ?: "{}").toByteArray(Charsets.UTF_8)
+            val plainBytes=(data?.toString() ?: "{}").toByteArray(Charsets.UTF_8)
+            val packetRequest=path in listOf("/api/packets/verify","/api/packets/exchange") && data!=null
+            val bodyBytes=if(packetRequest)java.io.ByteArrayOutputStream().also{out->java.util.zip.GZIPOutputStream(out).use{it.write(plainBytes)}}.toByteArray() else plainBytes
+            if(packetRequest)request.header("Content-Encoding","gzip")
             request.method(method, if (method in listOf("GET", "HEAD")) null else object : RequestBody() {
                 override fun contentType() = "application/json".toMediaType()
                 override fun contentLength() = bodyBytes.size.toLong()

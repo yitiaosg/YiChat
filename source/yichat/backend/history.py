@@ -55,6 +55,10 @@ def record_rows(s,rows):
             if old and old['sha256']!=record[7]:raise RuntimeError('Immutable packet receipt changed')
             c.execute('INSERT OR IGNORE INTO history_receipts VALUES(?,?,?,?,?,?,?,?,?,?)',record)
 
+    if s.material_protocol:
+        from .materials import observe
+        observe(s,rows)
+
 
 def backfill(s,limit=500):
     with connect(s.db) as c:cursor=c.execute('SELECT value FROM history_meta WHERE key=\'backfill\'').fetchone()
@@ -131,6 +135,7 @@ def install(app,s,session):
     async def updates(request:Request,since:int=0,after:int=0,until:int=0):
         who=session(request);rooms=current_rooms(s,who)
         if since<0 or after<0 or until<0:fail(400,'无效同步游标')
+        if s.material_protocol:since=max(since,int((time.time()-7*86400)*1000))
         with archive.connect(s.archive_reader) as pg:
             cp=pg.execute("SELECT * FROM checkpoints WHERE source='synapse'").fetchone()
             if not cp or not cp['healthy'] or cp['observed_ms']<int(time.time()*1000)-120000:fail(503,'历史存证正在同步，请稍后重试')
@@ -140,6 +145,7 @@ def install(app,s,session):
                 rows=c.execute('SELECT * FROM history_receipts WHERE room IN ('+','.join('?' for _ in rooms)+') AND received_ms>=? AND received_ms<=? AND sequence>? AND sequence<=? ORDER BY sequence LIMIT 100',(*sorted(rooms),since,end,after,cp['sequence'])).fetchall() if rooms else []
                 result=[]
                 for row in rows:
+                    if s.material_protocol and not row['sha256']:continue
                     if accessible(pg,rooms,who,row,s):result.append(dict(row)|{'tombstone':tombstone(c,row)})
         return {'records':result,'until':end,'next_after':rows[-1]['sequence'] if len(rows)==100 else None,'scanned_after':rows[-1]['sequence'] if rows else after,'server_ms':int(time.time()*1000),'rooms':sorted(rooms)}
 

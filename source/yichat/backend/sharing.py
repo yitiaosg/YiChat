@@ -43,8 +43,10 @@ def eligible(s,who,room,ids):
    result.append(event)
  return result
 def record_message(content):
+ if content.get('org.yitiao.material',{}).get('kind')=='record':return True
  return bool(content.get('org.yitiao.record') or re.search(r'https://chat\.yitiao\.org/records/[a-f0-9]{64}(?![a-zA-Z0-9/?#])',str(content.get('body',''))))
 def individual_allowed(content):
+ if content.get('org.yitiao.material_type') in ('gift','order','receipt'):return False
  share=content.get('org.yitiao.share') or {};business=content.get('org.yitiao.business') or {}
  if share.get('type') in ('order','receipt','gift') or business.get('kind') in ('order','receipt','gift'):return False
  if re.search(r'https://chat\.yitiao\.org/(orders|gifts)/[A-Za-z0-9_-]{32}',str(content.get('body',''))+' '+str(share.get('url',''))):return False
@@ -63,6 +65,11 @@ def grant_files(s,who,room,contents):
     c.execute('INSERT INTO file_reuse_grants VALUES(?,?,?,?) ON CONFLICT(file,room,uid) DO UPDATE SET expires=max(expires,excluded.expires)',(fid,room,who['subject'],row['expires']))
 def snapshot(app,s,who,event):
  content=event['content'];urls=[]
+ if content.get('org.yitiao.material'):
+  from . import materials
+  ref=content['org.yitiao.material'];raw=(materials.directory(s)/ref['id']).read_bytes()
+  if hashlib.sha256(raw).hexdigest()!=ref['sha256']:fail(503,'原始分享数据校验失败')
+  doc=json.loads(raw);content=dict(doc['content']);content['org.yitiao.forward_snapshot']={'content':doc['content'],'previews':doc.get('previews',[])}
  previous=content.get('org.yitiao.forward_snapshot')
  frozen=previous if isinstance(previous,dict) and isinstance(previous.get('content'),dict) else None
  if frozen:content=frozen['content']
@@ -78,9 +85,10 @@ def snapshot(app,s,who,event):
   with connect(s.ledger) as c:
    row=c.execute('SELECT * FROM yichat_card_gifts WHERE id=? AND room=?',(gid,event['room_id'])).fetchone()
    current=c.execute('SELECT i.owner,EXISTS(SELECT 1 FROM yc_destroyed d WHERE d.instance=i.id) destroyed FROM yc_instances i WHERE i.id=?',(row['instance'],)).fetchone() if row else None
-   if current and not current['destroyed']:
+   saved=c.execute('SELECT payload FROM yichat_gift_renderings WHERE id=?',(gid,)).fetchone() if row else None
+   if saved or current and not current['destroyed']:
     from .card_reads import store
-    card=store(s).preview(row['instance'],current['owner'],connection=c)
+    card=json.loads(saved['payload']) if saved else store(s).preview(row['instance'],current['owner'],connection=c)
     metas.append({'type':'gift','url':'https://chat.yitiao.org/gifts/'+gid,'title':'赠送卡片','data':{'card':card,'sender':row['sender'],'recipient':row['recipient']}})
  for url in urls[:4]:
   parsed=previews.parse(url)
@@ -109,7 +117,21 @@ def snapshot(app,s,who,event):
  except HTTPException as exc:
   if exc.status_code!=404:raise
   profile={}
- return {'id':event['event_id'],'sender':event['sender'],'username':username,'name':profile.get('nickname') or username,'avatar_url':profile.get('avatar_url'),'sent_at':event.get('origin_server_ts'),'content':content,'previews':metas}
+ result={'id':event['event_id'],'sender':event['sender'],'username':username,'name':profile.get('nickname') or username,'avatar_url':profile.get('avatar_url'),'sent_at':event.get('origin_server_ts'),'content':content,'previews':metas}
+ if s.material_protocol and profile.get('avatar_url'):
+  # A shared record carries a fixed avatar image too; offline viewing never
+  # depends on the account's future avatar URL or its continued existence.
+  root=(s.site/'static/avatar').resolve();target=(root/(username+'.jpg')).resolve()
+  if target.is_relative_to(root) and target.is_file():
+   import io,base64
+   from PIL import Image
+   try:
+    with Image.open(target) as image:
+     image.thumbnail((192,192));out=io.BytesIO();image.convert('RGB').save(out,format='JPEG',quality=85)
+    data=out.getvalue()
+    if len(data)<=131072:result['avatar_data']='data:image/jpeg;base64,'+base64.b64encode(data).decode()
+   except (OSError,ValueError):pass
+ return result
 def sign(s,room,sender,content):
     value=archive.canonical([room,sender,content])
     return hmac.new(s.session_key.encode(),value,hashlib.sha256).hexdigest()
@@ -158,7 +180,11 @@ def install(app,s,session):
    target=data.get('target');info=access(s,who,target);policy.require_send(s,info,who['mxid'])
    grant_files(s,who,target,[e['content'] for e in events]);messages=[]
    for event in events:
-    original=event['content'];content={k:v for k,v in original.items() if k in ('msgtype','body','url','info','format','formatted_body','org.yitiao.no_preview')}
+    original=event['content']
+    if original.get('org.yitiao.material'):
+     messages.append({'msgtype':original.get('msgtype','m.text'),'body':original.get('body','分享消息'),'org.yitiao.material_source':event['event_id']});continue
+    if isinstance(original.get('org.yitiao.forward_snapshot'),dict):original=original['org.yitiao.forward_snapshot'].get('content') or original
+    content={k:v for k,v in original.items() if k in ('msgtype','body','url','info','format','formatted_body','org.yitiao.no_preview')}
     if original.get('org.yitiao.share',{}).get('url'):content['org.yitiao.share']={'url':original['org.yitiao.share']['url']}
     content['org.yitiao.attachments']=sorted(file_ids(original));messages.append(content)
    return {'messages':messages}

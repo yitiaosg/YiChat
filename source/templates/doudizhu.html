@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1837"><meta name="description" content="Yitiao 三人斗地主，邀请朋友开房，或随时匹配牌友。">
+  <title>斗地主 · Yitiao Games</title><link rel="icon" href="/static/logo.ico">
+  <script src="/static/doudizhu-theme.js?v=20261030c"></script>
+  <link rel="stylesheet" href="/static/doudizhu.css?v=20261102b">
+  <script src="/static/yidt-bridge.js?v=20261028" defer></script>
+  <script src="/static/doudizhu-cards.js?v=20261030c" defer></script>
+  <link rel="stylesheet" href="/static/doudizhu-effects.css?v=20261030c">
+  <script src="/static/doudizhu-effects.js?v=20261030c" defer></script>
+  <script src="/static/doudizhu-counter.js?v=20261030c" defer></script>
+  <script src="/static/doudizhu.js?v=20261109-protocol2" defer></script>
+  <script src="/static/doudizhu-gap.js?v=20261102c" defer></script>
+<script src="/static/yichat-share-v2.js" defer></script></head>
+<body data-csrf="{{ csrf }}" data-user="{{ user or '' }}">
+{% include 'doudizhu_header.html' %}
+<main class="app"><section id="card-counter" class="card-counter" aria-label="记牌器" hidden></section>
+  <section id="lobby">
+    <div class="lobby-heading"><a class="back-link" href="/games/">← 游戏大厅</a><span class="eyebrow">THREE PLAYERS. ONE GOOD TIME.</span></div>
+    <div class="lobby-grid">
+      <section class="hero"><div class="hero-copy"><p class="eyebrow gold">YITIAO / 经典三人场</p><h1>好牌，<br>一起<span>出。</span></h1><p class="hero-description">叫一声地主，和牌友过几招。<br>普通、不洗牌或成王败寇，三人开局。</p></div><div class="hero-art" aria-hidden="true"><span class="art-ring"></span><span class="decor-card decor-one">A<span>♠</span></span><span class="decor-card decor-two">2<span>♥</span></span><img src="/static/doudizhu/landlord-128.webp" alt=""><span class="art-label">斗地主</span></div><div class="hero-footer"><span><i class="live-dot"></i>三人对局</span><span>叫抢地主 · 经典玩法</span></div></section>
+      <section class="play-panel">
+        <div class="bean-wallet"><div><p>我的豆子</p><strong id="bean-balance">—</strong><span class="bean-unit">豆</span></div><img src="/static/doudizhu/bean-64.webp" width="46" height="46" alt=""><button id="wallet-open" class="small-button">充值 / 赎回 ↗</button></div>
+        <div class="section-title"><h2 id="tier-heading">选个倍率，开始一局</h2><span>01 / 选择场次</span></div>
+        <label for="variant">玩法</label><select id="variant"><option value="normal">普通斗地主 · 单副牌</option><option value="happy">欢乐斗地主 · 不洗牌</option><option value="king">成王败寇 · 两副牌</option></select><div id="tiers" class="tiers" role="group" aria-label="选择底倍"></div>
+        <div id="king-rules" class="mode-note" hidden><strong>没有倍率，没有加倍，败者输掉本局全部豆子。</strong><p>地主赢：收取两位农民全部携带豆子；农民赢：平分地主全部携带豆子。以开局扣除入场费后的余额为准。</p></div><div class="tier-details"><span>最低入场 <b id="tier-minimum">2K</b> 豆</span><span>每局入场费 <b id="tier-fee">93</b> 豆</span></div>
+        <label class="counter-choice"><input id="use-counter" type="checkbox">本局使用记牌器（开局消耗 1 张，余 <b id="counter-inventory">0</b> 张）</label><button id="match" class="primary full">开始匹配 <span>→</span></button>
+        <div class="friend-actions"><button id="create" class="secondary">创建好友房</button><button id="join-open" class="secondary">房间码加入 <span>↗</span></button></div>
+        <p class="fine-print">匹配房间连续 5 秒无真人加入后，智能牌友补位。<br>好友房满 3 人后，由房主开始。<br>加入已有房间需在房内平均豆子的 0.5～2 倍内。</p>
+      </section>
+    </div>
+    <div class="lobby-bottom"><span>♠ <span>白底纸牌，熟悉的手感。</span></span><span>叫抢 / 炸弹 / 春天，倍率随牌局变化。</span></div>
+    {% if not user %}<p class="guest-note">登录后即可使用豆子、创建房间或匹配牌友。<a href="/login/?next=/games/doudizhu/">去登录 →</a></p>{% endif %}
+  </section>
+  <section id="room" hidden>
+    <div class="room-toolbar"><div><span class="eyebrow">房间</span> <button id="copy-code" class="room-code" title="复制房间码">—</button><span id="room-mode" class="muted"></span></div><div id="room-stakes" class="room-stakes"><span>底倍 <b id="room-base">1</b>×</span><span class="gold">当前 <b id="room-multiplier">1</b>×</span></div><button id="share-room" class="text-button">分享房间 ↗</button><button id="leave" class="text-button">退出房间 ↗</button></div>
+    <div class="game-table" id="game-table">
+      <div class="table-watermark" aria-hidden="true">YITIAO <span>斗地主</span></div>
+      <div class="bottom-cards"><span id="bottom-label">地主底牌</span><div id="bottom"></div></div>
+      <div class="opponent opponent-left" id="player-left"></div><div class="opponent opponent-right" id="player-right"></div>
+      <div class="played played-left" id="played-left"></div><div class="played played-right" id="played-right"></div>
+      <div class="table-center"><div id="waiting-symbol" class="waiting-symbol">♠</div><p id="notice" role="status">等待牌友加入</p><p id="matching-count" class="muted"></p><div id="waiting-actions"></div></div>
+      <div class="played played-self" id="played-self"></div>
+      <div class="self-profile" id="player-self"></div>
+      <div class="turn-indicator" id="turn-indicator" hidden><span id="timer">25</span><span id="turn-label">轮到你了</span></div>
+    </div>
+    <label id="room-counter-choice" class="counter-choice" hidden><input id="room-use-counter" type="checkbox">本局使用记牌器（开局消耗 1 张，余 <b id="room-counter-inventory">0</b> 张）</label><div class="hand-area"><div id="actions" class="game-actions"></div><div class="hand-scroll"><div id="hand" class="hand" role="group" aria-label="你的手牌"></div></div><p id="hand-help" class="hand-help">点击选牌 · 再点取消</p></div>
+    <section id="remaining-hands" class="remaining-hands" hidden><h3>本局剩余手牌</h3><div id="remaining-players"></div></section>
+  </section>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<dialog id="join-dialog"><form id="join-form"><div class="dialog-title"><h2>加入好友房</h2><button type="button" class="close" data-close aria-label="关闭">×</button></div><p class="muted">输入朋友分享的 5 位房间码</p><label for="room-code">房间码</label><input id="room-code" name="code" inputmode="numeric" pattern="[0-9]{5}" minlength="5" maxlength="5" placeholder="00000" required autocomplete="off"><button class="primary full" type="submit">进入房间 →</button></form></dialog>
+<dialog id="wallet-dialog"><div class="dialog-title"><h2>豆子钱包</h2><button class="close" data-close aria-label="关闭">×</button></div><div class="wallet-tabs" role="tablist" aria-label="钱包操作"><button id="tab-recharge" class="active" role="tab" aria-controls="recharge-pane" aria-selected="true">充值豆子</button><button id="tab-items" role="tab" aria-controls="items-pane" aria-selected="false">道具</button><button id="tab-redeem" role="tab" aria-controls="redeem-pane" aria-selected="false">赎回 YIDT</button></div><p class="wallet-binding"><span id="wallet-status">尚未绑定钱包</span><a href="https://yidt.yitiao.org/services/doudizhu/">管理绑定 ↗</a></p>
+  <p class="super-card-wallet">记牌器 <b id="counter-card-balance">0</b> 张 · 超级加倍卡 <b id="super-card-balance">0</b> 张 <span>每张可使用一次 ×4</span></p><section id="recharge-pane" role="tabpanel" aria-labelledby="tab-recharge"><div id="packages" class="packages"></div><p class="muted wallet-note">充值金额另加 gas，由你承担。选择套餐后前往 YIDT 界面确认付款，赠送道具数量见各套餐。</p><button id="recharge" class="primary full">前往 YIDT 确认 →</button></section>
+  <section id="items-pane" role="tabpanel" aria-labelledby="tab-items" hidden><div class="item-shop"><h3>道具单独购买</h3><article><h4>记牌器</h4><p>10 YIDT / 张</p><label for="buy-counter-quantity">数量</label><input id="buy-counter-quantity" type="number" min="1" max="1000" step="1" value="1"><button class="secondary full" data-buy-item="counter">购买记牌器</button></article><article><h4>超级加倍卡</h4><p>20 YIDT / 张</p><label for="buy-super-quantity">数量</label><input id="buy-super-quantity" type="number" min="1" max="1000" step="1" value="1"><button class="secondary full" data-buy-item="super">购买超级加倍卡</button></article></div><p class="muted wallet-note">购买道具前往 YIDT 界面确认，gas 由你额外承担。</p></section>
+  <section id="redeem-pane" role="tabpanel" aria-labelledby="tab-redeem" hidden><p class="redeem-rate">100 豆 <span>⇄</span> 2 YIDT</p><label for="redeem-beans">赎回豆子数量</label><div class="input-action"><input id="redeem-beans" inputmode="numeric" type="number" min="1" step="1" placeholder="输入整数数量"><button id="redeem-all" class="text-button">全部</button></div><p id="redeem-preview" class="muted wallet-note">实际到账 = 豆子 × 0.02 − gas</p><p class="muted wallet-note">直接到账至当前绑定钱包，无需再次跳转确认。房间中与对局中的豆子暂不可赎回。</p><button id="redeem" class="primary full">确认赎回</button></section>
+  <details class="bean-history"><summary>最近豆子记录</summary><div id="bean-history"></div></details>
+</dialog>
+<dialog id="rules-dialog"><div class="dialog-title"><h2>一桌三人，经典斗地主</h2><button class="close" data-close aria-label="关闭">×</button></div><div class="rules-copy"><h3>发牌与叫抢</h3><p>普通模式与欢乐不洗牌均使用 54 张牌，每人 17 张、底牌 3 张。不洗牌收集上一局打出的牌组和剩余手牌，仅随机切牌后整段发牌，保留更多整牌、减少散牌；首局使用随机整牌牌堆。各玩法分别匹配。成王败寇使用两副共 108 张牌，每人 33 张，地主获得 9 张底牌；4～8 张同点数为炸弹，先比张数再比点数；一大一小王为王炸，四王炸更大。</p><p>普通模式 54 张牌，每人 17 张，地主获得 3 张底牌并先出。依次叫地主，叫后其余有资格的玩家可抢地主；有人抢时，首叫者有最后一次抢地主机会。不叫者不能再抢。每次抢地主 ×2。连续三次无人叫时，第三次的首位叫牌玩家强制成为地主。</p><h3>支持的牌型</h3><p>单张、对子、三张、三带一、三带二、顺子（至少 5 张）、连对（至少 3 对）、飞机（至少 2 组连续三张）、飞机带单 / 带对、四带二单 / 两对、炸弹、王炸。顺子与连续组合不含 2 和大小王；带牌不能包含王炸或四张同点数，不能与主牌同点数。</p><p>王炸 ＞ 炸弹 ＞ 其他牌型。其余牌须牌型、张数一致才可比大小，只比较主牌点数。两家连续选择不要后，上一出牌者自由领出。</p><h3>倍率与结算</h3><p>可选底倍 1、2、3、5、10、20、100。最低入场为底倍 ×2000 豆，每局开始收（底倍 ×100−7）豆入场费。三人到齐才收费，重发不重复收费。开局可各自选择不加倍、免费加倍 ×2，或消耗一张超级加倍卡使用 ×4；每人每局只能选择一次，×4 不与自身 ×2 叠加。超时托管不会消耗卡片。普通与不洗牌模式的抢地主、炸弹、王炸、春天 / 反春均在当前倍率上 ×2，连续累乘。例如 3 个炸弹为 2×2×2＝8 倍。</p><p>每位农民与地主结算：100 × 底倍 × 公共倍率 × 地主加倍 × 该农民加倍。地主先出完则地主赢，任一农民先出完则两位农民赢。农民全未出过牌的地主胜局，或地主只出过一手的农民胜局，触发春天。</p><p>每位农民的输赢以自己与地主的开局可用豆子为限；两份合计再以地主开局可用豆子封顶，超出按比例分配。胜负结算豆子守恒，入场费单独扣除。</p><h3>成王败寇</h3><p>无倍率、无加倍阶段，不消耗超级加倍卡；抢地主、炸弹、王炸与春天均不改变输赢金额。最低 2000 豆入场，每人每局入场费 93 豆。以开局扣除入场费后的全部余额作为本局携带豆子，中途充值不计入本局。地主赢时，两位农民各输掉全部携带豆子；农民赢时，地主输掉全部携带豆子，两位农民平分（奇数余 1 豆给按座位顺序的后一位农民）。获胜收益不受赢家自身余额封顶。旧双副牌对局保留开局时规则。</p><h3>记牌器与道具</h3><p>可在匹配前、加入前或房间等待时勾选记牌器，实际开局消耗 1 张，取消匹配不扣除、无人叫重发不重复扣除。记牌器在页面顶部显示两排：牌号与除自己以外的余量；零张牌号隐藏，窄屏自动换行。统计由浏览器用本人手牌和公开出牌计算，刷新后也能继续。记牌器每张 10 YIDT、超级加倍卡每张 20 YIDT，支持单独购买，gas 由购买者承担。</p><h3>匹配与托管</h3><p>匹配优先真人，距本房间最后一位真人加入满 5 秒后由智能牌友补齐；10 秒后显示已匹配人数。同时在局的智能牌友最多 100 位，5 档强度，高强度优先。所有模式加入已有房间时，豆子须在当前房内玩家平均豆子的 0.5～2 倍内（含边界），并达到入场门槛；平均值按每次加入前的实际余额重新计算。匹配跳过范围不符的房间，房间码与邀请链接同样校验。智能牌友共用豆子资金池，入场金额在同一范围内按整数均匀随机分配；每个人机加入后，重新计算下一个人机的范围。人机同时受入场门槛、1B（100万豆）上限与资金池可用余额约束；为其余空位保留满足新范围所需的最低资金。结算后的余额归回资金池，资金或空闲名额不足时继续等待。智能牌友可读取全场牌面作决策，并随机等待后操作。</p><p>叫牌与出牌每手 25 秒，加倍阶段 15 秒；超时自动托管，关闭页面后仍继续。重开页面可返回当前牌局。进行中的牌局需完成后离开。</p><h3>充值与赎回</h3><p>充值前绑定斗地主专用 YIDT 服务，付款仍需在 YIDT 确认。100 豆固定赎回 2 YIDT；赎回从金额扣除 gas，直接到账至当前绑定钱包。豆子须为正整数，房间与对局中不可赎回。</p></div></dialog>
+<dialog id="result-dialog"><div class="dialog-title"><p class="eyebrow gold">本局结束</p><button class="close" data-close aria-label="关闭">×</button></div><h2 id="result-title" class="result-title">胜利</h2><p id="result-note" class="muted"></p><div id="result-players"></div><details class="result-hands"><summary>查看三家剩余手牌</summary><div id="result-hands"></div></details><p id="result-fee" class="muted wallet-note"></p><button id="again" class="primary full">再来一局 →</button><button id="result-share" class="secondary full" style="margin-top:10px">分享本局</button><button id="result-back" class="text-button full">返回大厅</button></dialog>
+</body></html>

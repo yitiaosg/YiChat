@@ -14,12 +14,12 @@ export function AppSettings({close,audit}:{close:()=>void;audit:()=>void}){
   <button type="button" disabled={busy} onClick={()=>run('backupNow')}>立即保存内部快照</button>
   <h3>App 更新</h3><UpdateControls/>
   {chat.appNotifications&&<><h3>消息通知</h3><NotificationControls/></>}
-  <h3>核验聊天记录</h3><p class="small muted">选择连续最多5个UTC日期，与服务器存证比对后只读查看，无需会话密钥。</p><button type="button" disabled={busy} onClick={audit}>验证备份记录</button>
+  <h3>核验聊天记录</h3><p class="small muted">选择连续最多7个 GMT 整日，与服务器存证比对后只读查看，无需会话密钥。</p><button type="button" disabled={busy} onClick={audit}>验证备份记录</button>
   <h3>按天导出到外部</h3><label>间隔天数<input type="number" min="1" max="3650" step="1" value={days} onInput={e=>setDays(e.currentTarget.value)}/></label>
   <label>独立导出口令<input type="password" autoComplete="new-password" value={password} onInput={e=>setPassword(e.currentTarget.value)} placeholder="至少12字符，请另行保存"/></label>
   <button type="button" disabled={busy||!/^\d+$/.test(days)||Number(days)<1||Number(days)>3650||password.length<12} onClick={()=>run('configureExport',{days:Number(days),password})}>选择系统目录并启用定期导出</button>
   {status?.days&&<div class="actions"><button type="button" disabled={busy} onClick={()=>run('exportNow')}>立即导出到已选目录</button><button type="button" disabled={busy} onClick={()=>run('stopExport')}>停用外部导出</button></div>}
-  <p class="small muted">导出为独立口令加密的 YCB1 原消息包，聊天原包无需会话密钥。导出不包含浏览器登录令牌或 Matrix 私钥。系统会在条件允许时按所选天数执行，应用内缓存不会因此清理。</p>
+  <p class="small muted">导出为独立口令加密的 YCP 整日数据包，包含已保存的原始特殊消息和附件，可在网页合并、校验与 App 导入。导出不包含浏览器登录令牌或 Matrix 私钥。系统会在条件允许时按所选天数执行，应用内缓存不会因此清理。</p>
   {busy&&<p role="status">正在处理，请完成系统文件选择…</p>}{error&&<ErrorText>{error}</ErrorText>}
  </Modal>
 }

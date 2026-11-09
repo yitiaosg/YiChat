@@ -25,7 +25,7 @@ def postgres():
 def env(tmp_path,monkeypatch,postgres):
     site=tmp_path/'site';site.mkdir()
     shutil.copy(Path(__file__).resolve().parents[2]/'yidt_core.py',site/'yidt_core.py')
-    s=Settings(root=tmp_path/'chat',site=site,origin='http://testserver',session_key=Fernet.generate_key().decode(),admin_token='fixture-admin')
+    s=Settings(material_protocol=False,root=tmp_path/'chat',site=site,origin='http://testserver',session_key=Fernet.generate_key().decode(),admin_token='fixture-admin')
     s.archive_reader=postgres['read'];s.archive_ingest=postgres['ingest'];s.archive_sealer=postgres['seal'];s.archive_cleanup=postgres['cleanup'];s.archive_path=tmp_path/'archives'
     f=Funds(s);y=f.y
     monkeypatch.setattr(y,'DB_PATH',site/'userdata.db');monkeypatch.setattr(y,'ACCOUNT_DB',site/'account.db');monkeypatch.setattr(y,'KEY_PATH',site/'key')

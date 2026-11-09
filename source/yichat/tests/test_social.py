@@ -66,7 +66,7 @@ def test_message_policy_direction_live_and_block_precedence(env,mode):
     with pytest.raises(social.PolicyError) as e:social.require_message(s.accounts,a,b)
     assert str(e.value)==social.PRIVACY_MESSAGE
     # Group sending remains permitted.
-    policy.require_send(s,{'kind':'group'},u['alice']['mxid'])
+    policy.require_send(s,{'kind':'group','room':'!test:chat.yitiao.org'},u['alice']['mxid'])
 
 
 def test_precision_public_format():

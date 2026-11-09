@@ -41,11 +41,17 @@ def gift(s,who,info,data):
         for table,sql in checks:
             if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone():fail(503,'YCards 数据结构不完整，赠送已禁用')
             if c.execute(sql,(iid,)).fetchone():fail(409,'卡片已销毁、挂售或拍卖，当前不可转让')
+        # Capture before the ownership mutation in the same ledger transaction.
+        rendering=None
+        if s.material_protocol:
+            from .card_reads import store
+            rendering=store(s).preview(iid,who['username'],connection=c)
         gid=secrets.token_hex(16);now=time.time()
         n=c.execute('UPDATE yc_instances SET owner=?,acquired=? WHERE id=? AND owner=?',(recipient['username'],now,iid,who['username'])).rowcount
         if n!=1:fail(409,'卡片所有权已变化')
         c.execute('INSERT INTO yichat_card_gifts VALUES(?,?,?,?,?,?,?,?,?,?)',(gid,who['subject'],recipient['uid'],who['username'],recipient['username'],info['room'],iid,key,payload,now))
-        return {'id':gid,'instance':iid,'recipient_uid':recipient['uid'],'state':'transferred'}
+        if rendering is not None:c.execute('INSERT INTO yichat_gift_renderings VALUES(?,?)',(gid,json.dumps(rendering,ensure_ascii=False,separators=(',',':'))))
+        return {'id':gid,'instance':iid,'recipient_uid':recipient['uid'],'state':'transferred','server_published':s.material_protocol}
 
 
 def migrate(s):
@@ -59,7 +65,7 @@ def install(app,s,session,room_access,require_send):
         with connect(s.ledger) as c:
             row=c.execute('SELECT id,instance,recipient_uid,recipient,room FROM yichat_card_gifts WHERE sender_uid=? AND request_key=?',(who['subject'],key)).fetchone()
         if not row:fail(404,'赠送记录不存在')
-        return dict(row)|{'state':'transferred'}
+        return dict(row)|{'state':'transferred','server_published':s.material_protocol}
 
     @app.get('/api/cards/gifts/{gid}')
     async def gift_preview(request:Request,gid:str,room:str|None=None):
@@ -93,4 +99,10 @@ def install(app,s,session,room_access,require_send):
         # Group recipients must also be actual current members.
         target=policy.identity(s,str(data.get('recipient','')))
         await app.state.matrix.member(who,info['room'],policy.mxid(s,target['username']))
-        return gift(s,who,info,data)
+        result=gift(s,who,info,data)
+        if s.material_protocol:
+            from . import server_messages
+            server_messages.queue_gift(s,result['id'])
+            await server_messages.tick(app)
+            result['server_published']=True
+        return result

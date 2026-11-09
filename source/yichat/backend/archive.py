@@ -104,7 +104,7 @@ def _ingest_batch(dsn,rows,through,observed_ms,fences=(),reuse=()):
         c.execute("INSERT INTO checkpoints VALUES('synapse',%s,%s,true,NULL) ON CONFLICT(source) DO UPDATE SET sequence=excluded.sequence,observed_ms=greatest(checkpoints.observed_ms,excluded.observed_ms),healthy=true,error=NULL",(through,observed_ms))
 
 
-def reconcile_source_position(dsn,allocated):
+def reconcile_source_position(dsn,allocated,accepted_floor=0):
     """Read the last actual accepted sequence, not a watermark containing gaps.
     SQLite may reuse unused tail allocations after restart. Accepted positions
     must never rewind; an actual source rollback fails closed.
@@ -112,6 +112,7 @@ def reconcile_source_position(dsn,allocated):
     with connect(dsn) as c:
         c.execute('SELECT pg_advisory_xact_lock(17919,1)')
         accepted=c.execute('SELECT greatest(coalesce((SELECT max(sequence) FROM events),0),coalesce((SELECT max(last_sequence) FROM archives),0)) n').fetchone()['n']
+        accepted=max(accepted,accepted_floor)
         if accepted>allocated:raise RuntimeError('Synapse source rolled back behind accepted archive evidence')
         checkpoint=c.execute("SELECT sequence FROM checkpoints WHERE source='synapse'").fetchone()
         if checkpoint and checkpoint['sequence']>allocated:

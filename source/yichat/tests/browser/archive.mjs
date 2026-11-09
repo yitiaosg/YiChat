@@ -1,7 +1,7 @@
 import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {readFile,writeFile} from 'node:fs/promises';
-const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,args:['--no-sandbox']});
 const context=await browser.newContext({acceptDownloads:true});
 await context.addCookies([{name:'yc_session',value:process.env.ARCHIVE_TEST_TOKEN,url:process.env.ARCHIVE_TEST_ORIGIN,httpOnly:true}]);
 const page=await context.newPage(),errors=[],uploads=[];

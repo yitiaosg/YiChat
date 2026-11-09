@@ -167,7 +167,7 @@ class Describer:
         parsed=[(u,p) for u,p in ((u,previews.parse(u)) for u in urls) if p]
         oid=business.get('id') if business.get('kind')=='order' and isinstance(business.get('id'),str) else next((p[1][0] for _,p in parsed if p[0]=='order'),None)
         if oid:
-            receipt=share.get('type')=='receipt';order=self.order(room,oid)
+            receipt=share.get('type')=='receipt' or content.get('org.yitiao.material_type')=='receipt';order=self.order(room,oid)
             if order:
                 amount=self.fmt(int(order['principal']))+' YIDT';title=(order['title'] or '').strip()
                 if receipt:kind,text='receipt','[已收款] '+amount
@@ -179,8 +179,12 @@ class Describer:
                 detail={'type':'order','order_id':oid,'url':self.s.origin+'/orders/'+oid}
             return {'kind':kind,'text':text,'attachment':None,'share':detail}
         gift=next((u for u in urls if GIFT.fullmatch(u)),None)
-        if gift or share.get('type')=='gift':
-            return {'kind':'gift','text':'[赠卡]','attachment':None,'share':{'type':'gift','url':gift or share.get('url')}}
+        if gift or share.get('type')=='gift' or business.get('kind')=='gift':
+            return {'kind':'gift','text':'[赠卡]','attachment':None,'share':{'type':'gift','url':gift or share.get('url') or self.s.origin+'/gifts/'+str(business.get('id',''))}}
+        material=content.get('org.yitiao.material');typ=content.get('org.yitiao.material_type')
+        if isinstance(material,dict):
+            if material.get('kind')=='record':return {'kind':'share','text':'[聊天记录]','attachment':None,'share':{'type':'record','title':'聊天记录'}}
+            if typ in SHARES:return {'kind':'share','text':'[分享] '+body,'attachment':None,'share':{'type':typ,'title':body}}
         for url,(kind,_) in parsed:
             if kind not in SHARES:continue
             try:meta=previews.metadata(self.s,url)
@@ -214,6 +218,7 @@ def message(s,row,names,redacted=False,describe=None):
         'share':view['share'],
         'msgtype':content.get('msgtype') if visible and isinstance(content.get('msgtype'),str) else None,
         'content':content if visible else None,
+        'material':content.get('org.yitiao.material') if visible else None,
         'encrypted':encrypted,
         'redacted':redacted,
     }
@@ -338,6 +343,9 @@ def install(app,s):
 
     async def send_message(who,info,content,txn):
         room=info['room']
+        if s.material_protocol:
+            from . import materials
+            if materials.recognized(content):content=await materials.prepare(app,s,who,room,content)
         policy.validate_event(s,info,'m.room.message',content,who['mxid'])
         who=await matrix_session(who)
         gid=api_grants.create(s,who['key_id'],room,who['mxid'],'m.room.message',content)
@@ -776,3 +784,6 @@ def install(app,s):
         finally:
             closed.set();task.cancel();read_task.cancel()
             await asyncio.gather(task,read_task,return_exceptions=True)
+
+    app.state.api_owner=api_owner
+    app.state.api_writable=writable

@@ -116,6 +116,9 @@ def room(s,room_id):
 
 def validate_event(s,info,event_type,content,sender,state_key=None,control=None):
     if event_type=='m.room.message':
+        if s.material_protocol:
+            from .materials import validate as validate_material
+            validate_material(s,info['room'],sender,content)
         from .sharing import validate
         validate(s,info['room'],sender,content)
     from . import lifecycle
@@ -174,7 +177,7 @@ def admit_attachments(s,event_id,room,sender,event_type,content,worker,boot):
 
 
 def finish_attachments(s,event_id,received_ms):
-    expiry=(received_ms//86400000+31)*86400
+    expiry=received_ms/1000+7*86400 if s.material_protocol else (received_ms//86400000+31)*86400
     with transaction(s.db) as c:
         c.execute('UPDATE files SET expires=max(expires,?) WHERE id IN (SELECT file FROM attachment_admissions WHERE event=?)',(expiry,event_id))
         c.execute('DELETE FROM attachment_admissions WHERE event=?',(event_id,))
