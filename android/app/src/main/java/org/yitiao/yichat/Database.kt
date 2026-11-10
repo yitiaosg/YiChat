@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("SELECT * FROM TrustedReceipt WHERE room=:room AND sequence>:after ORDER BY sequence LIMIT :limit") suspend fun recordReceipts(room: String, after: Long, limit: Int): List<TrustedReceipt>
     @Query("SELECT * FROM TrustedReceipt WHERE room=:room AND sequence<:before ORDER BY sequence DESC LIMIT :limit") suspend fun olderReceipts(room: String, before: Long, limit: Int): List<TrustedReceipt>
     @Query("SELECT * FROM TrustedReceipt") suspend fun receipts(): List<TrustedReceipt>
+    @Query("SELECT * FROM TrustedReceipt WHERE room=:room ORDER BY sequence") suspend fun roomReceipts(room: String): List<TrustedReceipt>
     @Query("DELETE FROM TrustedReceipt WHERE room=:room AND event=:event") suspend fun deleteReceipt(room:String,event:String)
     @Query("DELETE FROM Tombstone WHERE room=:room AND event=:event") suspend fun deleteTombstone(room:String,event:String)
     @Query("DELETE FROM Packet WHERE room=:room AND event=:event") suspend fun deletePacket(room: String, event: String)

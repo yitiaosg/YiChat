@@ -23,6 +23,13 @@ object PacketProtocol {
  private fun sorted(value:JsonElement):JsonElement=when(value){is JsonObject->JsonObject(value.toSortedMap().mapValues{sorted(it.value)});is JsonArray->JsonArray(value.map(::sorted));else->value}
  fun start(day:String):Long {val date=LocalDate.parse(day);require(date.toString()==day);return date.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()}
  fun day(ms:Long)=java.time.Instant.ofEpochMilli(ms).atOffset(ZoneOffset.UTC).toLocalDate().toString()
+ /** Room and GMT day of a stored full-day key ("day|room|day"), without opening the stored packet. */
+ fun dayKey(key:String):Pair<String,String>? {
+  if(!key.startsWith("day|"))return null
+  val rest=key.substring(4);val at=rest.lastIndexOf('|');if(at<2)return null
+  val room=rest.substring(0,at);val day=rest.substring(at+1)
+  return if(room.startsWith("!")&&Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}").matches(day))room to day else null
+ }
  fun immutable(day:String)=start(day)+86400000L+300000L
  fun files(rows:JsonArray)=JsonArray(rows.map{v->val r=v.jsonObject;obj("id" to r.s("id"),"bytes" to r.s("bytes"),"sha256" to r.s("sha256"))}.sortedBy{it.s("id")})
  fun materialProjection(meta:JsonObject,payload:String,files:JsonArray)=buildJsonObject {

@@ -31,4 +31,8 @@ class PacketProtocolTest {
   val record=buildJsonObject{put("messages",buildJsonArray{add(obj("msgtype" to "m.image","url" to "mxc://chat.yitiao.org/$photo"));add(obj("msgtype" to "m.file","url" to "mxc://chat.yitiao.org/$file"))})}
   assertEquals(setOf(photo),FileDownloadPlan.ids(record,true));assertEquals(setOf(photo,file),FileDownloadPlan.ids(record))
  }
+ @Test fun storedDayKeysNameTheirConversationAndDayWithoutOpeningThePacket() {
+  assertEquals("!room:chat.yitiao.org" to "2026-11-09",PacketProtocol.dayKey("day|!room:chat.yitiao.org|2026-11-09"))
+  for(other in listOf("proof|!room:x|2026-11-09","peer|!room:x|2026-11-09","day|!room:x","day|room:x|2026-11-09","day|!room:x|20261109","material|\$event","index"))assertNull(PacketProtocol.dayKey(other))
+ }
 }

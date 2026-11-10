@@ -6,4 +6,4 @@
 - `android-build.log`、`apk-verification.log`、`apk-facts.json`：签名构建、JVM 测试、签名与对齐核验。
 - 截图：`context-menu.png`、`loading-colour.png`（夹具拦截了网络请求，截图底部的“Failed to fetch”提示来自夹具）。
 
-原生桥为夹具，不是实体手机验收；未运行原生仪器测试。
+原生桥为夹具，不是实体手机验收；未运行原生仪器测试。原生导出提速没有自动化测试覆盖，耗时未在真机测量。

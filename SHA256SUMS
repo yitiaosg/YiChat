@@ -5,7 +5,7 @@
 197e00b1e833208093476e1657ed0d5e95c499cad336b9bb9a6d28b6a7f2deb6  ARCHITECTURE.md
 1e2b75254d36556fd80c6f8f6e296135ff3a638b1a8e8e7f0001b55bcb47baf5  BROWSER-LOGIN-FIX.md
 e26bfa6b5ab7cbf3009abe4f19cf02ce5efda3af87ddeab3a1094fa549219889  CALLBACK-FIX.md
-b39520a41186283de405e1fc579d7a3bfea498978d58a598f87f9f81c8b6711a  CHANGELOG.md
+6268bf3761b42d01b3e96c4ae06bf981a96254583784118da583b57c665a5e44  CHANGELOG.md
 1f0e4d699dda51218094635a6ace44ea56cdbc1d5d13c0a3737f14d83c040fd9  HANDOFF-README.original.md
 d0a7deb2804ccf4c320e3c4bff705b51668744c34e041a96639ac27e86661977  NEXT-SESSION-PROMPT.md
 73722c609a1a127dbc14aae600df78341acdf8e005e910341f89b5714a02d212  PRODUCTION-0.3.1.md
@@ -28,9 +28,9 @@ bd2d221120af1258410328fd0ac3d564520aef9d0d64a1e63abd9f37fe21d687  PRODUCTION-0.4
 05668ed3743104f97e66c6668013e24c63ef697451a0ec41391c2934464e40e9  PRODUCTION-0.4.3.md
 c757c99f3d279918baa37174a5733839f3e0b97df68c5a77abab8835c38a18fd  PRODUCTION-0.4.4.md
 fd054b4753e4e54c73e7a2fe6e2a5a052f46768cab6447c0ec4086c248ec14b6  PRODUCTION-0.4.5.md
-f9129b85902a64d656693f2e410ddf2190dfe2d82482fe7f0967ba75dd9c87e9  PRODUCTION-0.4.6.md
+62a8127cf8f6311a96173af4b7537959d056cf0d37ad5aed3b24c0c21e7c5483  PRODUCTION-0.4.6.md
 104169ac9485da07dacfcf99b89488fc24edaae1361a356cf590aa949d6002c8  PRODUCTION-20261021.md
-c686fa16e6cc9daf6e11d3e76df0cc170c76957785025a630f02a0b26d400de2  README.md
+ea62d240bbfd4a73cdde83cffd5a6b1d491371ddc421fc642ec817dc5a0f1b76  README.md
 a0a9a7f24e8eda4f990a32fa6a97f3036fe4cbc34d49029352aa5c8d9eccecdc  SHA256SUMS.handoff-original
 57e59ec031de5fa2cb0095fb48530dc519c2a78fd7aa017f112f81060520edbe  SOURCE-MANIFEST.handoff-original.json
 dad451d617676cbd6f3b8de02dd5971498d223d56e952dbd9af831f4e305efe8  SYNC-BACKUP-FIX.md
@@ -61,8 +61,8 @@ f2b7541800404406fee7c92d7a0c1ea51068a44cf4c462c39d1377407e30a949  android/app/sr
 7791a3db1759022344b794968686691e8a0e46b510497512e9104a1fb634c19d  android/app/src/main/java/org/yitiao/yichat/AuthRepository.kt
 26f5113dca66c20cbf5ada722579df9e25faa77ec719be31647a6a8b3295dc30  android/app/src/main/java/org/yitiao/yichat/BackupRepository.kt
 078aeffc49460827922e48924d50ed5e67bb4f4d2640913a04cb2b5f1b41e363  android/app/src/main/java/org/yitiao/yichat/BrowserNavigator.kt
-f609bd6f69f0826cca6efffb19f04f5dbe9cc493bb1154c43022478dffede0c5  android/app/src/main/java/org/yitiao/yichat/Database.kt
-40dcc97ee0e59f0918c8ffbf611314d2a7502624a86cf8d972d6e8854bdf4287  android/app/src/main/java/org/yitiao/yichat/DayPacketRepository.kt
+1ddfdc212d81136171768935a68017d6722a65d629369ae838e77919036caff8  android/app/src/main/java/org/yitiao/yichat/Database.kt
+5a70757205a68dea547e89615c6a120765c860e0ce3e821f626989bdda279b72  android/app/src/main/java/org/yitiao/yichat/DayPacketRepository.kt
 2dcd3643c5994466e335b57d9b0e0d560957dcc6018f774489a659f3cef1634c  android/app/src/main/java/org/yitiao/yichat/FileDownloadPlan.kt
 5eca6d6ac38415b8e411477fdc2ee6dfdc578821b41d706f5619d8bc50898986  android/app/src/main/java/org/yitiao/yichat/Gateway.kt
 13258998e4d6b0524d10b3cae9f9691c289aff5ecd84c8475607bfc83b9aea99  android/app/src/main/java/org/yitiao/yichat/HistoryRepository.kt
@@ -75,11 +75,11 @@ ad7052cba7018455501797ba4a72cddda6f98fda7532ad764630967bd2c04b8c  android/app/sr
 2caba354f4bc2167da45b1c6bfa33a25e84b88de7776b31d9accb7710f95be02  android/app/src/main/java/org/yitiao/yichat/NotificationContent.kt
 f7614a0bec2d5b079a30c2653983036eeaec51191d6bc83a90899133c328bd4a  android/app/src/main/java/org/yitiao/yichat/NotificationPolicy.kt
 3de00de748a57f8915ff668ddb013015076bfb4648d94cfd89383a47f2051779  android/app/src/main/java/org/yitiao/yichat/Notifications.kt
-cd59a0e47dfe4ed998df8e86ed41aef21523897bc2a49568cc240b75d5efb33c  android/app/src/main/java/org/yitiao/yichat/PacketProtocol.kt
+73163fdb149517d2458782f21d6882710858f0cfe6338bb3461d0cb6ebe48839  android/app/src/main/java/org/yitiao/yichat/PacketProtocol.kt
 95248eb902be1e0425c6da9de5c62890415ea2dcb1f492cbf5a89df81954166d  android/app/src/main/java/org/yitiao/yichat/PushNotifications.kt
 e3b478ebca712937a0236a36c9d81766135cffa6ef03fd022a406ecd18ca58d5  android/app/src/main/java/org/yitiao/yichat/RecordAudit.kt
 6b886341c78b077dcc7a85ebb18a9447dc55d322fa6b922e7907502feb6315ed  android/app/src/main/java/org/yitiao/yichat/RecordFiles.kt
-6c9fa70ae94f9c1a3009bb41d2085f7695713bf4a94b634606a8ad316a24cd55  android/app/src/main/java/org/yitiao/yichat/SecureStore.kt
+aeded944bb8e5cfc9ddc91943b248b63eec4aed54fc622ae84a01ced35d7a270  android/app/src/main/java/org/yitiao/yichat/SecureStore.kt
 8a622a974b433f3608c19da4b5c409bb558d26f45c7f70add1a091a2b7b22006  android/app/src/main/java/org/yitiao/yichat/SpecialPreviews.kt
 a6d0670ced486f9073dfaa2eef658ffb3e0bd2f4f710b82fd864e4b6d96c9770  android/app/src/main/java/org/yitiao/yichat/WebGraph.kt
 c61a9e16445ab105db4a62e22c174ac30ca1010665c3452b49bed98f3af6df64  android/app/src/main/java/org/yitiao/yichat/WebShellCache.kt
@@ -96,7 +96,7 @@ c4ba29bb24a62f243c933f1e14ba61013251d561b6205f0bcf4d25ecb406ab95  android/app/sr
 cca4a0d0687ac1d37c2f4333fad0c8639e9978efcaf917d71f6f11463b335660  android/app/src/test/java/org/yitiao/yichat/GatewayRecoveryTest.kt
 08110918002627b1aae60c5ab4d325032f30fa27385c2ebe878db144e9c44fb3  android/app/src/test/java/org/yitiao/yichat/NotificationPolicyTest.kt
 c5a2a393e4d9ecc03e94814e5d3b99a456c12e5e48b75ac00f27148837a57989  android/app/src/test/java/org/yitiao/yichat/PacketBackupTest.kt
-9e7d035e282f7210e4719d0980b8771715797f797a873fdb748909056ed4ae12  android/app/src/test/java/org/yitiao/yichat/PacketProtocolTest.kt
+332805ed95cf888da5276c97d065871ebe1e74e3e97f8c5660ca9adb1f86e008  android/app/src/test/java/org/yitiao/yichat/PacketProtocolTest.kt
 fe6a9e42dbf474bdf4feb59b67a0cbfb069d5909bca76a7e8335a37cb03ed81c  android/app/src/test/java/org/yitiao/yichat/SpecialPreviewPlanTest.kt
 ed5ac4ec6424e7311e4291201dbf12b1c97f9a9681ae578bd41d0cf1a5ff5f05  android/app/src/test/java/org/yitiao/yichat/WebRoutesTest.kt
 5567cf169617585245a0e4075a6950c5362dfdc8705ee91ab9d01055dd6b2710  android/app/src/test/resources/protocol-v2-browser.ycp
@@ -319,7 +319,10 @@ e383dc7f25f4c1f54c16711d375c6e18da0e6f110753f3e04d29618cd319d3dc  delivery/andro
 ef76c1c1507d1dea46d35a508f2caeb6dc0338a08377a8fd52343a3537c379b2  delivery/android-0.4.5-20261110/swipe-archive.png
 7acedf47477038309e1bd4953eb25718466bca5f0c9dee1abe62d525f255c040  delivery/android-0.4.5-20261110/swipe-pin.png
 9dcb7d75b170757e769674a1b3eb0dd9df3f0498471fbe477fe324a12b6e0291  delivery/android-0.4.5-20261110/ui-browser.log
-e2a831c6732bd01db2d26bb351d965ec3d7eafbac86e4dfa5a4c999c7971a30a  delivery/android-0.4.6-20261110/README.md
+4112627ae3ba3d33821ceb9a9a4f906cbcb17b4ebce4513c7429aefc0c725fa8  delivery/android-0.4.6-20261110/README.md
+c93f0f49431a8cb671ab4aabc6024849ddbe38a24c571980bf7433e24ade0161  delivery/android-0.4.6-20261110/android-build.log
+09e388b6b8ccab3e537121e3054be2542360e1c8d20deb5d9b1fd4dd2841bed4  delivery/android-0.4.6-20261110/apk-facts.json
+a3e84d850eb6965d69c3c64fff08d1e2b69de1370be772a49224418ec6197896  delivery/android-0.4.6-20261110/apk-verification.log
 ecff414500fe2eb433ca989921a5c4f8f61ee3e9d78b57cb0beeb60789df3849  delivery/android-0.4.6-20261110/app-room-previews.log
 867da222c3c3c2230156bfe15a003301c28df4add9779d8efc6c3a063c3b3b23  delivery/android-0.4.6-20261110/context-menu.png
 aa1a11c91d8687927b79359c2a46b8971299e33b65aec1c3beaf531cd7ebd741  delivery/android-0.4.6-20261110/frontend-tests.log

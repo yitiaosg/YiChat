@@ -25,8 +25,11 @@ class SecureStore(private val context: Context) {
                 .setKeySize(256).setRandomizedEncryptionRequired(true).build())
         }.generateKey()
     }
+    // Unwrapped account keys. Asking the Keystore on every row made bulk reads (export, restore) take minutes.
+    private val accountKeys = HashMap<String, ByteArray>()
     @Synchronized fun put(name: String, bytes: ByteArray) {
         require(name.matches(Regex("[A-Za-z0-9_.-]+")))
+        accountKeys.remove(name)?.fill(0)
         val f = AtomicFile(File(directory, name))
         val stream = f.startWrite()
         try { stream.write(seal(master, name, bytes)); f.finishWrite(stream) }
@@ -36,10 +39,13 @@ class SecureStore(private val context: Context) {
         val f = File(directory, name)
         return if (f.exists() || File(f.path+".bak").exists()) open(master, name, AtomicFile(f).readFully()) else null
     }
-    @Synchronized fun delete(name: String) = AtomicFile(File(directory, name)).delete()
+    @Synchronized fun delete(name: String) { accountKeys.remove(name)?.fill(0); AtomicFile(File(directory, name)).delete() }
     @Synchronized fun accountKey(account: String, purpose: String): ByteArray {
         val name = "$account.$purpose"
-        return get(name) ?: ByteArray(32).also { random.nextBytes(it); put(name, it) }
+        accountKeys[name]?.let { return it.copyOf() } // Callers may wipe their copy.
+        val key = get(name) ?: ByteArray(32).also { random.nextBytes(it); put(name, it) }
+        accountKeys[name] = key.copyOf()
+        return key
     }
     fun encrypt(account: String, row: String, data: ByteArray) = seal(SecretKeySpec(accountKey(account, "data"), "AES"), row, data)
     fun decrypt(account: String, row: String, data: ByteArray) = open(SecretKeySpec(accountKey(account, "data"), "AES"), row, data)

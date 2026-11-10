@@ -18,13 +18,28 @@ class DayPacketRepository(private val store:PacketStore,private val gateway:Gate
  private fun proof(room:String,day:String)=cache.get("proof|$room|$day") as? JsonObject
  private fun checkedAccount(a:Account){check(store.account?.token==a.token){"本地账户已锁定"}}
  private fun dates(start:String,end:String,max:Int=3650):List<String> {val a=LocalDate.parse(start);val b=LocalDate.parse(end);val count=java.time.temporal.ChronoUnit.DAYS.between(a,b)+1;require(count in 1..max.toLong()&&a.toString()==start&&b.toString()==end){"请选择连续1至${max}个 GMT 日期"};return (0 until count.toInt()).map{a.plusDays(it.toLong()).toString()}}
- suspend fun collect(room:String,day:String,includeData:Boolean=true):JsonObject=withContext(Dispatchers.IO) {
+ /** Receipts grouped by conversation and GMT day, read once for a whole export. */
+ private class DayIndex(val days:Map<Pair<String,String>,List<Pair<TrustedReceipt,Long>>>,val unreadable:Set<String>)
+ private suspend fun index(a:Account,dao:LocalDao,rooms:Collection<String>?):DayIndex {
+  val days=mutableMapOf<Pair<String,String>,MutableList<Pair<TrustedReceipt,Long>>>();val unreadable=mutableSetOf<String>()
+  for(receipt in if(rooms==null)dao.receipts() else rooms.distinct().flatMap{dao.roomReceipts(it)}) {
+   val raw=runCatching{vault.decrypt(a.storage,"receipt:${receipt.room}:${receipt.event}",receipt.encrypted)}.getOrNull()
+   val metadata=try{raw?.let{runCatching{json.parseToJsonElement(it.decodeToString()).jsonObject}.getOrNull()}}finally{raw?.fill(0)}
+   if(metadata==null){unreadable.add(receipt.room);continue}
+   val at=metadata["received_ms"]?.jsonPrimitive?.longOrNull?:continue
+   days.getOrPut(receipt.room to PacketProtocol.day(at)){mutableListOf()}.add(receipt to at)
+  }
+  for(rows in days.values)rows.sortBy{it.first.sequence}
+  return DayIndex(days,unreadable)
+ }
+ suspend fun collect(room:String,day:String,includeData:Boolean=true):JsonObject=collect(room,day,includeData,null)
+ private suspend fun collect(room:String,day:String,includeData:Boolean,known:DayIndex?):JsonObject=withContext(Dispatchers.IO) {
   val selected=cache.get(dayKey(room,day)) as? JsonObject
   if(selected?.b("manual")==true)return@withContext selected
-  val a=requireNotNull(store.account);val dao=requireNotNull(store.database).local();val low=PacketProtocol.start(day);val entries=mutableListOf<JsonElement>();var missing=false
-  for(receipt in dao.receipts().filter{it.room==room}.sortedBy{it.sequence}) {
-   val metadata=runCatching{json.parseToJsonElement(vault.decrypt(a.storage,"receipt:$room:${receipt.event}",receipt.encrypted).decodeToString()).jsonObject}.getOrNull()
-   if(metadata==null){missing=true;continue};val at=metadata["received_ms"]?.jsonPrimitive?.longOrNull?:continue;if(at<low||at>=low+86400000)continue
+  val a=requireNotNull(store.account);val dao=requireNotNull(store.database).local();val low=PacketProtocol.start(day);val entries=mutableListOf<JsonElement>()
+  val index=known?:index(a,dao,listOf(room));var missing=room in index.unreadable
+  for((receipt,at) in index.days[room to day].orEmpty()) {
+   if(at<low||at>=low+86400000)continue
    val packet=dao.packet(room,receipt.event);if(packet==null){missing=true;continue}
    var bytes:ByteArray?=null
    try {
@@ -129,16 +144,20 @@ class DayPacketRepository(private val store:PacketStore,private val gateway:Gate
  }
  suspend fun exportKnown(selectedRooms:List<String>?=null):JsonObject=withContext(Dispatchers.IO) {
   val a=requireNotNull(store.account);val dao=requireNotNull(store.database).local();val keys=linkedSetOf<Pair<String,String>>()
-  for(key in cache.keys().filter{it.startsWith("day|")}){val row=cache.get(key)?.jsonObject?:continue;keys.add(row.s("room_id") to row.s("day"))}
-  for(receipt in dao.receipts())runCatching {val raw=vault.decrypt(a.storage,"receipt:${receipt.room}:${receipt.event}",receipt.encrypted);try{val m=json.parseToJsonElement(raw.decodeToString()).jsonObject;keys.add(receipt.room to PacketProtocol.day(m["received_ms"]!!.jsonPrimitive.long))}finally{raw.fill(0)}}
+  val wanted=selectedRooms?.toSet()
+  for(key in cache.keys())PacketProtocol.dayKey(key)?.let{if(wanted==null||it.first in wanted)keys.add(it)}
+  // One pass over the receipts; every day is then assembled from this index.
+  val index=index(a,dao,wanted);keys.addAll(index.days.keys)
   require(keys.size<=10000){"日期超过10000项，请按会话分批导出"}
-  val result=mutableListOf<JsonObject>();for((room,day) in keys.sortedBy{it.first+it.second})if((selectedRooms==null||room in selectedRooms)&&System.currentTimeMillis()>=PacketProtocol.immutable(day))result.add(collect(room,day,true))
+  val result=mutableListOf<JsonObject>();for((room,day) in keys.sortedBy{it.first+it.second})if(System.currentTimeMillis()>=PacketProtocol.immutable(day))result.add(collect(room,day,true,index))
   checkedAccount(a);PacketProtocol.pack(result)
  }
- suspend fun rooms():List<String> {val dao=requireNotNull(store.database).local();return (dao.recordRooms()+cache.keys().filter{it.startsWith("day|")}.mapNotNull{(cache.get(it) as? JsonObject)?.s("room_id")}).distinct().sorted()}
+ suspend fun rooms():List<String> {val dao=requireNotNull(store.database).local();return (dao.recordRooms()+cache.keys().mapNotNull{PacketProtocol.dayKey(it)?.first}).distinct().sorted()}
  suspend fun export(rooms:List<String>,start:String,end:String):JsonObject=withContext(Dispatchers.IO) {
   require(rooms.isNotEmpty());val dates=dates(start,end);require(rooms.size.toLong()*dates.size<=10000){"日期超过10000项，请分批导出"};val days=mutableListOf<JsonObject>()
-  for(room in rooms)for(day in dates){require(System.currentTimeMillis()>=PacketProtocol.immutable(day)){"只能导出已经不可撤回的 GMT 日期"};days+=collect(room,day,true)}
+  for(day in dates)require(System.currentTimeMillis()>=PacketProtocol.immutable(day)){"只能导出已经不可撤回的 GMT 日期"}
+  val a=requireNotNull(store.account);val index=index(a,requireNotNull(store.database).local(),rooms)
+  for(room in rooms)for(day in dates)days+=collect(room,day,true,index)
   PacketProtocol.pack(days)
  }
  private suspend fun serverValid(packet:JsonObject):Boolean {
