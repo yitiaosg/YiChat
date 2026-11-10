@@ -23,7 +23,7 @@ a317b405b88300144ea770f1a807f06f31eb31fbcaeb6e1dea33989d3acc7235  PRODUCTION-0.3
 d6a681420df95f4a5099f6ea79e2a9dea4c47bad77e2084463c7588fd8407740  PRODUCTION-0.3.8.md
 6948d9eee6ca8eb2b1548577ed251a2e467dd88465cdb74012235a16e734417f  PRODUCTION-0.3.9.md
 0fa84aa7953c33ad7820af5dd68739a15796ca61e38a74d8452989add2c957ae  PRODUCTION-0.4.0.md
-2370205c3a715b472fea8b3f962e882a2a87026667b22f1a0be1313998b60c20  PRODUCTION-0.4.1.md
+bd2d221120af1258410328fd0ac3d564520aef9d0d64a1e63abd9f37fe21d687  PRODUCTION-0.4.1.md
 104169ac9485da07dacfcf99b89488fc24edaae1361a356cf590aa949d6002c8  PRODUCTION-20261021.md
 16d5909e007a69867d466c3a77f68e8addd4c8c8275e77adf09f445e58e2dbfd  README.md
 a0a9a7f24e8eda4f990a32fa6a97f3036fe4cbc34d49029352aa5c8d9eccecdc  SHA256SUMS.handoff-original
@@ -237,9 +237,9 @@ fe2cf79069913c8362bef711a38ea4b0942f1fde78accb6c465cfde1d1039f10  delivery/andro
 8c534cf39b37983b990a4d78d3e7e08f237e9fc13fb0617012a26c84dc45ec36  delivery/android-0.4.0-20261109/production-browser.log
 4983e1831a026cfcb417b081175b4acb53730f4f2b7bd057fe522328a7383964  delivery/android-0.4.0-20261109/production-data-tools.png
 92e0d143225fbd4d909ea3521a6c11a78aa9a72796a3f84174811fabd2d423c7  delivery/android-0.4.1-20261110/README.md
-f32da2d5c3df8af42b5b9ad72de0fcacc749a6064d11fd788aa0006767a3a37b  delivery/android-0.4.1-20261110/android-build.log
-30b13a9bd8d489f1b4e79686dc7a3c1e40ecf67a0b4ec2d674bc9498891fea3e  delivery/android-0.4.1-20261110/apk-facts.json
-2f2c7142ff212555f1dcd55fc572d304e254bb1320263ca750a0703508cebd9c  delivery/android-0.4.1-20261110/apk-verification.log
+d584248e399f6e197538d7294927d2889dfa5b3efb81f8b4bdf69d247fc1b43f  delivery/android-0.4.1-20261110/android-build.log
+33617816632777d581a1c50696ad910ec677e44a440a340c550a3d5174db30ab  delivery/android-0.4.1-20261110/apk-facts.json
+38c4e066020557d1edd768d55dd509b056079b5fbef776eb344a9dcb4dbe3fa8  delivery/android-0.4.1-20261110/apk-verification.log
 7c871844cb443ba14dacf13cb3d84647d9d8a22ce4d159a427fa6e73cb121e71  delivery/android-0.4.1-20261110/backend-initial-full.log
 dd83d81f540c255b9e1003c1b4661f611ad25e2d18b25ca3c6b74c624ad65f8b  delivery/android-0.4.1-20261110/backend-retest.log
 80c007357584c53f7b659f1c604099e1426564378c51948a8548afb62e48a972  delivery/android-0.4.1-20261110/browser-originals-export.log
@@ -849,7 +849,7 @@ e5828b7ef54f3b3995229b5c3490b08fd5abaf93c9dd5f6808151f8d6371bac5  source/yichat/
 ab4d547058cbd2ee2b6d4c4d780381170705de306fcba59dc712c2b6aa16af4b  source/yichat/client/src/offline-previews.ts
 15db943ffed00447873830cd99c9c75f6f5d5131e4b9cefb5b211db2aef9ef8b  source/yichat/client/src/packet-display.ts
 0a20fd8a236eb5e36b3086a6f8a9e3e281293b1257e46317b75b3337669687c7  source/yichat/client/src/packet-protocol.ts
-70c9a306e67dbf3e3850ee32c9f7cb3f8f413dd95c424e03271d8807ae535c9a  source/yichat/client/src/packet-tools.tsx
+370d236d29ad066e460682cab546fa364cd75255806852174ed0bc9542315b48  source/yichat/client/src/packet-tools.tsx
 ffad05df7a195ec0e8890142c8b229338a831108da8a8eea18db50fb0f4fbd1e  source/yichat/client/src/people.tsx
 330a293f72b49a2a36dba581bdbe9b23c914ba4461394030572fb2f162cc7407  source/yichat/client/src/preview-cache.ts
 0600d8ff8075f05f1e30b82694657f0948bb3c8cb03cb030e218f60adc6a8b9f  source/yichat/client/src/previews.tsx
