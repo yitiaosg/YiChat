@@ -1,3 +1,4 @@
+import {NativeLiveMessages} from './native-live';
 import {latestRoomMessage,receivedAt} from './room-timeline';
 import {legacySpecial} from './message-display';
 import {nativeBootstrap,replaceNativeDay} from './native-bootstrap';
@@ -23,7 +24,7 @@ export class Chat {
   private preferencePending=new Set<string>();private preferenceRevision=0;private preferenceVersions=new Map<string,number>();
   appNotifications=false;activeRoom='';preferences=new Map<string,{pinned?:boolean;archived?:boolean;muted?:boolean;deleted?:boolean;read_sequence?:number;read_event?:string;latest_event?:string;unread_count?:number}>();
   rooms: sdk.Room[]=[];info=new Map<string,RoomInfo>();profiles=new Map<string,Profile>();outbox:Outgoing[]=[];business:any[]=[];
-  nativeProtocol=false;offline=false;private saveTimer?:ReturnType<typeof setTimeout>;private uiSaveTimer?:ReturnType<typeof setTimeout>;
+  nativeProtocol=false;nativeImmediate=false;private liveMessages=new NativeLiveMessages();offline=false;private saveTimer?:ReturnType<typeof setTimeout>;private uiSaveTimer?:ReturnType<typeof setTimeout>;
   private listeners=new Set<()=>void>();private release?:()=>void;private closed=false;private refreshTimer?:ReturnType<typeof setTimeout>;private channel?:BroadcastChannel;
   readonly outer=new Map<string,string[]>();private outerBusiness=new Map<string,any>();private profileTimes=new Map<string,number>();private inflight=new Set<string>();private profileFlight?:Promise<void>;
   subscribe=(fn:()=>void)=>{this.listeners.add(fn);return()=>this.listeners.delete(fn)};
@@ -50,7 +51,7 @@ export class Chat {
       this.channel=new BroadcastChannel('yc:lifecycle');this.channel.onmessage=e=>{if(e.data==='notification-preempt'&&this.notificationMode)this.lock('loading');if(e.data==='logout')this.lock('login');if(e.data==='release')this.lock('other-tab')};
       const app=isApp?await appCall('session'):undefined;this.nativeProtocol=app?.session?.material_protocol===2;this.appNotifications=app?.capabilities?.notifications===true;
       if(isApp&&!app.session){this.phase='login';this.error=app.pendingLogout?'已锁定本地数据，服务器退出将在联网后完成。':'';this.changed();return}
-      if(app?.session)requests.token=app.session.token;
+      this.nativeImmediate=!!app?.capabilities?.immediateMessages;if(app?.session)requests.token=app.session.token;
       if(app?.session&&(!app.online||!navigator.onLine)){this.session=app.session;this.offline=true}
       else {
         const controller=new AbortController(),timer=isApp?setTimeout(()=>controller.abort(),8000):undefined;
@@ -91,7 +92,7 @@ export class Chat {
         if(isApp&&['PREPARED','SYNCING'].includes(state)){clearTimeout(this.saveTimer);this.saveTimer=setTimeout(()=>void store.save(true).catch(()=>{}),1200)}
       });
       const update=()=>{this.updateRooms()};
-      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{update();if(event.getContent()['org.yitiao.material'])void ensureMaterial(event.getId()!).catch(()=>{});if(room&&!toStart&&data.liveEvent&&this.preferences.get(room.roomId)?.deleted&&['m.room.message','m.room.encrypted'].includes(event.getWireType()))this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Name,()=>{update();if(isApp&&this.phase==='ready'&&this.info.size){clearTimeout(this.uiSaveTimer);this.uiSaveTimer=setTimeout(()=>void this.saveNativeUi().catch(()=>{}),500)}});this.client.on(sdk.RoomEvent.Receipt,()=>{update();this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Redaction,update);
+      this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{update();if(this.nativeImmediate&&room&&event.getId()?.startsWith('$'))void this.liveMessages.remember(room.roomId,event).catch(e=>this.fail(e));if(event.getContent()['org.yitiao.material'])void ensureMaterial(event.getId()!).catch(()=>{});if(room&&!toStart&&data.liveEvent&&this.preferences.get(room.roomId)?.deleted&&['m.room.message','m.room.encrypted'].includes(event.getWireType()))this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Name,()=>{update();if(isApp&&this.phase==='ready'&&this.info.size){clearTimeout(this.uiSaveTimer);this.uiSaveTimer=setTimeout(()=>void this.saveNativeUi().catch(()=>{}),500)}});this.client.on(sdk.RoomEvent.Receipt,()=>{update();this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Redaction,update);
       this.client.on(sdk.MatrixEventEvent.Decrypted,update);this.client.on(sdk.RoomEvent.MyMembership,()=>{this.scheduleRefresh();update()});this.client.on(sdk.ClientEvent.Room,()=>{this.scheduleRefresh();update()});
 
       this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{if(this.notificationMode||!isApp||!this.appNotifications||this.phase!=='ready'||toStart||!data.liveEvent||!room||event.getSender()===this.session?.mxid||!['m.room.message','m.room.encrypted'].includes(event.getWireType()))return;const p=this.preferences.get(room.roomId);if(!p?.archived&&!p?.muted&&!this.readOnly(room.roomId)&&(document.hidden||this.activeRoom!==room.roomId))void appCall('notifyRoom',{room:room.roomId,event:event.getId(),label:this.roomName(room),kind:this.info.get(room.roomId)?.kind==='group'?'group':'private'}).catch(()=>{})});
@@ -121,6 +122,7 @@ export class Chat {
   }
   name(mxid?:string){return mxid?(this.profiles.get(mxid)?.nickname||this.client?.getUser(mxid)?.displayName||mxid):'未知用户'}
   roomName(room:sdk.Room){const info=this.info.get(room.roomId);if(info?.kind==='direct')return this.name(info.owner===this.session.mxid?info.peer!:info.owner);return room.name||'会话'}
+  async syncRoomLatest(room:string){if(!this.nativeImmediate||this.offline||!navigator.onLine)return;try{await this.liveMessages.room(room);await nativeBootstrap(this)}catch{/* The local inbox remains available while the archive catches up. */}}
   previewEvent(room:sdk.Room){return latestRoomMessage(room.roomId,room.getLiveTimeline().getEvents(),this.history.receipts)}
   private roomActivity(room:sdk.Room){const event=this.previewEvent(room);return event?receivedAt(event,this.history.receipts):room.getLastActiveTimestamp()}
   timeline(room:sdk.Room){const events=this.history.timeline(room).filter(e=>e.getRoomId()===room.roomId);return this.session?.material_protocol===2?events.filter(e=>!legacySpecial(e.getContent())&&(e.getType()!=='m.room.message'||Object.keys(e.getContent()).length>0)):events}
@@ -198,7 +200,8 @@ export class Chat {
       if(this.info.get(row.room)?.kind==='direct')await requests.api('/api/rooms/'+path(row.room)+'/prepare',{});
       const old=this.client.getRoom(row.room)?.getPendingEvents().find(e=>e.getTxnId()===row.txn);
       if(row.content['org.yitiao.material'])throw Error('原始消息必须使用服务器分享请求，不能直接重发引用');
-      if(old)await this.client.resendEvent(old,this.client.getRoom(row.room)!);else await this.client.sendEvent(row.room,sdk.EventType.RoomMessage,row.content,row.txn);
+      const sent=old?await this.client.resendEvent(old,this.client.getRoom(row.room)!):await this.client.sendEvent(row.room,sdk.EventType.RoomMessage,row.content,row.txn);
+      if(this.nativeImmediate){const wire=this.client.getRoom(row.room)?.findEventById(sent.event_id);await this.liveMessages.remember(row.room,wire||{event_id:sent.event_id,room_id:row.room,sender:this.session.mxid,type:'m.room.message',origin_server_ts:Date.now(),content:row.content}).catch(e=>this.fail(Error('消息已发送，但本机保存未完成：'+e.message)))}
       this.outbox=this.outbox.filter(x=>x.txn!==row.txn);await this.persist();
     }catch(e:any){row.state='failed';row.error=e.data?.error||e.message||'发送失败';await this.persist()}
     finally{this.inflight.delete(row.txn);this.outer.delete(row.txn);this.outerBusiness.delete(row.txn);this.changed()}

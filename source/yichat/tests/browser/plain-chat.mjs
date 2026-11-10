@@ -19,6 +19,11 @@ async function send(page,text){await page.getByRole('textbox',{name:'消息',exa
 async function check(name,fn){console.log('CHECK',name);await fn();checks.push(name)}
 try{
  await mkdir('artifacts',{recursive:true});const a=await setup('alice'),b=await setup('bob');
+ await check('browser settings use categorized data/security/theme/wallet entries and the main-site logout screen',async()=>{
+  await a.getByRole('button',{name:'账户与设置',exact:true}).click();assert.deepEqual((await a.locator('.account-menu').locator('button,a').allTextContents()).map(x=>x.trim()),['下载…','数据与安全','开发者API','主题','YiChat Wallet','主站账户设置','退出登录YiChat']);assert.equal(await a.getByRole('link',{name:'退出登录YiChat',exact:true}).getAttribute('href'),'https://yitiao.org/logout/');
+  await a.getByRole('button',{name:'数据与安全',exact:true}).click();assert.equal(await a.getByRole('link',{name:'数据包合并与校验',exact:true}).count(),1);assert.equal(await a.getByRole('button',{name:'App 数据备份与导出',exact:true}).count(),0);await a.getByRole('button',{name:'安全与备份',exact:true}).click();await a.getByRole('heading',{name:'安全与备份',exact:true}).waitFor();await a.getByRole('button',{name:'关闭',exact:true}).click();await a.getByRole('button',{name:'关闭',exact:true}).click();
+  await a.getByRole('button',{name:'账户与设置',exact:true}).click();await a.getByRole('button',{name:'主题',exact:true}).click();assert.equal(await a.getByRole('button',{name:'主题色设置',exact:true}).count(),0);await a.getByRole('button',{name:'浅色',exact:true}).click();await a.getByRole('button',{name:'关闭',exact:true}).click();
+ });
  let room;
  await check('private room has no encryption state; both users read normal messages',async()=>{
   const response=await a.request.post(origin+'/api/rooms',{headers:{Origin:origin},data:{kind:'direct',users:['bob'],key:crypto.randomUUID()}});assert.equal(response.status(),200);room=(await response.json()).room_id;

@@ -3,6 +3,8 @@ package org.yitiao.yichat
 import android.content.Context
 import android.util.AtomicFile
 import androidx.room.withTransaction
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -32,7 +34,7 @@ class ProtocolStore(private val context:Context,private val packets:PacketStore,
   val keys=(read(a,"index") as? JsonArray)?.map{it.jsonPrimitive.content}?.toMutableSet()?:mutableSetOf();if(keys.add(key))write(a,"index",JsonArray(keys.sorted().map(::JsonPrimitive)))
  }
 }
-class MessageMaterials(private val packets:PacketStore,private val gateway:Gateway,private val cache:ProtocolStore,private val files:RecordFiles) {
+class MessageMaterials(private val packets:PacketStore,private val gateway:Gateway,private val cache:ProtocolStore,private val files:RecordFiles,private val scope:CoroutineScope) {
  private val mutex=Mutex();private val recordsMutex=Mutex()
  fun read(event:String):JsonObject? {
   require(event.startsWith("$")&&event.length<=255)
@@ -66,10 +68,13 @@ class MessageMaterials(private val packets:PacketStore,private val gateway:Gatew
   val value=buildJsonObject{put("meta",state);put("canonical",canonical)};PacketProtocol.validateMaterial(value)
   val confirmed=gateway.call("/api/materials/"+Gateway.segment(event)+"/confirm",buildJsonObject{put("payload_sha256",state.s("payload_sha256"));put("sha256",state["sha256"]?:JsonNull)}).jsonObject
   require(confirmed.s("state")=="ok"){"服务器未通过客户端重新计算的原始消息摘要"}
-  val doc=json.parseToJsonElement(canonical).jsonObject;val photos=FileDownloadPlan.ids(doc,true)
-  for(file in state.a("files")){val f=file.jsonObject;files.remember(f,a);if(f.s("id") in photos)runCatching{files.ensure(f.s("id"),f.s("sha256"))}}
   check(packets.account?.token==a.token){"本地账户已锁定"}
-  save(buildJsonObject{put("meta",confirmed);put("canonical",canonical)},a)
+  val saved=save(buildJsonObject{put("meta",confirmed);put("canonical",canonical)},a)
+  scope.launch {
+   val photos=FileDownloadPlan.ids(json.parseToJsonElement(canonical),true)
+   for(f in confirmed.a("files").map{it.jsonObject}.filter{it.s("id") in photos})runCatching{files.ensure(f.s("id"),f.s("sha256"),owner=a)}
+  }
+  saved
  }}
  suspend fun saveRecord(value:JsonObject):JsonObject {
   val a=requireNotNull(packets.account);val h=value.s("hash");val raw=value.s("canonical");require(h.matches(Regex("[a-f0-9]{64}"))&&PacketProtocol.hash(raw.toByteArray())==h){"记录原始哈希不匹配"}

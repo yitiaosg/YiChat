@@ -27,6 +27,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.webkit.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.serialization.json.*
 import java.io.File
 import java.util.UUID
@@ -175,10 +176,12 @@ class MainActivity : ComponentActivity() {
         consumeIntent(intent)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {graph.liveMessages.changes.collectLatest{token->delay(40);if(graph.store.account?.token==token)web.evaluateJavascript("window.dispatchEvent(new Event('yc:packet-updated'))",null)}}
+                graph.liveMessages.changed()
                 launch { while(isActive){withContext(Dispatchers.IO){runCatching{if(online()&&graph.store.account!=null)graph.messageMaterials.exchangeRecords()}};delay(5000)} }
                 while(isActive) {
                     withContext(Dispatchers.IO) {
-                        runCatching { graph.restore();if(graph.auth.account!=null) { if(online()) { graph.history.catchUp();graph.history.exchange();graph.protocol.sync() };graph.backup.saveInternal() } }
+                        runCatching { graph.restore();if(graph.auth.account!=null) { if(online()) { runCatching{graph.liveMessages.drain()};graph.history.catchUp();graph.liveMessages.changed();runCatching{graph.history.exchange()};runCatching{graph.protocol.sync()} };graph.backup.saveInternal() } }
                     }
                     delay(60000)
                 }
@@ -276,7 +279,7 @@ class MainActivity : ComponentActivity() {
     private fun respond(reply:Reply,value:JsonElement=JsonNull) { reply.proxy.postMessage(buildJsonObject { put("id",reply.id);put("ok",true);put("value",value) }.toString()) }
     private fun reject(reply:Reply,error:Throwable) { reply.proxy.postMessage(buildJsonObject { put("id",reply.id);put("ok",false);put("error",safeError(error)) }.toString()) }
     private suspend fun backupStatus():JsonObject = withContext(Dispatchers.IO) {
-        buildJsonObject { put("status",graph.backup.status.value);put("exportStatus",graph.backup.exportStatus.value);put("days",graph.backup.exportDays.value?.let(::JsonPrimitive) ?: JsonNull);put("packets",graph.store.database?.local()?.packetCount() ?: 0) }
+        buildJsonObject { put("status",graph.backup.status.value);put("exportStatus",graph.backup.exportStatus.value);put("days",graph.backup.exportDays.value?.let(::JsonPrimitive) ?: JsonNull);put("packets",graph.store.database?.local()?.packetCount() ?: 0);put("pendingMessages",graph.store.database?.local()?.allOperations()?.count{it.kind=="live_message"&&it.state=="pending"}?:0) }
     }
     private fun receive(raw:String?,proxy:JavaScriptReplyProxy) {
         if(raw==null || raw.length>400000)return
@@ -287,6 +290,8 @@ class MainActivity : ComponentActivity() {
             try {
                 val args=data.o("args")
                 when(data.s("method")) {
+                    "messagePersist" -> respond(reply,graph.persistLive(args).await())
+                    "messageSyncRoom" -> respond(reply,graph.syncLiveRoom(args.s("room")).await())
                     "protocolBootstrap" -> respond(reply,withContext(Dispatchers.IO){graph.protocol.bootstrap()})
                     "protocolUiSave" -> {withContext(Dispatchers.IO){graph.protocol.saveUi(args)};respond(reply)}
                     "materialRead" -> respond(reply,withContext(Dispatchers.IO){graph.messageMaterials.read(args.s("event"))?:JsonNull})
@@ -339,7 +344,7 @@ class MainActivity : ComponentActivity() {
                     "checkUpdate" -> checkForUpdate(true,reply)
                     "session" -> {
                         val a=withContext(Dispatchers.IO) { graph.restore() }
-                        respond(reply,buildJsonObject { put("online",online());put("version",BuildConfig.VERSION_NAME);put("capabilities",buildJsonObject{put("notifications",true);put("backgroundNotifications",true)});put("pendingLogout",graph.vault.get("web.pending-logout")!=null);put("session",a?.let { buildJsonObject {
+                        respond(reply,buildJsonObject { put("online",online());put("version",BuildConfig.VERSION_NAME);put("capabilities",buildJsonObject{put("notifications",true);put("backgroundNotifications",true);put("immediateMessages",true)});put("pendingLogout",graph.vault.get("web.pending-logout")!=null);put("session",a?.let { buildJsonObject {
                             put("uid",it.uid);put("user",it.user);put("mxid",it.mxid);put("device",it.device);put("device_id",it.device);put("token",it.token);put("material_protocol",2)
                         } } ?: JsonNull) })
                     }

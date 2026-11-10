@@ -1,0 +1,9 @@
+{
+  "version": "0.4.3",
+  "versionCode": 26,
+  "apk_bytes": 9943886,
+  "apk_sha256": "06479f7634d7e435c6ecf98417d357f8f85006ed955f1bc6b19db0866fe6b74b",
+  "web_assets": 14,
+  "jvm_tests": 28,
+  "jvm_failures": 0
+}

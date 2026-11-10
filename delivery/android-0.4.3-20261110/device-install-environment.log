@@ -1,0 +1,22 @@
+Performing Streamed Install
+adb: failed to install android/app/build/outputs/apk/debug/app-debug.apk: 
+Exception occurred while executing:
+java.lang.NullPointerException: Attempt to invoke virtual method 'void android.content.pm.PackageManagerInternal.freeStorage(java.lang.String, long, int)' on a null object reference
+	at com.android.server.StorageManagerService.allocateBytes(StorageManagerService.java:3263)
+	at android.os.storage.StorageManager.allocateBytes(StorageManager.java:2099)
+	at android.os.storage.StorageManager.allocateBytes(StorageManager.java:2156)
+	at com.android.server.pm.PackageInstallerSession.doWriteInternal(PackageInstallerSession.java:723)
+	at com.android.server.pm.PackageInstallerSession.write(PackageInstallerSession.java:670)
+	at android.content.pm.PackageInstaller$Session.write(PackageInstaller.java:951)
+	at com.android.server.pm.PackageManagerShellCommand.doWriteSplit(PackageManagerShellCommand.java:2732)
+	at com.android.server.pm.PackageManagerShellCommand.runInstall(PackageManagerShellCommand.java:1072)
+	at com.android.server.pm.PackageManagerShellCommand.onCommand(PackageManagerShellCommand.java:169)
+	at android.os.ShellCommand.exec(ShellCommand.java:104)
+	at com.android.server.pm.PackageManagerService.onShellCommand(PackageManagerService.java:21729)
+	at android.os.Binder.shellCommand(Binder.java:881)
+	at android.os.Binder.onTransact(Binder.java:765)
+	at android.content.pm.IPackageManager$Stub.onTransact(IPackageManager.java:4860)
+	at com.android.server.pm.PackageManagerService.onTransact(PackageManagerService.java:4014)
+	at android.os.Binder.execTransactInternal(Binder.java:1021)
+	at android.os.Binder.execTransact(Binder.java:994)
+

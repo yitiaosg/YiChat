@@ -71,8 +71,8 @@ class RecordFiles(private val context:Context,private val store:PacketStore,priv
    val manifest=buildJsonObject{put("sha256",actual);put("bytes",total);put("chunks",count)}.toString().toByteArray();File(temp,"manifest").writeBytes(vault.encrypt(a.storage,"record-file:$id:manifest",manifest));commit(a,id,temp)
   }finally{buffer.fill(0);temp.deleteRecursively()}
  }
- suspend fun ensure(id:String,expected:String,record:String?=null)=receiving.withLock {withContext(Dispatchers.IO) {
-  val a=requireNotNull(store.account);require(valid(id)&&expected.matches(Regex("[a-f0-9]{64}")))
+ suspend fun ensure(id:String,expected:String,record:String?=null,owner:Account?=null)=receiving.withLock {withContext(Dispatchers.IO) {
+  val a=requireNotNull(store.account);require(owner==null||owner.token==a.token){"附件账户已改变"};require(valid(id)&&expected.matches(Regex("[a-f0-9]{64}")))
   if(available(id)&&runCatching{open(id)?.data?.use{digest(it)}==expected}.getOrDefault(false))return@withContext
   gateway.readFile(id,record){input->receive(a,id,input,expected)}
  }}

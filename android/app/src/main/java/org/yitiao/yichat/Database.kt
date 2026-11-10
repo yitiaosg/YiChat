@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
     @Query("DELETE FROM Operation WHERE kind='missing_packet'") suspend fun clearMissingOperations()
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveOperation(value: Operation)
+    @Query("DELETE FROM Operation WHERE `key`=:key") suspend fun deleteOperation(key:String)
     @Query("SELECT * FROM Operation ORDER BY updated DESC") fun operations(): Flow<List<Operation>>
     @Query("SELECT * FROM Operation WHERE `key`=:key") suspend fun operation(key: String): Operation?
     @Query("SELECT * FROM Operation") suspend fun allOperations(): List<Operation>

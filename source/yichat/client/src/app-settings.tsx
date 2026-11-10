@@ -10,7 +10,7 @@ export function AppSettings({close,audit}:{close:()=>void;audit:()=>void}){
  return <Modal title="App 数据备份与导出" close={close}>
   <p>聊天网页与浏览器共用同一套界面。此 App 的加密存储、缓存和数据包独立保存在应用内部，不与系统浏览器混用。</p>
   <p class="notice">自动保存原消息包到内部 data 目录，无需选择文件夹。卸载会删除内部数据。消息不再依赖会话密钥。</p>
-  {status&&<><p role="status">{status.status}</p><p>内部已保存 {status.packets} 份原消息包</p><p>{status.exportStatus}</p></>}
+  {status&&<><p role="status">{status.status}</p><p>内部已保存 {status.packets} 份原消息包</p>{status.pendingMessages>0&&<p>{status.pendingMessages} 条最新消息已加密保存到本机，等待完成服务器校验。</p>}<p>{status.exportStatus}</p></>}
   <button type="button" disabled={busy} onClick={()=>run('backupNow')}>立即保存内部快照</button>
   <h3>App 更新</h3><UpdateControls/>
   {chat.appNotifications&&<><h3>消息通知</h3><NotificationControls/></>}

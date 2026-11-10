@@ -1725,8 +1725,23 @@ def login():
     return _render_login(step=1, next_url=next_url, error=err_msg)
 
 
-@app.route("/logout/", methods=["POST"])
+@app.route("/logout/", methods=["GET", "POST"])
 def logout():
+    if request.method == "GET":
+        if not session.get("user"):
+            return redirect(url_for("login"))
+        session.setdefault("_logout_csrf", secrets.token_urlsafe(32))
+        return render_template_string(_shell("退出登录", """
+<div class="page"><div class="card"><h1>退出登录</h1>
+<p>当前账户：{{ session['user'] }}</p>
+<p>确认退出当前主站账户？关联的 YiChat 会话也会自动退出，本机聊天备份保留。</p>
+<form method="post" action="/logout/"><input type="hidden" name="confirm" value="yichat">
+<input type="hidden" name="csrf" value="{{ session['_logout_csrf'] }}">
+<button class="btn-primary" type="submit">确认退出登录</button></form>
+<p><a href="/account/">返回账户设置</a></p></div></div>
+"""))
+    if request.form.get("confirm") == "yichat" and not secrets.compare_digest(request.form.get("csrf", "").encode(), session.get("_logout_csrf", "invalid").encode()):
+        return "页面已过期，请刷新后重试", 403
     username = session.get("user")
     if username:
         import yidt_core as y

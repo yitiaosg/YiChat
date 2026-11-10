@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+const calls:any[]=[];const port={onmessage:null as any,postMessage(raw:string){calls.push(JSON.parse(raw))}};
+(globalThis as any).window={YiChatApp:port};(globalThis as any).document={documentElement:{dataset:{}}};
+const {NativeLiveMessages}=await import('../src/native-live');
+function reply(ok=true){const req=calls.at(-1);port.onmessage({data:JSON.stringify({id:req.id,ok,value:{state:'saved'},error:'fixture failure'})})}
+test('wire messages are sent to durable native storage immediately and duplicate callbacks share the commit',async()=>{const live=new NativeLiveMessages(),event={event_id:'$live',room_id:'!r',type:'m.room.message',content:{msgtype:'m.text',body:'latest'}};const saved=live.remember('!r',event);assert.equal(calls.at(-1).method,'messagePersist');const before=calls.length;assert.equal(live.remember('!r',event),saved);assert.equal(calls.length,before);reply();await saved;await live.remember('!r',event);assert.equal(calls.length,before)});
+test('failed local commits can retry; foreign-room and local-echo IDs are rejected',async()=>{const live=new NativeLiveMessages(),event={event_id:'$retry',room_id:'!r',type:'m.room.message'};const failed=live.remember('!r',event);reply(false);await assert.rejects(failed);const retry=live.remember('!r',event);reply();await retry;const before=calls.length;await live.remember('!other',event);await live.remember('!r',{...event,event_id:'~local'});assert.equal(calls.length,before)});

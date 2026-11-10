@@ -17,13 +17,13 @@ function flag(value?:boolean){
  return false;
 }
 
-export function DownloadLink({icon,className}:{icon?:ComponentChildren;className?:string}){
+export function DownloadLink({icon,className,label}:{icon?:ComponentChildren;className?:string;label?:string}){
  const [info,setInfo]=useState<any>();
  useEffect(()=>{if(isApp)return;void fetch('/api/downloads',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():undefined).then(setInfo).catch(()=>{})},[]);
  if(isApp)return null;
  const rec=info?.recommended;
  const href=typeof rec?.url==='string'&&rec.url.startsWith('https://github.com/')?rec.url:RELEASES;
- return <a class={className} href={href} target="_blank" rel="noopener noreferrer" title={rec?.version||'GitHub Releases'}>{icon}{rec?.label||'在 GitHub 下载 YiChat'}</a>;
+ return <a class={className} href={href} target="_blank" rel="noopener noreferrer" title={rec?.version||'GitHub Releases'}>{icon}{label||rec?.label||'在 GitHub 下载 YiChat'}</a>;
 }
 
 // ---------- Web Push ----------

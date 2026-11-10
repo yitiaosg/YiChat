@@ -1,3 +1,4 @@
+import {createNativeRoom} from './native-room';
 import {orderedRoomEvents} from './room-timeline';
 import * as sdk from 'matrix-js-sdk';import {appCall,isApp} from './app';import {verifyPacket} from './history';import {gmtDay,type DayPacket} from './packet-protocol';import type {Chat} from './chat';
 export async function nativeBootstrap(chat:Chat){
@@ -9,18 +10,20 @@ export async function nativeBootstrap(chat:Chat){
  for(const state of data.states||[])chat.packetStates.set(state.room_id+'|'+state.day,state.state);
  for(const saved of data.rooms||[]){
   const events:sdk.MatrixEvent[]=[];
-  for(const row of saved.rows||[])try{const raw=await verifyPacket(row.raw,{sha256:row.sha256,event_id:row.event_id,room:saved.room});raw.unsigned={...raw.unsigned,'org.yitiao.received_ms':row.received_ms,'org.yitiao.sequence':row.sequence};events.push(new sdk.MatrixEvent(raw))}catch{/* A corrupt native packet is handled by full-day repair. */}
+  for(const row of saved.rows||[])try{const raw=await verifyPacket(row.raw,{sha256:row.sha256,event_id:row.event_id,room:saved.room});raw.unsigned={...raw.unsigned,'org.yitiao.received_ms':row.received_ms,'org.yitiao.sequence':row.sequence,'org.yitiao.pending_receipt':!!row.provisional,'org.yitiao.packet_sha256':row.provisional?undefined:row.sha256};events.push(new sdk.MatrixEvent(raw))}catch{/* A corrupt native packet is handled by full-day repair. */}
   if(!chat.info.has(saved.room))chat.info.set(saved.room,{room:saved.room,kind:'group',owner:chat.session.mxid,peer:null,encryption:'plain'});
   let room=chat.client.getRoom(saved.room);
-  if(!room){room=new sdk.Room(saved.room,chat.client,chat.session.mxid,{pendingEventOrdering:sdk.PendingEventOrdering.Detached});const info=chat.info.get(saved.room)!;const members=[...new Set([chat.session.mxid,info.owner,...(info.peer?[info.peer]:[]),...events.map(e=>e.getSender()!)])];room.currentState.setStateEvents(members.map((mxid,i)=>new sdk.MatrixEvent({event_id:'$local-member-'+i,room_id:saved.room,type:'m.room.member',state_key:mxid,sender:mxid,content:{membership:'join',displayname:chat.name(mxid)}})));room.updateMyMembership('join' as any);if(roomNames.get(saved.room)||(info as any).name)room.currentState.setStateEvents([new sdk.MatrixEvent({event_id:'$local-name',room_id:saved.room,type:'m.room.name',state_key:'',sender:chat.session.mxid,content:{name:roomNames.get(saved.room)||(info as any).name}})]);room.recalculate();chat.client.store.storeRoom(room)}
+  if(!room){room=createNativeRoom(chat.client,saved.room,chat.session.mxid);const info=chat.info.get(saved.room)!;const members=[...new Set([chat.session.mxid,info.owner,...(info.peer?[info.peer]:[]),...events.map(e=>e.getSender()!)])];room.currentState.setStateEvents(members.map((mxid,i)=>new sdk.MatrixEvent({event_id:'$local-member-'+i,room_id:saved.room,type:'m.room.member',state_key:mxid,sender:mxid,content:{membership:'join',displayname:chat.name(mxid)}})));room.updateMyMembership('join' as any);if(roomNames.get(saved.room)||(info as any).name)room.currentState.setStateEvents([new sdk.MatrixEvent({event_id:'$local-name',room_id:saved.room,type:'m.room.name',state_key:'',sender:chat.session.mxid,content:{name:roomNames.get(saved.room)||(info as any).name}})]);room.recalculate();chat.client.store.storeRoom(room)}
   const live=room.getLiveTimeline(),existing=live.getEvents();
   const merged=new Map(existing.filter(e=>e.getRoomId()===saved.room).map(e=>[e.getId(),e]));
   for(const event of [...events].reverse()){
    const cached=merged.get(event.getId());
-   if(cached)cached.event.unsigned={...cached.getUnsigned(),...event.getUnsigned()};else merged.set(event.getId(),event);
+   if(cached&&(cached.isRedacted()||event.getUnsigned()['org.yitiao.pending_receipt']||cached.getUnsigned()['org.yitiao.packet_sha256']===event.getUnsigned()['org.yitiao.packet_sha256'])){
+    if(!(event.getUnsigned()['org.yitiao.pending_receipt']&&cached.getUnsigned()['org.yitiao.packet_sha256']))cached.event.unsigned={...cached.getUnsigned(),...event.getUnsigned()};
+   }else merged.set(event.getId(),event);
   }
   const ordered=orderedRoomEvents(saved.room,[...merged.values()],chat.history.receipts);
-  if(ordered.length!==existing.length||ordered.some((e,i)=>e.getId()!==existing[i]?.getId())){
+  if(ordered.length!==existing.length||ordered.some((e,i)=>e!==existing[i])){
    if(existing.length)room.resetLiveTimeline(live.getPaginationToken(sdk.EventTimeline.BACKWARDS),null);
    if(ordered.length)await room.addLiveEvents(ordered,{addToState:false});
   }

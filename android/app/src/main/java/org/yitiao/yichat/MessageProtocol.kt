@@ -7,13 +7,14 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.time.LocalDate
 
-class MessageProtocol(private val store:PacketStore,private val gateway:Gateway,private val vault:SecureStore,private val cache:ProtocolStore,private val materials:MessageMaterials,private val days:DayPacketRepository,private val timeline:LocalTimeline) {
+class MessageProtocol(private val store:PacketStore,private val gateway:Gateway,private val vault:SecureStore,private val cache:ProtocolStore,private val materials:MessageMaterials,private val days:DayPacketRepository,private val timeline:LocalTimeline,private val live:LiveMessages) {
  private val mutex=Mutex();private var rootsAt=0L
  fun saveUi(value:JsonObject){cache.put("ui",value)}
  suspend fun bootstrap():JsonObject=withContext(Dispatchers.IO) {
   val a=requireNotNull(store.account);val ui=(cache.get("ui") as? JsonObject)?:JsonObject(emptyMap());val dao=requireNotNull(store.database).local()
-  val rooms=(ui.a("info").mapNotNull{(it as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull}+dao.recordRooms()).distinct().take(100)
-  val result=buildJsonArray {for(room in rooms){val page=timeline.older(room,"",Long.MAX_VALUE,40);add(buildJsonObject{put("room",room);put("rows",page.a("rows"));put("cursor",page["cursor"]?:JsonNull)})}}
+  val provisional=live.snapshot()
+  val rooms=(provisional.map{it.s("room")}+ui.a("info").mapNotNull{(it as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull}+dao.recordRooms()).distinct().take(100)
+  val result=buildJsonArray {for(room in rooms){val page=timeline.older(room,"",Long.MAX_VALUE,40);add(buildJsonObject{put("room",room);put("rows",JsonArray(page.a("rows")+provisional.filter{it.s("room")==room&&!page.a("rows").any{r->r.jsonObject.s("event_id")==it.s("event_id")}}));put("cursor",page["cursor"]?:JsonNull)})}}
   check(store.account?.token==a.token)
   buildJsonObject{put("ui",ui);put("rooms",result);put("states",days.states());put("untrusted",days.displayEntries(result.flatMap{it.jsonObject.a("rows")}.map{it.jsonObject.s("event_id")}.toSet()))}
  }

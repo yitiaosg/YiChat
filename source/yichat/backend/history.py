@@ -149,6 +149,45 @@ def install(app,s,session):
                     if accessible(pg,rooms,who,row,s):result.append(dict(row)|{'tombstone':tombstone(c,row)})
         return {'records':result,'until':end,'next_after':rows[-1]['sequence'] if len(rows)==100 else None,'scanned_after':rows[-1]['sequence'] if rows else after,'server_ms':int(time.time()*1000),'rooms':sorted(rooms)}
 
+    @app.post('/api/history/recent')
+    async def recent(request:Request):
+        who=session(request);app_transport(request);data=await request.json()
+        if not isinstance(data,dict):fail(400,'需要消息保存请求')
+        room=data.get('room');ids=data.get('ids');limit=data.get('limit',40)
+        if not isinstance(room,str) or len(room)>255 or type(limit)!=int or not 1<=limit<=40:fail(400,'会话或条数无效')
+        if ids is not None and (not isinstance(ids,list) or not 1<=len(ids)<=20 or any(not isinstance(e,str) or not e.startswith('$') or len(e)>255 for e in ids)):fail(400,'每次最多20个消息ID')
+        def read():
+            rooms=current_rooms(s,who)
+            if room not in rooms:fail(403,'没有此会话的消息权限')
+            with archive.connect(s.archive_reader) as pg,connect(s.db) as c:
+                cp=pg.execute("SELECT * FROM checkpoints WHERE source='synapse'").fetchone()
+                if not cp or not cp['healthy'] or cp['observed_ms']<int(time.time()*1000)-120000:fail(503,'历史存证正在同步，请稍后重试')
+                if ids is None:rows=c.execute("SELECT * FROM history_receipts WHERE room=? AND sha256<>'' ORDER BY sequence DESC LIMIT ?",(room,limit)).fetchall()
+                else:
+                    rows=[]
+                    for eid in dict.fromkeys(ids):
+                        r=c.execute('SELECT * FROM history_receipts WHERE event_id=?',(eid,)).fetchone()
+                        if r:
+                            if r['room']!=room or not accessible(pg,rooms,who,r,s):fail(403,'没有此消息的历史权限')
+                            rows.append(r)
+                result=[];found=set()
+                for r in rows:
+                    if not accessible(pg,rooms,who,r,s):continue
+                    if not r['sha256'] or s.material_protocol and r['received_ms']<int((time.time()-7*86400)*1000):continue
+                    if policy.room(s,room)['encryption']!='plain' and r['type'] not in ('m.room.encrypted','m.room.redaction'):fail(503,'旧加密会话的消息类型不符')
+                    view=tombstone(c,r);packet={'event_id':r['event_id'],'sha256':r['sha256'],'tombstone':view}
+                    if not view:
+                        source=pg.execute('SELECT body FROM events WHERE room=%s AND event_id=%s',(room,r['event_id'])).fetchone()
+                        if not source:continue
+                        raw=bytes(source['body'])
+                        if hashlib.sha256(raw).hexdigest()!=r['sha256']:fail(503,'服务端事件存证不一致')
+                        event=json.loads(raw)
+                        if event.get('room_id')!=room or event.get('event_id')!=r['event_id']:fail(503,'消息身份不匹配')
+                        packet['raw']=base64.b64encode(raw).decode()
+                    result.append({'receipt':dict(r)|{'tombstone':view},'packet':packet});found.add(r['event_id'])
+                return {'records':result,'pending':[e for e in dict.fromkeys(ids or []) if e not in found]}
+        return await __import__('asyncio').to_thread(read)
+
     @app.post('/api/history/recall-ciphertexts')
     async def recall_ciphertexts(request:Request):
         # A read-only crypto capability check for a withdrawn encrypted event.

@@ -64,10 +64,11 @@ class Graph(val context: Application) {
     val backup = BackupRepository(context, store, history, vault,recordFiles)
     val records = RecordAudit(store,vault)
     val localTimeline = LocalTimeline(store,vault)
+    val liveMessages=LiveMessages(store,gateway,vault)
     val protocolStore=ProtocolStore(context,store,vault)
-    val messageMaterials=MessageMaterials(store,gateway,protocolStore,recordFiles)
+    val messageMaterials=MessageMaterials(store,gateway,protocolStore,recordFiles,scope)
     val dayPackets=DayPacketRepository(store,gateway,vault,protocolStore,messageMaterials,recordFiles)
-    val protocol=MessageProtocol(store,gateway,vault,protocolStore,messageMaterials,dayPackets,localTimeline)
+    val protocol=MessageProtocol(store,gateway,vault,protocolStore,messageMaterials,dayPackets,localTimeline,liveMessages)
     init { backup.portablePackets={dayPackets.exportKnown()} }
     val updates = AppUpdates(context)
     val notifications = Notifications(context,this)
@@ -85,8 +86,15 @@ class Graph(val context: Application) {
     }
     suspend fun activate(a: Account) {
         store.open(a); resetChatEpoch(a); backup.activate(); notifications.resume()
-        scope.launch { runCatching { history.catchUp(true); protocol.sync();backup.saveInternal() } }
+        scope.launch { runCatching { runCatching{liveMessages.drain()};history.catchUp(true);liveMessages.changed();protocol.sync();backup.saveInternal() } }
     }
+    private fun cacheLiveMaterials(ids:List<String>) {scope.launch{for(id in ids)runCatching{messageMaterials.ensure(id)}}}
+    fun persistLive(args:JsonObject):Deferred<JsonObject>{val owner=requireNotNull(store.account);return scope.async {
+        val saved=liveMessages.remember(args,owner)
+        scope.launch {repeat(5){attempt->if(store.account==null)return@launch;runCatching{cacheLiveMaterials(liveMessages.drain())};kotlinx.coroutines.delay((attempt+1)*1000L)}}
+        saved
+    }}
+    fun syncLiveRoom(room:String):Deferred<JsonObject>{val owner=requireNotNull(store.account);return scope.async {val ids=liveMessages.recent(room,owner);cacheLiveMaterials(ids);buildJsonObject{put("saved",true)}}}
     // Explicit server-wide chat reset. Preserve credentials, wallet/business
     // operations, backup settings and at-rest protection. Do not import old chats.
     internal suspend fun resetChatEpoch(a: Account) {
