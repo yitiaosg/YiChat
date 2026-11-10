@@ -33,7 +33,7 @@ class ProtocolStore(private val context:Context,private val packets:PacketStore,
  }
 }
 class MessageMaterials(private val packets:PacketStore,private val gateway:Gateway,private val cache:ProtocolStore,private val files:RecordFiles) {
- private val mutex=Mutex()
+ private val mutex=Mutex();private val recordsMutex=Mutex()
  fun read(event:String):JsonObject? {
   require(event.startsWith("$")&&event.length<=255)
   val owner=requireNotNull(packets.account)
@@ -48,6 +48,7 @@ class MessageMaterials(private val packets:PacketStore,private val gateway:Gatew
  }
  fun save(value:JsonObject,expected:Account?=null):JsonObject {
   val good=PacketProtocol.validateMaterial(value);cache.put("material|"+good.o("meta").s("event_id"),good,expected)
+  for(row in good.o("meta").a("files"))files.remember(row.jsonObject,expected)
   val doc=json.parseToJsonElement(good.s("canonical")).jsonObject
   if(doc.s("kind")=="record"){val record=doc.o("record");cache.put("public-record|"+record.s("hash"),record,expected)}
   return good
@@ -65,11 +66,46 @@ class MessageMaterials(private val packets:PacketStore,private val gateway:Gatew
   val value=buildJsonObject{put("meta",state);put("canonical",canonical)};PacketProtocol.validateMaterial(value)
   val confirmed=gateway.call("/api/materials/"+Gateway.segment(event)+"/confirm",buildJsonObject{put("payload_sha256",state.s("payload_sha256"));put("sha256",state["sha256"]?:JsonNull)}).jsonObject
   require(confirmed.s("state")=="ok"){"服务器未通过客户端重新计算的原始消息摘要"}
-  // Actual file bytes are checked on the device before retaining a material.
-  for(file in state.a("files"))files.ensure(file.jsonObject.s("id"),file.jsonObject.s("sha256"))
+  val doc=json.parseToJsonElement(canonical).jsonObject;val photos=FileDownloadPlan.ids(doc,true)
+  for(file in state.a("files")){val f=file.jsonObject;files.remember(f,a);if(f.s("id") in photos)runCatching{files.ensure(f.s("id"),f.s("sha256"))}}
   check(packets.account?.token==a.token){"本地账户已锁定"}
   save(buildJsonObject{put("meta",confirmed);put("canonical",canonical)},a)
  }}
+ suspend fun saveRecord(value:JsonObject):JsonObject {
+  val a=requireNotNull(packets.account);val h=value.s("hash");val raw=value.s("canonical");require(h.matches(Regex("[a-f0-9]{64}"))&&PacketProtocol.hash(raw.toByteArray())==h){"记录原始哈希不匹配"}
+  val payload=json.parseToJsonElement(raw).jsonObject;val good=JsonObject(value+("payload" to payload));cache.put("public-record|$h",good,a)
+  val photos=FileDownloadPlan.ids(payload,true)
+  for(v in value.a("files")){val f=v.jsonObject;files.remember(f,a);if(f.s("id") in photos)runCatching{files.ensure(f.s("id"),f.s("sha256"),h)}}
+  return good
+ }
+ suspend fun exchangeRecords()=recordsMutex.withLock {
+  val a=packets.account?:return@withLock;val reply=gateway.call("/api/records/exchange",obj()).jsonObject
+  var offeredBytes=0L
+  val offers=buildJsonArray {for(v in reply.a("asked")) {
+   val ask=v.jsonObject;val h=ask.s("hash");var record=(cache.get("public-record|$h") as? JsonObject)?:files.previews.read("","record:$h") as? JsonObject
+   if(record==null)runCatching {
+    val recipe=ask.o("recipe");val messages=buildJsonArray {for(m in recipe.a("messages")){val row=m.jsonObject;val packet=requireNotNull(packets.database?.local()?.packet(ask.s("room"),row.s("id")));val bytes=files.decryptPacket(a,packet)
+     try {val event=json.parseToJsonElement(bytes.decodeToString()).jsonObject;var content=event.o("content");var previews=JsonArray(emptyList())
+      if(content[PacketProtocol.MATERIAL]!=null){val material=requireNotNull(read(row.s("id")));val doc=json.parseToJsonElement(material.s("canonical")).jsonObject;content=doc.o("content");previews=doc.a("previews")}
+      else if(content["org.yitiao.forward_snapshot"] is JsonObject){val frozen=content.o("org.yitiao.forward_snapshot");content=frozen.o("content");previews=frozen.a("previews")}
+      add(JsonObject(row+mapOf("content" to content,"previews" to previews)))
+     }finally{bytes.fill(0)}
+    }}
+    val raw=PacketProtocol.canonical(JsonObject(recipe.o("header")+("messages" to messages)));require(PacketProtocol.hash(raw.toByteArray())==h);record=obj("hash" to h,"canonical" to raw);cache.put("public-record|$h",requireNotNull(record),a)
+   }
+   val raw=record?.s("canonical")?:continue;if(PacketProtocol.hash(raw.toByteArray())!=h)continue
+   offeredBytes+=raw.toByteArray().size*2L+1024
+   val bodies=buildJsonArray{for(id in ask.a("files").map{it.jsonPrimitive.content}){val data=runCatching{files.bytes(id)}.getOrNull()?:continue;val encodedBytes=((data.size+2L)/3L)*4+1024;if(offeredBytes+encodedBytes>128L*1024*1024-1024)continue;offeredBytes+=encodedBytes;add(obj("id" to id,"data" to java.util.Base64.getEncoder().encodeToString(data)))}}
+   add(buildJsonObject{put("hash",h);put("canonical",raw);put("files",bodies)})
+  }}
+  if(offers.isNotEmpty())gateway.call("/api/records/exchange",buildJsonObject{put("offers",offers)})
+  var attempted=0
+  for(key in cache.keys().filter{it.startsWith("public-record|")}) {
+   val record=cache.get(key) as? JsonObject?:continue;val raw=record.s("canonical");if(raw.isBlank())continue
+   val photos=FileDownloadPlan.ids(json.parseToJsonElement(raw),true)
+   for(v in record.a("files")){val f=v.jsonObject;if(f.s("id") !in photos||files.available(f.s("id")))continue;if(attempted++>=7)return@withLock;runCatching{files.ensure(f.s("id"),f.s("sha256"),key.removePrefix("public-record|"))}}
+  }
+ }
  suspend fun removeLegacy() {
   val a=packets.account?:return;val db=packets.database?:return;val dao=db.local();var after=0L
   do {
@@ -97,6 +133,7 @@ class MessageMaterials(private val packets:PacketStore,private val gateway:Gatew
   // downloading payloads that already match the server's original bytes.
   for(key in cache.keys().filter{it.startsWith("material|")}) {
    val value=runCatching{cache.get(key)?.jsonObject}.getOrNull()?:continue;val m=value.o("meta")
+   runCatching{val doc=json.parseToJsonElement(value.s("canonical"));val photos=FileDownloadPlan.ids(doc,true);for(f in m.a("files").map{it.jsonObject}.filter{it.s("id") in photos&&!files.available(it.s("id"))})files.ensure(f.s("id"),f.s("sha256"))}
    if(!m.b("single_expired")&&(!m.b("finalized")||m["server_confirmed"]==JsonPrimitive(false))&&System.currentTimeMillis()>=m.s("shared_at").toLong()+300000)runCatching{ensure(m.s("event_id"))}
   }
  }

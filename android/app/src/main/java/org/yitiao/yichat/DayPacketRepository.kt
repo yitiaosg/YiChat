@@ -33,8 +33,8 @@ class DayPacketRepository(private val store:PacketStore,private val gateway:Gate
     if(content[PacketProtocol.MATERIAL]!=null&&material==null){missing=true;continue}
     val legacyIds=content.a("org.yitiao.attachments").map{it.jsonPrimitive.content}.toMutableSet()
     Regex("mxc://chat\\.yitiao\\.org/([a-f0-9]{48})").matchEntire(content.s("url"))?.groupValues?.get(1)?.let{legacyIds.add(it)}
-    val fileRows=if(material!=null)material.o("meta").a("files") else JsonArray(legacyIds.sorted().mapNotNull{id->runCatching{val data=files.bytes(id);buildJsonObject{put("id",id);put("bytes",data.size.toString());put("sha256",PacketProtocol.hash(data))}}.getOrElse{missing=true;null}})
-    val projectedFiles=buildJsonArray {for(row in fileRows){val f=row.jsonObject;val value=runCatching{files.bytes(f.s("id"))}.getOrNull();if(value==null||PacketProtocol.hash(value)!=f.s("sha256")){missing=true;add(f);continue};add(if(includeData)JsonObject(f+("data" to JsonPrimitive(Base64.getEncoder().encodeToString(value)))) else f)}}
+    val fileRows=if(material!=null)material.o("meta").a("files") else JsonArray(legacyIds.sorted().mapNotNull{id->runCatching{val meta=files.metadata(id);if(meta!=null)meta else {val data=files.bytes(id);buildJsonObject{put("id",id);put("bytes",data.size.toString());put("sha256",PacketProtocol.hash(data))}}}.getOrElse{missing=true;null}})
+    val projectedFiles=buildJsonArray {for(row in fileRows){val f=row.jsonObject;val value=runCatching{files.bytes(f.s("id"))}.getOrNull();if(value==null){add(f);continue};if(PacketProtocol.hash(value)!=f.s("sha256")){missing=true;add(f);continue};add(if(includeData)JsonObject(f+("data" to JsonPrimitive(Base64.getEncoder().encodeToString(value)))) else f)}}
     entries+=buildJsonObject {
      put("event_id",receipt.event);put("room_id",room);put("sender",event.s("sender"));put("type",event.s("type"));put("sequence",receipt.sequence.toString());put("received_ms",at.toString());put("raw",raw);put("files",projectedFiles);put("redacted",dao.tombstone(room,receipt.event)!=null)
      if(material!=null){val meta=material.o("meta");put("material",JsonObject(meta+("canonical" to JsonPrimitive(material.s("canonical")))));if(!meta.b("finalized"))missing=true}
@@ -50,7 +50,7 @@ class DayPacketRepository(private val store:PacketStore,private val gateway:Gate
  }
  private suspend fun validated(packet:JsonObject,download:Boolean):JsonObject {
   val entries=buildJsonArray{for(v in packet.a("entries")){
-   val e=v.jsonObject;val f=buildJsonArray {for(value in e.a("files")){val row=value.jsonObject;val bytes=if(row["data"] is JsonPrimitive)Base64.getDecoder().decode(row.s("data")) else {if(download)files.ensure(row.s("id"),row.s("sha256"));files.bytes(row.s("id"))};require(PacketProtocol.hash(bytes)==row.s("sha256")&&bytes.size.toLong()==row.s("bytes").toLong()){ "附件校验失败" };add(JsonObject(row+("data" to JsonPrimitive(Base64.getEncoder().encodeToString(bytes)))))}}
+   val e=v.jsonObject;val f=buildJsonArray {for(value in e.a("files")){val row=value.jsonObject;val bytes=if(row["data"] is JsonPrimitive&&row["data"]!=JsonNull)Base64.getDecoder().decode(row.s("data")) else runCatching{files.bytes(row.s("id"))}.getOrNull();if(bytes==null){add(JsonObject(row-"data"));continue};require(PacketProtocol.hash(bytes)==row.s("sha256")&&bytes.size.toLong()==row.s("bytes").toLong()){ "附件校验失败" };add(JsonObject(row+("data" to JsonPrimitive(Base64.getEncoder().encodeToString(bytes)))))}}
    add(JsonObject(e+("files" to f)))
   }}
   val complete=JsonObject(packet+mapOf("entries" to entries,"complete" to JsonPrimitive(true)));val actual=PacketProtocol.dayHash(complete)
@@ -61,8 +61,8 @@ class DayPacketRepository(private val store:PacketStore,private val gateway:Gate
   val ready=if(verified)validated(packet,download) else packet;checkedAccount(a)
   if(verified)for(value in ready.a("entries")) {
    val e=value.jsonObject
-   for(v in e.a("files")){val f=v.jsonObject;if(f["data"] is JsonPrimitive)files.save(f.s("id"),Base64.getDecoder().decode(f.s("data")),f.s("sha256"),a)}
-   if(e["material"] is JsonObject){val m=e.o("material");materials.save(buildJsonObject{put("meta",JsonObject(m-"canonical"));put("canonical",m.s("canonical"))},a)}
+   for(v in e.a("files")){val f=v.jsonObject;files.remember(f,a);if(f["data"] is JsonPrimitive&&f["data"]!=JsonNull)files.save(f.s("id"),Base64.getDecoder().decode(f.s("data")),f.s("sha256"),a)}
+   if(e["material"] is JsonObject){val m=e.o("material");materials.save(buildJsonObject{put("meta",JsonObject(m-"canonical"));put("canonical",m.s("canonical"))},a);if(download){val photos=FileDownloadPlan.ids(json.parseToJsonElement(m.s("canonical")),true);for(f in m.a("files").map{it.jsonObject}.filter{it.s("id") in photos})runCatching{files.ensure(f.s("id"),f.s("sha256"))}}}
   }
   db.withTransaction {
    for(r in dao.receipts().filter{it.room==room}){
@@ -127,16 +127,17 @@ class DayPacketRepository(private val store:PacketStore,private val gateway:Gate
   }}
   if(offers.isNotEmpty())gateway.call("/api/packets/exchange",buildJsonObject{put("offers",offers)})
  }
- suspend fun exportKnown():JsonObject=withContext(Dispatchers.IO) {
+ suspend fun exportKnown(selectedRooms:List<String>?=null):JsonObject=withContext(Dispatchers.IO) {
   val a=requireNotNull(store.account);val dao=requireNotNull(store.database).local();val keys=linkedSetOf<Pair<String,String>>()
   for(key in cache.keys().filter{it.startsWith("day|")}){val row=cache.get(key)?.jsonObject?:continue;keys.add(row.s("room_id") to row.s("day"))}
   for(receipt in dao.receipts())runCatching {val raw=vault.decrypt(a.storage,"receipt:${receipt.room}:${receipt.event}",receipt.encrypted);try{val m=json.parseToJsonElement(raw.decodeToString()).jsonObject;keys.add(receipt.room to PacketProtocol.day(m["received_ms"]!!.jsonPrimitive.long))}finally{raw.fill(0)}}
   require(keys.size<=10000){"日期超过10000项，请按会话分批导出"}
-  val result=mutableListOf<JsonObject>();for((room,day) in keys.sortedBy{it.first+it.second})if(System.currentTimeMillis()>=PacketProtocol.immutable(day))result.add(collect(room,day,true))
+  val result=mutableListOf<JsonObject>();for((room,day) in keys.sortedBy{it.first+it.second})if((selectedRooms==null||room in selectedRooms)&&System.currentTimeMillis()>=PacketProtocol.immutable(day))result.add(collect(room,day,true))
   checkedAccount(a);PacketProtocol.pack(result)
  }
+ suspend fun rooms():List<String> {val dao=requireNotNull(store.database).local();return (dao.recordRooms()+cache.keys().filter{it.startsWith("day|")}.mapNotNull{(cache.get(it) as? JsonObject)?.s("room_id")}).distinct().sorted()}
  suspend fun export(rooms:List<String>,start:String,end:String):JsonObject=withContext(Dispatchers.IO) {
-  require(rooms.isNotEmpty()&&rooms.size<=100);val dates=dates(start,end);val days=mutableListOf<JsonObject>()
+  require(rooms.isNotEmpty());val dates=dates(start,end);require(rooms.size.toLong()*dates.size<=10000){"日期超过10000项，请分批导出"};val days=mutableListOf<JsonObject>()
   for(room in rooms)for(day in dates){require(System.currentTimeMillis()>=PacketProtocol.immutable(day)){"只能导出已经不可撤回的 GMT 日期"};days+=collect(room,day,true)}
   PacketProtocol.pack(days)
  }

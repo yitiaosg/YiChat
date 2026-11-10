@@ -1,4 +1,4 @@
-> 当前版本为 **0.4.0 / code 23**：[下载签名 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261109-v0.4.0/YiChat-0.4.0-23.apk)、[部署验证](../PRODUCTION-0.4.0.md)、[测试证据](android-0.4.0-20261109/)。以下内容为历史交付记录。
+> 当前版本为 **0.4.1 / code 24**：[下载签名 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261110-v0.4.1/YiChat-0.4.1-24.apk)、[部署验证](../PRODUCTION-0.4.1.md)、[测试证据](android-0.4.1-20261110/)。以下内容为历史交付记录。
 
 > 2026-10-20 接力修复：当前版本为 0.1.1 / code 3、可并存包 `org.yitiao.yichat.mobile`。当前部署、下载及验证以根目录 [BROWSER-LOGIN-FIX.md](../BROWSER-LOGIN-FIX.md) 为准。以下候选版记录保留为历史，原 APK 链接不是本次修复包。
 

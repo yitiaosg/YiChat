@@ -20,4 +20,15 @@ class PacketProtocolTest {
  @Test fun portableGzipPackagesRejectTamperingAndWrongPasswords() {
   val p=PacketProtocol.pack(listOf(vectors().o("packets").o("special")));val bytes=DataPackageCodec.encode(p,"local");assertEquals(p,DataPackageCodec.decode(bytes,"local"));assertThrows(Exception::class.java){DataPackageCodec.decode(bytes,"wrong")};bytes[bytes.lastIndex]=(bytes.last().toInt() xor 1).toByte();assertThrows(Exception::class.java){DataPackageCodec.decode(bytes,"local")}
  }
+ @Test fun undownloadedFileKeepsSameDayRootWithoutFetchingBytes() {
+  val p=vectors().o("packets").o("media");val e=p.a("entries").single().jsonObject;val f=e.a("files").single().jsonObject
+  val stripped=JsonObject(e+("files" to JsonArray(listOf(JsonObject(f-"data")))))
+  val absent=JsonObject(p+("entries" to JsonArray(listOf(stripped))))
+  assertEquals(PacketProtocol.dayHash(p),PacketProtocol.dayHash(absent));val bundle=PacketProtocol.pack(listOf(absent));assertEquals(PacketProtocol.dayHash(p),PacketProtocol.dayHash(PacketProtocol.hydrate(bundle,bundle.a("days").single().jsonObject)))
+ }
+ @Test fun photoPlanIncludesMergedImagesButExcludesOrdinaryFiles() {
+  val photo="a".repeat(48);val file="b".repeat(48)
+  val record=buildJsonObject{put("messages",buildJsonArray{add(obj("msgtype" to "m.image","url" to "mxc://chat.yitiao.org/$photo"));add(obj("msgtype" to "m.file","url" to "mxc://chat.yitiao.org/$file"))})}
+  assertEquals(setOf(photo),FileDownloadPlan.ids(record,true));assertEquals(setOf(photo,file),FileDownloadPlan.ids(record))
+ }
 }

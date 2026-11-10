@@ -1,10 +1,14 @@
 # YiChat
 
-当前版本 **Android 0.4.0 / versionCode 23**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.4.1 / versionCode 24**，包名 `org.yitiao.yichat.mobile`。
 
-[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.4.0 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261109-v0.4.0/YiChat-0.4.0-23.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
+[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.4.1 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261110-v0.4.1/YiChat-0.4.1-24.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
+
+## 0.4.1 更新
+
+全部/多会话全部本机数据离线导出；滑到顶部自动加载历史和本机记录分隔线；服务器转账气泡无需手动补发；已发布记录缺失时从源会话在线 App 核验补齐；照片自动缓存、普通文件按需下载，未下载文件使用保存摘要。见 [部署与验证](PRODUCTION-0.4.1.md)。
 
 ## 0.4.0 更新
 
@@ -94,4 +98,4 @@ export YICHAT_FIREBASE_CONFIG=/private/path/google-services.json
 
 0.3.10 / code 18 修正主题色Logo图形，见 [0.3.10记录](PRODUCTION-0.3.10.md)。
 
-历史 0.3.14 的自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。当前 0.4.0 的部署和完整测试记录见 [0.4.0记录](PRODUCTION-0.4.0.md)。
+历史 0.3.14 的自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。当前 0.4.1 的部署和测试记录见 [0.4.1记录](PRODUCTION-0.4.1.md)。

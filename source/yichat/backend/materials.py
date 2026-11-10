@@ -103,6 +103,7 @@ async def prepare(app,s,who,room,content):
  grant_files(s,who,room,[content])
  summary='聊天记录' if value['kind']=='record' else content.get('body','附件') if value['kind']=='media' else {'gift':'赠送闪卡','card':'分享闪卡','order':'收款回执' if content.get('org.yitiao.share',{}).get('type')=='receipt' else '转账 / 红包','doudizhu_record':'斗地主战绩'}.get(value['previews'][0]['type'],value['previews'][0].get('title','分享消息'))
  result={'msgtype':content.get('msgtype','m.text') if value['kind']=='media' else 'm.text','body':str(summary)[:2000],KEY:{'version':2,'id':mid,'sha256':body_hash(raw),'kind':value['kind']},'org.yitiao.attachments':sorted(file_ids(content))}
+ if value['kind']=='record':result['org.yitiao.record_access']=value['record']['hash']
  if value['kind']=='media':result.update({k:v for k,v in content.items() if k in ('url','info')})
  if value['kind']=='share':
   first=value['previews'][0];typ=first['type'];result['org.yitiao.material_type']='receipt' if first.get('receipt') else typ

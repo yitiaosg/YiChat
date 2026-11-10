@@ -51,7 +51,7 @@ def project_entry(entry,verify_files=True):
   if len({r['id'] for r in fproject})!=len(fproject):raise ValueError('重复附件')
   for row in frows:
    if not re.fullmatch('[a-f0-9]{48}',row['id']) or not re.fullmatch('[a-f0-9]{64}',row['sha256']):raise ValueError('附件摘要无效')
-   if verify_files:
+   if verify_files and row.get('data') is not None:
     data=base64.b64decode(row['data'],validate=True)
     if len(data)!=int(row['bytes']) or hashlib.sha256(data).hexdigest()!=row['sha256']:raise ValueError('附件内容不匹配')
   material=entry.get('material');material_sha=None

@@ -23,46 +23,27 @@ class RecordFiles(private val context:Context,private val store:PacketStore,priv
  fun available(id:String):Boolean { val a=store.account?:return false;return valid(id)&&File(folder(a,id),"manifest").isFile }
  suspend fun backupMerged()=withContext(Dispatchers.IO) {
   previews.backup()
-  val a=store.account?:return@withContext;val db=store.database?:return@withContext;val ids=mutableSetOf<String>()
+  val a=store.account?:return@withContext;val db=store.database?:return@withContext;val ids=mutableSetOf<String>();val photos=mutableSetOf<String>();val capabilities=mutableMapOf<String,String>()
   for(packet in db.local().packets()) {
-   val bytes=vault.decrypt(a.storage,"packet:${packet.room}:${packet.event}",packet.encrypted)
+   val bytes=runCatching{decryptPacket(a,packet)}.getOrNull()?:continue
    try {
     val content=json.parseToJsonElement(bytes.decodeToString()).jsonObject.o("content")
-    content.a("org.yitiao.attachments").mapNotNullTo(ids){it.jsonPrimitive.contentOrNull?.takeIf(::valid)}
-    Regex("mxc://chat\\.yitiao\\.org/([a-f0-9]{48})").matchEntire(content.s("url"))?.groupValues?.get(1)?.let(ids::add)
-    val hash=content.s("org.yitiao.record").ifBlank{SpecialPreviewPlan.requests(packet.room,content).firstOrNull{it.resource.startsWith("record:")}?.resource?.removePrefix("record:").orEmpty()}
-    val raw=content.s("org.yitiao.record_json").ifBlank{previews.read("","record:$hash")?.jsonObject?.s("canonical").orEmpty()};if(raw.isBlank())continue
-    require(SecureStore.hash(raw)==hash){"合并记录摘要不一致"}
-    val record=json.parseToJsonElement(raw).jsonObject
-    for(message in record.a("messages")) {
-     val c=message.jsonObject.o("content")
-     c.a("org.yitiao.attachments").mapNotNullTo(ids){it.jsonPrimitive.contentOrNull?.takeIf(::valid)}
-     Regex("mxc://chat\\.yitiao\\.org/([a-f0-9]{48})").matchEntire(c.s("url"))?.groupValues?.get(1)?.let(ids::add)
+    ids.addAll(FileDownloadPlan.ids(content));photos.addAll(FileDownloadPlan.ids(content,true))
+    for(plan in SpecialPreviewPlan.requests(packet.room,content).filter{it.resource.startsWith("record:")}) {
+     val saved=previews.read("",plan.resource)?.jsonObject;val raw=saved?.s("canonical").orEmpty();if(raw.isBlank())continue
+     require(PacketProtocol.hash(raw.toByteArray())==plan.resource.removePrefix("record:"));val record=json.parseToJsonElement(raw)
+     ids.addAll(FileDownloadPlan.ids(record));photos.addAll(FileDownloadPlan.ids(record,true));for(f in saved?.a("files").orEmpty()){remember(f.jsonObject,a);capabilities[f.jsonObject.s("id")]=plan.resource.removePrefix("record:")}
     }
-   } finally { bytes.fill(0) }
+   } finally {bytes.fill(0)}
   }
-  for(id in ids) {
-   check(store.account?.token==a.token){"备份账号已锁定"};if(available(id))continue
-   val meta=gateway.call("/api/files/$id/meta").jsonObject;val expected=meta.s("sha256");require(expected.matches(Regex("[a-f0-9]{64}")))
-   val parent=folder(a,id).parentFile!!.apply{mkdirs()};val temp=File(parent,"$id.part");temp.deleteRecursively();temp.mkdirs()
-   try {
-    var count=0;var total=0L;val digest=MessageDigest.getInstance("SHA-256")
-    gateway.readFile(id) { input ->
-     val buffer=ByteArray(65536)
-     while(true) {
-      check(store.account?.token==a.token){"备份账号已锁定"};val n=input.read(buffer);if(n<0)break;if(n==0)continue
-      total+=n;require(total<=100000000);digest.update(buffer,0,n)
-      val data=vault.encrypt(a.storage,"record-file:$id:$count",buffer.copyOf(n));File(temp,"${count++}").writeBytes(data)
-     }
-     buffer.fill(0)
-    }
-    val actual=digest.digest().joinToString(""){"%02x".format(it)};require(actual==expected){"合并记录附件摘要不一致"}
-    val manifest=buildJsonObject{put("sha256",actual);put("bytes",total);put("chunks",count)}.toString().toByteArray()
-    File(temp,"manifest").writeBytes(vault.encrypt(a.storage,"record-file:$id:manifest",manifest))
-    check(store.account?.token==a.token);check(temp.renameTo(folder(a,id))){"无法保存合并记录附件"}
-   } finally { temp.deleteRecursively() }
+  for(id in ids)runCatching {
+   check(store.account?.token==a.token);val meta=metadata(id)?:gateway.call("/api/files/$id/meta").jsonObject.also{remember(it,a)}
+   if(id in photos)ensure(id,meta.s("sha256"),capabilities[id])
   }
  }
+ fun remember(row:JsonObject,owner:Account?=null) {val a=requireNotNull(store.account);require(owner==null||owner.token==a.token);val id=row.s("id");require(valid(id)&&row.s("sha256").matches(Regex("[a-f0-9]{64}")));previews.save(a,"","file-meta:$id",buildJsonObject{put("id",id);put("sha256",row.s("sha256"));put("bytes",row["bytes"]?:JsonPrimitive("0"))})}
+ fun metadata(id:String):JsonObject?=previews.read("","file-meta:$id") as? JsonObject
+
  fun decryptPacket(a:Account,packet:Packet)=vault.decrypt(a.storage,"packet:${packet.room}:${packet.event}",packet.encrypted)
  fun bytes(id:String):ByteArray {
   val response=requireNotNull(open(id)){"本机附件缺失"}
@@ -90,10 +71,10 @@ class RecordFiles(private val context:Context,private val store:PacketStore,priv
    val manifest=buildJsonObject{put("sha256",actual);put("bytes",total);put("chunks",count)}.toString().toByteArray();File(temp,"manifest").writeBytes(vault.encrypt(a.storage,"record-file:$id:manifest",manifest));commit(a,id,temp)
   }finally{buffer.fill(0);temp.deleteRecursively()}
  }
- suspend fun ensure(id:String,expected:String)=receiving.withLock {withContext(Dispatchers.IO) {
+ suspend fun ensure(id:String,expected:String,record:String?=null)=receiving.withLock {withContext(Dispatchers.IO) {
   val a=requireNotNull(store.account);require(valid(id)&&expected.matches(Regex("[a-f0-9]{64}")))
   if(available(id)&&runCatching{open(id)?.data?.use{digest(it)}==expected}.getOrDefault(false))return@withContext
-  gateway.readFile(id){input->receive(a,id,input,expected)}
+  gateway.readFile(id,record){input->receive(a,id,input,expected)}
  }}
  fun open(id:String):WebResourceResponse? {
   val a=store.account?:return null;if(!available(id))return null

@@ -16,6 +16,9 @@ def identity(data):
  return value
 def url(h):return 'https://chat.yitiao.org/records/'+h
 def migrate(c):
+ from . import record_recovery
+ c.executescript(record_recovery.SCHEMA)
+ for row in c.execute("SELECT p.hash,p.source_room,p.active,r.payload FROM record_publications p JOIN shared_records r USING(hash)").fetchall():record_recovery.remember(c,row["hash"],row["source_room"],json.loads(row["payload"]),row["active"])
  if 'active' not in {r[1] for r in c.execute('PRAGMA table_info(record_publications)')}:c.execute('ALTER TABLE record_publications ADD COLUMN active INTEGER NOT NULL DEFAULT 1')
 def public(s,h,pending=False):
  if not isinstance(h,str) or not re.fullmatch('[a-f0-9]{64}',h):fail(404,'聊天记录不存在')
@@ -76,17 +79,24 @@ def prepare(app,s,who,room,events,display,activate=False):
  if existing:
   h=existing[0]
   if activate:
-   with transaction(s.db) as c:c.execute('UPDATE record_publications SET active=1 WHERE hash=?',(h,))
+   with transaction(s.db) as c:c.execute('UPDATE record_publications SET active=1 WHERE hash=?',(h,));c.execute('UPDATE record_capabilities SET active=1 WHERE hash=?',(h,))
   return public(s,h,pending=True)
  payload=draft(app,s,who,room,events,display)['payload'];raw=archive.canonical(payload);h=hashlib.sha256(raw).hexdigest()
  with transaction(s.db) as c:
   existing=c.execute('SELECT hash FROM record_publications WHERE selection_key=?',(key,)).fetchone()
   if existing:
    h=existing[0]
-   if activate:c.execute('UPDATE record_publications SET active=1 WHERE hash=?',(h,))
+   if activate:c.execute('UPDATE record_publications SET active=1 WHERE hash=?',(h,));c.execute('UPDATE record_capabilities SET active=1 WHERE hash=?',(h,))
   else:
    c.execute('INSERT INTO shared_records VALUES(?,?,?) ON CONFLICT(hash) DO NOTHING',(h,raw.decode(),time.time()))
    c.execute('INSERT INTO record_publications VALUES(?,?,?,?,?,?)',(h,key,room,json.dumps(ids),expires,int(activate)))
+ with transaction(s.db) as c:
+  from . import record_recovery
+  record_recovery.remember(c,h,room,payload,activate)
+  from .materials import files
+  from .sharing import file_ids
+  contents={'org.yitiao.attachments':sorted(set().union(*(file_ids(m['content']) for m in payload['messages'])))}
+  descriptors=files(s,contents);row=c.execute('SELECT recipe FROM record_capabilities WHERE hash=?',(h,)).fetchone();recipe=json.loads(row[0]);recipe['files']={f['id']:f for f in descriptors};c.execute('UPDATE record_capabilities SET recipe=? WHERE hash=?',(json.dumps(recipe,ensure_ascii=False),h))
  return public(s,h,pending=True)
 
 def activate_message(s,room,content):
@@ -94,27 +104,54 @@ def activate_message(s,room,content):
  if not isinstance(h,str) or not isinstance(raw,str):return
  with transaction(s.db) as c:
   admitted=c.execute('SELECT 1 FROM shared_records r JOIN shared_record_rooms a USING(hash) WHERE hash=? AND room=? AND payload=?',(h,room,raw)).fetchone()
-  if admitted:c.execute('UPDATE record_publications SET active=1 WHERE hash=?',(h,))
+  if admitted:
+   c.execute('UPDATE record_publications SET active=1 WHERE hash=?',(h,));c.execute('UPDATE record_capabilities SET active=1 WHERE hash=?',(h,))
 
 def cleanup(c):
  expired='SELECT hash FROM record_publications WHERE expires<'+str(time.time())
  c.execute('DELETE FROM shared_record_rooms WHERE hash IN ('+expired+')')
  c.execute('DELETE FROM shared_records WHERE hash IN ('+expired+')')
  c.execute('DELETE FROM record_publications WHERE expires<?',(time.time(),))
-def install(app,s):
+def install(app,s,session):
+ from . import record_recovery
+ from fastapi.responses import JSONResponse
+ record_recovery.install(app,s,session)
+ def resolve(h):
+  try:
+   value=public(s,h)
+   with transaction(s.db) as c:
+    row=c.execute('SELECT source_room FROM record_publications WHERE hash=?',(h,)).fetchone()
+    if row:record_recovery.remember(c,h,row[0],value['payload'],value['active']);c.execute('UPDATE record_capabilities SET active=? WHERE hash=?',(int(value['active']),h))
+   return value
+  except __import__('fastapi').HTTPException as e:
+   if e.status_code not in (404,410):raise
+   return app.state.record_recovery.record(h)
+ def pending():return JSONResponse({'state':'pending','error':'正在向原会话在线 App 请求并校验记录，请稍后重试'},status_code=202,headers={'Retry-After':'3'})
  @app.get('/api/public-records/{h}')
- async def record(h:str):return public(s,h)
+ async def record(h:str):
+  value=resolve(h)
+  if value is None:return pending()
+  cap=record_recovery.capability(s,h);return value|{'files':list(json.loads(cap['recipe']).get('files',{}).values())}
  @app.get('/api/public-records/{h}/files/{fid}/content')
  async def file(h:str,fid:str):
-  record=public(s,h)
+  record=resolve(h)
+  if record is None:return pending()
   from .sharing import file_ids
   if fid not in set().union(*(file_ids(m['content']) for m in record['payload']['messages'])):fail(404,'附件不属于此记录')
   with connect(s.db) as c:row=c.execute('SELECT * FROM files WHERE id=?',(fid,)).fetchone()
-  if not row or row['removed'] or row['expires']<=time.time() or not (s.objects/fid).is_file():fail(410,'附件已删除或过期')
+  if not row or row['removed'] or row['expires']<=time.time() or not (s.objects/fid).is_file():
+   recovery=app.state.record_recovery
+   with recovery.lock:
+    job=recovery.job(h);body=job['files'].get(fid)
+    if body is not None:return Response(body,media_type='application/octet-stream',headers={'Cache-Control':'no-store'})
+    job['wants'].add(fid)
+   return pending()
   return FileResponse(s.objects/fid,media_type='application/octet-stream',headers={'Cache-Control':'no-store'})
  @app.get('/api/public-records/{h}/avatars/{index}')
  async def avatar(h:str,index:int):
-  record=public(s,h);items=record['payload']['messages']
+  record=resolve(h)
+  if record is None:return pending()
+  items=record['payload']['messages']
   if not 0<=index<len(items):fail(404,'头像不存在')
   embedded=items[index].get('avatar_data','')
   if isinstance(embedded,str) and len(embedded)<=180000 and re.fullmatch(r'data:image/jpeg;base64,[A-Za-z0-9+/=]+',embedded):

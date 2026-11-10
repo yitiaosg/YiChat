@@ -70,10 +70,10 @@ class Gateway(val base: String = BuildConfig.GATEWAY) {
             } } finally { uploadCall = null }
         }
     }
-    suspend fun readFile(id:String,consume:(java.io.InputStream)->Unit)=withContext(Dispatchers.IO) {
-        require(id.matches(Regex("[a-f0-9]{48}")))
+    suspend fun readFile(id:String,record:String?=null,consume:(java.io.InputStream)->Unit)=withContext(Dispatchers.IO) {
+        require(id.matches(Regex("[a-f0-9]{48}"))&&(record==null||record.matches(Regex("[a-f0-9]{64}"))))
         mutex.withLock { val now=android.os.SystemClock.elapsedRealtime();delay((maxOf(next.get(),cooldown.get())-now).coerceAtLeast(0));next.set(android.os.SystemClock.elapsedRealtime()+180) }
-        readHttp.newCall(Request.Builder().url(base+"/api/files/$id/content").header("Authorization","Bearer "+requireNotNull(token)).build()).execute().use { r ->
+        readHttp.newCall(Request.Builder().url(base+if(record==null)"/api/files/$id/content" else "/api/public-records/$record/files/$id/content").header("Authorization","Bearer "+requireNotNull(token)).build()).execute().use { r ->
             if(!r.isSuccessful)throw GatewayError(r.code,"合并记录附件暂不能备份（${r.code}）")
             requireNotNull(r.body).byteStream().use(consume)
         }

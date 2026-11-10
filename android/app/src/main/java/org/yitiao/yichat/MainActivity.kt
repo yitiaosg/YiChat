@@ -175,6 +175,7 @@ class MainActivity : ComponentActivity() {
         consumeIntent(intent)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { while(isActive){withContext(Dispatchers.IO){runCatching{if(online()&&graph.store.account!=null)graph.messageMaterials.exchangeRecords()}};delay(5000)} }
                 while(isActive) {
                     withContext(Dispatchers.IO) {
                         runCatching { graph.restore();if(graph.auth.account!=null) { if(online()) { graph.history.catchUp();graph.history.exchange();graph.protocol.sync() };graph.backup.saveInternal() } }
@@ -294,10 +295,11 @@ class MainActivity : ComponentActivity() {
                     "protocolCheckDay" -> {val value=withContext(Dispatchers.IO){graph.dayPackets.checkDay(args.s("room"),args.s("day"))};respond(reply,value);web.evaluateJavascript("window.dispatchEvent(new Event('yc:packet-updated'))",null)}
                     "protocolDay" -> respond(reply,withContext(Dispatchers.IO){graph.dayPackets.collect(args.s("room"),args.s("day"),args.b("include_data"))})
                     "packetImportResolve" -> {val value=withContext(Dispatchers.IO){graph.dayPackets.resolve(args.s("import"),args.s("room"),args.s("day"),args.s("choice"),args.b("confirmed"))};respond(reply,value);web.evaluateJavascript("window.dispatchEvent(new Event('yc:packet-updated'))",null)}
+                    "packetRooms" -> respond(reply,withContext(Dispatchers.IO){buildJsonObject{put("rooms",JsonArray(graph.dayPackets.rooms().map(::JsonPrimitive)))}})
                     "packetExport" -> {
                         require(saving==null&&downloads.isEmpty()){"请先完成当前下载"}
-                        val file=withContext(Dispatchers.IO){val bundle=graph.dayPackets.export(args.a("rooms").map{it.jsonPrimitive.content},args.s("start"),args.s("end"));val bytes=DataPackageCodec.encode(bundle,args.s("password"));val dir=File(cacheDir,"web-downloads").apply{mkdirs()};File(dir,UUID.randomUUID().toString()).apply{writeBytes(bytes)}}
-                        val d=Download(file,"YiChat-${args.s("start")}-${args.s("end")}.ycp","application/octet-stream",file.length());saving=d to reply
+                        val file=withContext(Dispatchers.IO){val rooms=if(args.b("all_rooms"))graph.dayPackets.rooms() else args.a("rooms").map{it.jsonPrimitive.content};require(rooms.isNotEmpty()){"请选择至少一个本机会话"};val bundle=if(args.b("all_dates"))graph.dayPackets.exportKnown(rooms) else graph.dayPackets.export(rooms,args.s("start"),args.s("end"));val bytes=DataPackageCodec.encode(bundle,args.s("password"));val dir=File(cacheDir,"web-downloads").apply{mkdirs()};File(dir,UUID.randomUUID().toString()).apply{writeBytes(bytes)}}
+                        val d=Download(file,if(args.b("all_dates"))"YiChat-all-local.ycp" else "YiChat-${args.s("start")}-${args.s("end")}.ycp","application/octet-stream",file.length());saving=d to reply
                         saveDocument.launch(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(d.mime).putExtra(Intent.EXTRA_TITLE,d.name))
                     }
                     "packetImportFinish" -> {
@@ -305,6 +307,8 @@ class MainActivity : ComponentActivity() {
                         try{val plan=withContext(Dispatchers.IO){graph.dayPackets.inspect(DataPackageCodec.decode(d.file.readBytes(),args.s("password")))};respond(reply,plan);web.evaluateJavascript("window.dispatchEvent(new Event('yc:packet-updated'))",null)}finally{d.file.delete()}
                     }
                     "messagePreview" -> respond(reply,withContext(Dispatchers.IO){(if(args.s("resource").startsWith("record:"))graph.protocolStore.get("public-record|"+args.s("resource").removePrefix("record:")) else null)?:graph.recordFiles.previews.read(args.s("room"),args.s("resource"))?:JsonNull})
+                    "recordSave" -> {respond(reply,withContext(Dispatchers.IO){graph.messageMaterials.saveRecord(args)})}
+                    "recordEnsureFile" -> {withContext(Dispatchers.IO){val id=args.s("id");val meta=requireNotNull(graph.recordFiles.metadata(id)){"附件摘要未保存"};graph.recordFiles.ensure(id,meta.s("sha256"),args.s("record").takeIf{it.isNotBlank()})};respond(reply)}
                     "recordFileAvailable" -> respond(reply,buildJsonObject { put("available",graph.recordFiles.available(args.s("id"))) })
                     "systemThemeColor" -> {
                         val color=if(android.os.Build.VERSION.SDK_INT>=31) getColor(android.R.color.system_accent1_500) else 0xff1479b8.toInt()

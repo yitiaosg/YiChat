@@ -1,3 +1,4 @@
+import {rememberFiles} from './file-descriptors';
 import {requests} from './api';import {isApp,appCall} from './app';import {chat} from './chat';
 import {sha256,materialHash,type MaterialState} from './packet-protocol';
 export const MATERIAL_KEY='org.yitiao.material';
@@ -5,7 +6,7 @@ export type MaterialDocument={version:2;kind:'share'|'media'|'record';content:an
 export type SavedMaterial={meta:MaterialState;canonical:string;document:MaterialDocument};
 const memory=new Map<string,SavedMaterial>(),pending=new Map<string,Promise<SavedMaterial>>();
 const online=()=>!chat.offline&&navigator.onLine;
-async function checked(eid:string,value:any):Promise<SavedMaterial>{if(!value||typeof value.canonical!=='string'||value.meta?.event_id!==eid)throw Error('原始消息尚未保存到设备');const hash=await sha256(value.canonical);if(hash!==value.meta.payload_sha256)throw Error('设备原始消息数据损坏');if(value.meta.finalized&&await materialHash(value.meta,hash,value.meta.files||[])!==value.meta.sha256)throw Error('设备原始消息时间摘要损坏');return {...value,document:JSON.parse(value.canonical)}}
+async function checked(eid:string,value:any):Promise<SavedMaterial>{if(!value||typeof value.canonical!=='string'||value.meta?.event_id!==eid)throw Error('原始消息尚未保存到设备');const hash=await sha256(value.canonical);if(hash!==value.meta.payload_sha256)throw Error('设备原始消息数据损坏');if(value.meta.finalized&&await materialHash(value.meta,hash,value.meta.files||[])!==value.meta.sha256)throw Error('设备原始消息时间摘要损坏');rememberFiles(value.meta.files);return {...value,document:JSON.parse(value.canonical)}}
 export async function readMaterial(eid:string){const existing=memory.get(eid);if(existing)return checked(eid,existing);let value:any;try{value=isApp&&chat.nativeProtocol?await appCall('materialRead',{event:eid}):await chat.businessVault.state('material:'+eid)}catch{}if(value){const good=await checked(eid,value);memory.set(eid,good);return good}}
 async function save(eid:string,value:any){const good=await checked(eid,value);if(isApp&&chat.nativeProtocol)await appCall('materialSave',{event:eid,meta:good.meta,canonical:good.canonical});else await chat.businessVault.saveState('material:'+eid,{meta:good.meta,canonical:good.canonical});memory.set(eid,good);window.dispatchEvent(new CustomEvent('yc:material',{detail:eid}));return good}
 export function ensureMaterial(eid:string):Promise<SavedMaterial>{const old=pending.get(eid);if(old)return old;const task=(async()=>{

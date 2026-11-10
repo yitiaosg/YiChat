@@ -33,6 +33,7 @@ class MessageProtocol(private val store:PacketStore,private val gateway:Gateway,
     // Cover empty GMT days too. Older lazy-loaded dates are checked by the UI.
     for(room in rooms)for(offset in 0L..6L)runCatching{days.checkDay(room,end.minusDays(offset).toString())}
    }
+   materials.exchangeRecords()
    days.exchange()
   }
  }

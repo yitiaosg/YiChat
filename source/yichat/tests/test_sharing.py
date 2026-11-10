@@ -90,7 +90,7 @@ def test_record_can_only_be_forwarded_as_ordinary_original_link(gateway):
  assert r.json()['messages']==[{'msgtype':'m.text','body':body,'org.yitiao.attachments':[]}]
 
 
-def test_public_record_limits_files_and_ends_when_source_deleted(gateway,postgres):
+def test_public_record_limits_files_and_waits_for_peer_when_source_deleted(gateway,postgres):
  c,app,s=gateway
  own=c.post('/api/files/!direct',content=b'public photo').json()['id'];other=c.post('/api/files/!direct',content=b'private unrelated').json()['id']
  seed(s,{'msgtype':'m.image','body':'photo.png','url':'mxc://chat.yitiao.org/'+own,'info':{'mimetype':'image/png'}})
@@ -100,18 +100,18 @@ def test_public_record_limits_files_and_ends_when_source_deleted(gateway,postgre
  assert c.get('/api/public-records/'+h+'/files/'+other+'/content').status_code==404
  assert c.get('/api/files/'+own+'/content').status_code==401
  with archive.connect(postgres['owner']) as pg:pg.execute('DELETE FROM events WHERE event_id=%s',('$selected',))
- assert c.get('/api/public-records/'+h).status_code==410
- assert c.get('/api/public-records/'+h+'/files/'+own+'/content').status_code==410
+ assert c.get('/api/public-records/'+h).status_code==202
+ assert c.get('/api/public-records/'+h+'/files/'+own+'/content').status_code==202
 
 
-def test_public_record_expires_by_original_receipt_not_link_creation(gateway,postgres):
+def test_public_record_original_retention_does_not_remove_the_public_capability(gateway,postgres):
  c,app,s=gateway
  with archive.connect(postgres['owner']) as pg:pg.execute('UPDATE memberships SET received_ms=%s',(int(time.time()*1000)-10*86400000,))
  seed(s,age=6*86400000)
  r=c.post('/api/sharing/!direct/selection',json={'ids':['$selected'],'mode':'image'});assert r.status_code==200,r.text
  assert 86300<r.json()['expires']-time.time()<86500
  with connect(s.db) as db:db.execute('UPDATE record_publications SET expires=?',(time.time()-1,))
- c.cookies.clear();assert c.get('/api/public-records/'+r.json()['hash']).status_code==410
+ c.cookies.clear();assert c.get('/api/public-records/'+r.json()['hash']).status_code==200
 
 
 def test_public_record_revoked_with_source_and_old_messages_cannot_be_published(gateway,postgres):

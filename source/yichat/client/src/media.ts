@@ -1,3 +1,4 @@
+import {checkFile} from './file-descriptors';
 import {unbase64,sha256} from './packet-protocol';
 import {transferFile,type TransferState} from './upload-transfer';
 import { requests, path, ApiError, retryDelay, sleep } from './api';
@@ -44,14 +45,15 @@ export async function attachment(content:any,signal:AbortSignal,publicRecord?:st
   if(content.file)throw Error('旧加密附件已清空，请使用新会话中的附件');
   const mxc=content.url;
   const match=/^mxc:\/\/chat\.yitiao\.org\/([a-f0-9]{48})$/.exec(mxc||'');if(!match)throw Error('附件地址不受支持');
-  if(isApp)try{if((await appCall('recordFileAvailable',{id:match[1]})).available){const local=await requests.fetch('/app-local-record-files/'+match[1],{signal});if(local.ok){const bytes=await local.arrayBuffer();const type=String(content.info?.mimetype||'application/octet-stream');return new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'})}}}catch{/* Older Apps and absent local records use the server path. */}
+  if(isApp)try{if((await appCall('recordFileAvailable',{id:match[1]})).available){const local=await requests.fetch('/app-local-record-files/'+match[1],{signal});if(local.ok){const bytes=await local.arrayBuffer();const type=String(content.info?.mimetype||'application/octet-stream');return checkFile(match[1],new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'}))}}}catch{/* Older Apps and absent local records use the server path. */}
+  if(isApp)try{await appCall('recordEnsureFile',{id:match[1],record:publicRecord||''});const local=await requests.fetch('/app-local-record-files/'+match[1],{signal});if(local.ok){const type=String(content.info?.mimetype||'application/octet-stream');return checkFile(match[1],new Blob([await local.arrayBuffer()],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'}))}}catch{/* Continue through the normal authenticated/capability download. */}
   if(publicRecord){
-    const response=await requests.fetch('/api/public-records/'+path(publicRecord)+'/files/'+match[1]+'/content',{signal});if(!response.ok)throw new ApiError(response.status,await response.json());
-    const type=String(content.info?.mimetype||'application/octet-stream');return new Blob([await response.arrayBuffer()],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});
+    let response:Response|undefined;for(let n=0;n<40;n++){response=await requests.fetch('/api/public-records/'+path(publicRecord)+'/files/'+match[1]+'/content',{signal});if(response.status!==202)break;await sleep(3000,signal)}if(!response||response.status===202)throw Error('原会话在线设备暂未提供此附件，请稍后重试');if(!response.ok)throw new ApiError(response.status,await response.json());
+    const type=String(content.info?.mimetype||'application/octet-stream');return checkFile(match[1],new Blob([await response.arrayBuffer()],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'}));
   }
   // File IDs are content-addressed: a stored chat image never changes.
   const key='file:'+match[1],image=content.msgtype==='m.image',vault=chat.businessVault;
-  if(image){const stored=await vault.image(key).catch(()=>undefined);if(stored)return stored}
+  if(image){const stored=await vault.image(key).catch(()=>undefined);if(stored){try{return await checkFile(match[1],stored)}catch{/* Refetch a corrupt image cache. */}}}
   let response:Response|undefined;
 
   for(let attempt=0;attempt<5;attempt++){
@@ -65,6 +67,7 @@ export async function attachment(content:any,signal:AbortSignal,publicRecord?:st
   // Never execute HTML/SVG or arbitrary uploaded files in the app origin.
   const type=String(content.info?.mimetype||'application/octet-stream');
   const blob=new Blob([bytes],{type:/^(image\/(png|jpeg|gif|webp|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+)$/i.test(type)?type:'application/octet-stream'});
+  await checkFile(match[1],blob);
   if(image&&!signal.aborted)void vault.saveImage(key,blob).catch(()=>{});
   return blob;
 }

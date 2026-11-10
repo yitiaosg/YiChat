@@ -135,7 +135,7 @@ export class Chat {
       try{result=await appCall('localOlder',{room:room.roomId,cursor:next,before_ts:first?first.getTs():Number.MAX_SAFE_INTEGER,limit:40})}catch(e:any){if(/不支持此 App 操作/.test(e.message)){this.localCursors.set(room.roomId,null);return added}throw e}
       if(this.closed)return 0;
       const events:sdk.MatrixEvent[]=[];
-      for(const row of result.rows){if(room.findEventById(row.event_id))continue;try{events.push(new sdk.MatrixEvent(await verifyPacket(row.raw,{sha256:row.sha256,event_id:row.event_id,room:room.roomId})))}catch{/* Skip packets that fail verification. */}}
+      for(const row of result.rows){if(room.findEventById(row.event_id))continue;try{const raw=await verifyPacket(row.raw,{sha256:row.sha256,event_id:row.event_id,room:room.roomId});raw.unsigned={...raw.unsigned,'org.yitiao.received_ms':(row as any).received_ms};events.push(new sdk.MatrixEvent(raw))}catch{/* Skip packets that fail verification. */}}
       if(events.length){room.addEventsToTimeline(events,true,false,room.getLiveTimeline(),room.getLiveTimeline().getPaginationToken(sdk.EventTimeline.BACKWARDS)??undefined);added+=events.length}
       next=result.more&&result.cursor?result.cursor:null;
     }

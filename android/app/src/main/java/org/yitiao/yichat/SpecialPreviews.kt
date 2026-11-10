@@ -33,7 +33,7 @@ class SpecialPreviews(private val context:Context,private val store:PacketStore,
  private fun directory(a:Account)=File(context.noBackupFilesDir,"special-previews/${a.storage}")
  private fun key(room:String,resource:String)=SecureStore.hash("$room\u0000$resource")
  private fun check(a:Account){check(store.account?.token==a.token){"备份账号已锁定"}}
- private fun save(a:Account,room:String,resource:String,value:JsonElement) {
+ internal fun save(a:Account,room:String,resource:String,value:JsonElement) {
   check(a);val id=key(room,resource);val dir=directory(a).apply{mkdirs()}
   val bytes=buildJsonObject{put("room",room);put("resource",resource);put("saved_at",System.currentTimeMillis());put("value",value)}.toString().toByteArray()
   try { val file=AtomicFile(File(dir,id));val out=file.startWrite()

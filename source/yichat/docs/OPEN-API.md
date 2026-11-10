@@ -785,7 +785,7 @@ websocat -H "Authorization: Bearer $YICHAT_KEY" \
 
 - 页面：`https://chat.yitiao.org/records/<SHA-256>`，无需登录。
 - 数据：`GET /api/public-records/<SHA-256>`，返回 `hash`、`canonical`、`payload`、`url`、`expires`。`hash` 是 `canonical` UTF-8 字节的 SHA-256。
-- 有效期取所引用消息的最早服务器接收时间加七天，不因重新分享而延长。原消息被删除或撤回后拒绝读取；到期返回410，未知记录返回404。
+- 服务器原件保留期取所引用消息最早接收时间加七天。已发布 URL 保留所选记录访问凭证：优先读取设备备份，其次服务器原件或重建结果，缺失时向源会话在线 App 请求并核对原记录哈希。等待补齐返回202 pending（Retry-After: 3），未知/未发布返回404；撤回或清空源会话返回410。
 - 附件只允许通过该记录中的文件 ID 读取：`GET /api/public-records/<SHA-256>/files/<文件ID>/content`。使用原文件，不复制一份。现有私有文件接口仍需原有权限。
 - 公开页面不提供转账、收款、领取红包或赠卡操作。逐条转发按本人新发消息处理，不附带原发送者；转账、收款、红包和赠卡消息禁止逐条转发，聊天记录消息不能再次合并。
 
@@ -814,7 +814,7 @@ websocat -H "Authorization: Bearer $YICHAT_KEY" \
 {"event_id":"$forwarded","conversation_id":"!target:chat.yitiao.org","txn_id":"record-001","hash":"<64位SHA-256>","url":"https://chat.yitiao.org/records/<64位SHA-256>","expires":1794600000}
 ```
 
-服务器计算并验证记录摘要，发送一条与界面合并转发相同的特殊 URL 消息。消息被服务器接受后 URL 可用；匿名访问、七天有效期、原消息删除/撤回后的失效规则与界面分享一致。相同分享者、原消息和显示选项复用相同哈希及 URL。
+服务器计算并验证记录摘要，发送一条与界面合并转发相同的特殊 URL 消息。消息被服务器接受后 URL 可用；匿名访问、原件七天保留及经过原发布哈希校验的在线设备补齐规则与界面分享一致。相同分享者、原消息和显示选项复用相同哈希及 URL。
 
 ### 读取或设置禁止分享
 
@@ -842,3 +842,5 @@ websocat -H "Authorization: Bearer $YICHAT_KEY" \
 上述接口使用相同 Bearer API 密钥、账户限速、密钥作用域及历史会话权限。请求键必须在重试时复用，不能用于不同内容。客户端不能伪造 `org.yitiao.material`；原件描述必须由服务器生成。
 
 整日 GMT 摘要、离线导出/导入、网页数据包合并与连续最多7日实际内容核验规范见 [MATERIAL-PROTOCOL-V2.md](MATERIAL-PROTOCOL-V2.md)。网页独立工具地址为 `https://chat.yitiao.org/data-packages`。
+
+0.4.1 中，整日校验的文件 `data` 可省略，表示实体尚未下载；必须保留原 `id/bytes/sha256`。若提供 `data`，服务器必定重新计算字节数和摘要。照片自动缓存，普通文件点击后下载。完整行为与原生互助端点见 [原始消息协议](MATERIAL-PROTOCOL-V2.md)。

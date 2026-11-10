@@ -43,7 +43,7 @@ object PacketProtocol {
   val originals=value.a("files");val projected=files(originals);require(projected.map{it.jsonObject.s("id")}.distinct().size==projected.size)
   for(f in originals.map{it.jsonObject}) {
    require(f.s("id").matches(Regex("[a-f0-9]{48}"))&&f.s("sha256").matches(Regex("[a-f0-9]{64}")))
-   if(verifyFiles){val bytes=Base64.getDecoder().decode(f.s("data"));require(bytes.size.toLong()==f.s("bytes").toLong()&&hash(bytes)==f.s("sha256")){"附件内容损坏"}}
+   if(verifyFiles&&f["data"]!=null&&f["data"]!=JsonNull){require(f["data"] is JsonPrimitive&&f["data"]!!.jsonPrimitive.isString){"附件实体必须为编码字符串"};val bytes=Base64.getDecoder().decode(f.s("data"));require(bytes.size.toLong()==f.s("bytes").toLong()&&hash(bytes)==f.s("sha256")){"附件内容损坏"}}
   }
   var material:JsonElement=JsonNull
   if(value["material"] is JsonObject) {

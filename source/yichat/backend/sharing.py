@@ -153,7 +153,7 @@ def set_sharing(s,who,room,data):
  return sharing(s,who,room)
 
 def install(app,s,session):
- public_records.install(app,s)
+ public_records.install(app,s,session)
  @app.get('/api/sharing/{room}')
  async def preferences(request:Request,room:str):return sharing(s,session(request),room)
  @app.put('/api/sharing/{room}')

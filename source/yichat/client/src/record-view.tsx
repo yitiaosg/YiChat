@@ -32,7 +32,7 @@ export function RecordTranscript({payload,publicHash}:{payload:any;publicHash?:s
 export function RecordQRCode({url}:{url:string}){
  const [src,setSrc]=useState(''),[error,setError]=useState('');
  useEffect(()=>{let active=true;setSrc('');void QRCode.toDataURL(url,{width:240,margin:4,errorCorrectionLevel:'M'}).then(src=>{if(active)setSrc(src)}).catch(e=>{if(active)setError(e.message)});return()=>{active=false}},[url]);
- return <footer class="record-qr" data-qr-loading={!src&&!error?'true':undefined}>{src&&<img src={src} alt="扫描二维码查看聊天记录" data-qr-url={url}/>}<div><strong>扫码查看聊天记录</strong><p>引用消息七天内有效</p></div>{error&&<ErrorText>{error}</ErrorText>}</footer>;
+ return <footer class="record-qr" data-qr-loading={!src&&!error?'true':undefined}>{src&&<img src={src} alt="扫描二维码查看聊天记录" data-qr-url={url}/>}<div><strong>扫码查看聊天记录</strong><p>优先读取本机备份，缺失时请求在线补齐</p></div>{error&&<ErrorText>{error}</ErrorText>}</footer>;
 }
 export function RecordOpenLink({hash}:{hash:string}){return <a class="button record-open" href={recordUrl(hash)} target={isApp?'_self':'_blank'} rel="noopener noreferrer"><ExternalLink size={16}/>{isApp?'全屏显示':'在新标签页打开'}</a>}
 export function RecordPage({hash}:{hash:string}){
