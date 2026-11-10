@@ -1,0 +1,10 @@
+{
+  "source_commit": "2cac9392536441d32a139bdce61e8a17cfb668a3",
+  "services": "4 active",
+  "health": "ok",
+  "logout_anonymous": "302 login",
+  "runtime_files_match": 14,
+  "web_apk_production_identical": 14,
+  "ledger_reconciliation": "ok",
+  "business_ids": "preserved"
+}
