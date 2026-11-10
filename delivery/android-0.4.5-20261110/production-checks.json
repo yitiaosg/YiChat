@@ -1,0 +1,10 @@
+{
+  "source_commit": "8ecc4edd5a47bf64763e65b52d18811a9cb94a78",
+  "scope": "frontend only",
+  "runtime_files_match": 13,
+  "production_web_and_apk_identical": 14,
+  "web_release": "20261110T160355Z",
+  "previous_web_release": "20261110T142938Z",
+  "health": "ok",
+  "rollback": "private source backup and previous web release retained"
+}
