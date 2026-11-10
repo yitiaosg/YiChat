@@ -38,5 +38,5 @@ mockRequests.api=async(url,data,method)=>{
  return {allowed:state.testPolicy,can_set:true,blocked_by_me:!state.testPolicy};
 };
 chat.send=async(room,content)=>{state.testSent.push({room,content});const h=content['org.yitiao.record'];if(h&&state.testPublications[h])state.testPublications[h].active=true};
-function Harness(){const [,refresh]=useState(0),[details,setDetails]=useState(false);chat.changed=()=>refresh(x=>x+1);return <main class="app-shell has-active"><Conversation roomId="!source" back={()=>{}} details={()=>setDetails(true)} business={()=>{}} security={()=>{}}/>{details&&<Details roomId="!source" close={()=>setDetails(false)} archive={()=>{}} onLeave={()=>{}} audit={()=>{}}/>}</main>}
+function Harness(){const [,refresh]=useState(0),[details,setDetails]=useState(false);chat.changed=()=>refresh(x=>x+1);return <main class="app-shell has-active"><Conversation roomId="!source" back={()=>{}} details={()=>setDetails(true)} business={()=>{}} security={()=>{}}/>{details&&<Details roomId="!source" close={()=>setDetails(false)} archive={()=>{}} onLeave={()=>{}}/>}</main>}
 render(<Harness/>,document.getElementById('app')!);

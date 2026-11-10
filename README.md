@@ -1,10 +1,14 @@
 # YiChat
 
-当前版本 **Android 0.4.3 / versionCode 26**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.4.4 / versionCode 27**，包名 `org.yitiao.yichat.mobile`。
 
-[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.4.3 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261110-v0.4.3/YiChat-0.4.3-26.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
+[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.4.4 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261110-v0.4.4/YiChat-0.4.4-27.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
+
+## 0.4.4 更新
+
+下载入口恢复按浏览器标识显示平台名称与链接。“Yichat设置”按通知、聊天记录、账户与数据安全、应用更新分类；内部快照自动保存，移除手动快照与 App 独立核验入口。App 导出范围使用统一开关，会话选择复用首页头像、名称、摘要与时间，点击整行选择。网页数据包工具使用独立完整页面，支持分次添加、拖放、移除、文件完整日期统计、合并下载和所选数据包核验。菜单禁用双指/触控板缩放，保留滚动。见 [部署与验证](PRODUCTION-0.4.4.md)。
 
 ## 0.4.3 更新
 
@@ -106,4 +110,4 @@ export YICHAT_FIREBASE_CONFIG=/private/path/google-services.json
 
 0.3.10 / code 18 修正主题色Logo图形，见 [0.3.10记录](PRODUCTION-0.3.10.md)。
 
-历史 0.3.14 的自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。当前 0.4.3 的部署和测试记录见 [0.4.3记录](PRODUCTION-0.4.3.md)。
+历史 0.3.14 的自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。当前 0.4.4 的部署和测试记录见 [0.4.4记录](PRODUCTION-0.4.4.md)。

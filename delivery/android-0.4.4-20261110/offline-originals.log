@@ -1,0 +1,3 @@
+PASS automatic top paging, local-only separator, all-room and multi-room all-date offline export
+PASS actual main cold SDK cache rebuilds room+packets and original transfer/gift with zero API calls
+PASS standalone decrypts and previews package locally
