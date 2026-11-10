@@ -1,10 +1,17 @@
 # YiChat
 
-当前版本 **Android 0.4.5 / versionCode 28**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.4.6 / versionCode 29**，包名 `org.yitiao.yichat.mobile`。
 
-[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.4.5 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261110-v0.4.5/YiChat-0.4.5-28.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
+[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.4.6 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261110-v0.4.6/YiChat-0.4.6-29.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
+
+## 0.4.6 更新（网页版与 Android App）
+
+- **会话菜单**：长按会话（触屏）、右键或键盘菜单键（桌面）在按下的位置弹出菜单，包含“置顶/取消置顶”“归档/取消归档”（空会话为“删除空会话”）和“导出对话文件”。会话行右下角原有的归档、置顶小按钮已移除；左右滑动保持不变。
+- **导出对话文件**：在 App 中直接打开已选中该会话的导出页面，返回时回到会话列表。网页版没有本机原始记录，此项显示为不可用并注明“在 YiChat App 中可用”。
+- **启动主题色**：选择了自定义主题色后，App 启动的加载界面直接使用该颜色，不再先显示 Android 系统主题色；原生窗口背景同样记住上次的颜色。升级后需要进入一次应用，之后的启动才会生效。
+- 见 [部署与验证](PRODUCTION-0.4.6.md)。
 
 ## 0.4.5 更新（网页版与 Android App）
 
@@ -120,4 +127,4 @@ export YICHAT_FIREBASE_CONFIG=/private/path/google-services.json
 
 0.3.10 / code 18 修正主题色Logo图形，见 [0.3.10记录](PRODUCTION-0.3.10.md)。
 
-历史 0.3.14 的自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。0.4.4 的部署和测试记录见 [0.4.4记录](PRODUCTION-0.4.4.md)。当前 0.4.5 见 [0.4.5记录](PRODUCTION-0.4.5.md)。
+历史 0.3.14 的自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。0.4.4 的部署和测试记录见 [0.4.4记录](PRODUCTION-0.4.4.md)。0.4.5 见 [0.4.5记录](PRODUCTION-0.4.5.md)。当前 0.4.6 见 [0.4.6记录](PRODUCTION-0.4.6.md)。

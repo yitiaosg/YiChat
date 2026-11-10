@@ -192,8 +192,14 @@ class MainActivity : ComponentActivity() {
     }
     private fun setSafeContent(content: View) {
         WindowCompat.setDecorFitsSystemWindows(window,false)
-        val dark=resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES
-        val root=FrameLayout(this).apply { setBackgroundColor(if(dark) 0xff121f2d.toInt() else android.graphics.Color.WHITE) };safeRoot=root
+        val systemDark=resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES
+        // Start with the colours last applied by the page, so the launch does not flash the defaults.
+        val chrome=getSharedPreferences("chrome",MODE_PRIVATE)
+        val remembered=chrome.contains("color")
+        val dark=if(remembered)chrome.getBoolean("dark",systemDark) else systemDark
+        val background=if(remembered)chrome.getInt("color",0) or 0xff000000.toInt() else if(dark) 0xff121f2d.toInt() else android.graphics.Color.WHITE
+        val root=FrameLayout(this).apply { setBackgroundColor(background) };safeRoot=root
+        (content as? WebView)?.setBackgroundColor(background)
         root.addView(content,FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT))
         val controller=WindowInsetsControllerCompat(window,root)
         controller.isAppearanceLightStatusBars=!dark;controller.isAppearanceLightNavigationBars=!dark
@@ -326,6 +332,7 @@ class MainActivity : ComponentActivity() {
                         val dark=args.b("dark");val base=if(dark) 0xff101820.toInt() else android.graphics.Color.WHITE
                         val color=androidx.core.graphics.ColorUtils.blendARGB(base,android.graphics.Color.parseColor(seed),if(dark) .04f else .01f)
                         safeRoot?.setBackgroundColor(color)
+                        getSharedPreferences("chrome",MODE_PRIVATE).edit().putInt("color",color).putBoolean("dark",dark).apply()
                         WindowInsetsControllerCompat(window,safeRoot?:web).apply { isAppearanceLightStatusBars=!dark;isAppearanceLightNavigationBars=!dark }
                         respond(reply)
                     }

@@ -33,7 +33,6 @@ html[data-app="android"] .message-body,html[data-app="android"] input,html[data-
 .audit-dates{display:flex;gap:12px}.audit-dates label{flex:1;min-width:0}.audit-results{display:grid;gap:10px;margin:18px 0}.audit-record{padding:14px 0;border-bottom:1px solid var(--border)}.audit-record>small{display:block;color:var(--muted);margin-bottom:8px;font-size:10px}.audit-reader{margin-top:22px}
 /* Personal conversation organization, keyboard alternatives and read-only history. */
 .conversation-entry{position:relative;overflow:hidden;touch-action:pan-y}.conversation-entry.pinned{background:var(--soft)}.conversation-entry .room-row{width:100%;transition:transform .13s ease}.conversation-row-actions{display:flex;position:absolute;right:9px;bottom:4px;gap:2px;background:var(--panel);border-radius:7px;opacity:0}.conversation-entry:hover .conversation-row-actions,.conversation-entry:focus-within .conversation-row-actions{opacity:1}.conversation-row-actions .icon{width:27px;height:23px}.room-summary small svg{display:inline-block;vertical-align:middle}.sidebar-tabs button{padding-left:10px;padding-right:10px}.conversation-readonly{padding:20px;text-align:center;color:var(--muted);border-top:1px solid var(--border);background:var(--panel)}.message.continued{padding-left:38px}.message.direct-message{padding-left:0}.message.continued .bubble{border-top-left-radius:12px}.conversation-mute{margin:20px 0}.transaction-row{display:grid;gap:7px;padding:16px 0;border-bottom:1px solid var(--border);text-decoration:none}.transaction-row small{overflow-wrap:anywhere;color:var(--muted)}
-@media(pointer:coarse){.conversation-row-actions{opacity:1;right:6px;bottom:2px}.conversation-row-actions .icon{width:30px;height:24px}.conversation-entry .room-row{padding-bottom:27px}}
 .conversation-entry.pinned{background:var(--raised)}.message:not(.mine):not(.direct-message){gap:10px}.message:not(.mine):not(.direct-message) .message-avatar{display:inline-flex;flex-shrink:0}.message.continued{padding-left:39px}
 .bubble:has(.gift-message){padding:0;background:transparent;border:0;box-shadow:none}.bubble:has(.gift-message)>.message-meta{padding:5px 8px}.bubble:has(.gift-message)>.message-body.only-order{display:none}.bubble:has(.gift-message)>.actions{padding:0 8px 8px}.gift-message{width:290px;max-width:100%}.gift-bubble{border:1px solid var(--border);border-radius:14px;background:var(--panel);overflow:hidden;box-shadow:0 2px 9px #142f4b0a}.gift-heading{display:flex;align-items:center;gap:9px;padding:12px 14px;color:var(--accent);background:var(--accent-soft)}.gift-heading strong{font-size:13px;flex:1}.gift-icon{display:grid;place-items:center}.gift-state{font-size:10px;border:1px solid currentColor;border-radius:20px;padding:2px 7px;white-space:nowrap}.gift-art .card-art{height:245px}.gift-placeholder{display:flex;flex-direction:column;gap:12px;color:#b4d6f1;font-size:11px}.gift-summary{padding:12px 14px;color:var(--text)}.gift-summary h3{font-size:15px;margin:0 0 6px;overflow-wrap:anywhere}.gift-summary p{font-size:11px;margin:0;overflow-wrap:anywhere;color:var(--muted)}.gift-footer{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;border-top:1px solid var(--border);border-radius:0;padding:10px 13px;background:var(--panel);font-size:10px;color:var(--muted);font-weight:400}.gift-footer>span:last-child{display:flex;align-items:center;gap:3px;color:var(--accent)}.gift-footer:disabled{opacity:1}.gift-detail-title{margin:16px 0 9px}.gift-cid{overflow-wrap:anywhere}
 
@@ -164,7 +163,6 @@ html[data-app="android"] :focus:not(:focus-visible){outline:none}
 .swipe-hint.armed>span{transform:scale(1.14);opacity:1}
 .conversation-entry.swiping .swipe-hint{visibility:visible}
 .conversation-entry.dragging .swipe-hint{transition:filter .15s}
-.conversation-entry.swiping .conversation-row-actions{opacity:0}
 
 /* Theme colour editor. */
 .color-editor{display:grid;gap:18px;margin:6px 0 12px}
@@ -183,3 +181,15 @@ html[data-app="android"] :focus:not(:focus-visible){outline:none}
 .color-value input[aria-invalid=true]{border-color:var(--danger)}
 .file-button{margin:0;padding:9px 13px;background:var(--panel);color:var(--text);font-size:14px;font-weight:550;cursor:pointer}
 .background-picker{display:block;width:100%;height:auto;margin:8px 0;border-radius:12px;border:1px solid var(--border);cursor:crosshair}
+
+/* Conversation menu: opens at the press point (long press, right click or the menu key). */
+@keyframes menu-in{from{opacity:0;transform:scale(.86)}}
+.context-menu-shade{position:fixed;inset:0;z-index:30;touch-action:none}
+.context-menu{position:fixed;left:0;top:0;min-width:188px;max-width:calc(100vw - 16px);padding:6px;border:1px solid var(--border);border-radius:13px;background:var(--panel);box-shadow:0 10px 38px #0b243a33,0 2px 8px #0b243a1a;visibility:hidden}
+.context-menu.open{visibility:visible;animation:menu-in .14s cubic-bezier(.2,.8,.2,1)}
+.context-menu button{display:flex;width:100%;justify-content:flex-start;gap:12px;padding:11px 12px;border:0;border-radius:8px;background:transparent;font-size:13px;font-weight:500;text-align:left}
+.context-menu button>span{display:grid;gap:3px}.context-menu button small{font-size:11px;font-weight:400;color:var(--muted)}
+.context-menu button:focus-visible{outline:0;background:var(--raised)}
+.context-menu button.danger{color:var(--danger)}
+.room-row.menu-open{background:var(--raised)}
+.conversation-entry .room-row{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
