@@ -18,11 +18,11 @@ E     CHECK App persists encrypted previews across page closure and offline reop
 E     node:internal/modules/run_main:123
 E         triggerUncaughtException(
 E         ^
-E     
+E
 E     locator.waitFor: Timeout 25000ms exceeded.
 E     Call log:
 E     [2m  - waiting for locator('.timeline canvas.game-art') to be visible[22m
-E     
+E
 E         at /tmp/yichat-038-publish/source/yichat/tests/browser/plain-chat.mjs:88:357
 E         at async check (/tmp/yichat-038-publish/source/yichat/tests/browser/plain-chat.mjs:19:57)
 E         at async file:///tmp/yichat-038-publish/source/yichat/tests/browser/plain-chat.mjs:85:2 {
@@ -31,9 +31,9 @@ E         "  - waiting for locator('.timeline canvas.game-art') to be visible"
 E       ],
 E       name: 'TimeoutError'
 E     }
-E     
+E
 E     Node.js v22.23.3
-E     
+E
 E   assert 1 == 0
 E    +  where 1 = <Popen: returncode: 1 args: ['node', 'plain-chat.mjs']>.returncode
 ----------------------------- Captured stdout call -----------------------------

@@ -1,0 +1,11 @@
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 1500ms exceeded.
+    at /tmp/yichat-038-publish/source/yichat/client/test/browser/records-check.mjs:13:428 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.3

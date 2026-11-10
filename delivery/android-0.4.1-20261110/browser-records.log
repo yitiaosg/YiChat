@@ -1,11 +1,1 @@
-node:internal/modules/run_main:123
-    triggerUncaughtException(
-    ^
-
-page.waitForFunction: Timeout 1500ms exceeded.
-    at /tmp/yichat-038-publish/source/yichat/client/test/browser/records-check.mjs:13:428 {
-  log: [],
-  name: 'TimeoutError'
-}
-
-Node.js v22.23.3
+PASS: deferred publication, image download/Web Share/native sharing bridge, immediate selection, plain individual forwarding and business restrictions, identical image/combined URL, identity modes, chat bubble layout/corners, transparent record card, actual PNG+QR, anonymous actual entry point, app full-screen link

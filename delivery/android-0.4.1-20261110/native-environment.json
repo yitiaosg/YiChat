@@ -1,0 +1,6 @@
+{
+  "kvm_available": false,
+  "streamed_install": "PackageManagerInternal.freeStorage NullPointerException",
+  "non_streamed_install": "timed out after pushing APK",
+  "instrumentation": "compiled, not executed this round"
+}
