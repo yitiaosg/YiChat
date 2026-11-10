@@ -1,3 +1,4 @@
+import {latestRoomMessage,receivedAt} from './room-timeline';
 import {legacySpecial} from './message-display';
 import {nativeBootstrap,replaceNativeDay} from './native-bootstrap';
 import {gmtDay,immutableAt} from './packet-protocol';
@@ -107,7 +108,7 @@ export class Chat {
   async checkPacketDay(room:string,day:string){const key=room+'|'+day;if(!isApp||!this.nativeProtocol||this.offline||!navigator.onLine||Date.now()<immutableAt(day)||this.checkingDays.has(key))return;this.checkingDays.add(key);try{const result=await appCall('protocolCheckDay',{room,day});if(['repaired','ok'].includes(result.state)){this.packetStates.set(key,'ok');if(result.state==='repaired')await replaceNativeDay(this,room,day)}else if(result.state==='peer_required')this.packetStates.set(key,'mismatch');this.changed()}catch(e:any){if(!this.offline)this.fail(e)}finally{this.checkingDays.delete(key)}}
   fail(e:any){if(e?.name!=='AbortError'){this.error=e.message||String(e);this.changed()}}
   unreadCount(room:sdk.Room){return unreadCount(room,this.preferences.get(room.roomId))}
-  updateRooms(){if(!this.client||this.closed)return;this.rooms=this.client.getRooms().filter(r=>!this.preferences.get(r.roomId)?.deleted&&(r.getMyMembership()==='invite'||(['join','leave'].includes(r.getMyMembership())&&this.info.has(r.roomId)))).sort((a,b)=>Number(!!this.preferences.get(b.roomId)?.pinned)-Number(!!this.preferences.get(a.roomId)?.pinned)||b.getLastActiveTimestamp()-a.getLastActiveTimestamp());this.changed()}
+  updateRooms(){if(!this.client||this.closed)return;const rooms=this.client.getRooms().filter(r=>!this.preferences.get(r.roomId)?.deleted&&(r.getMyMembership()==='invite'||(['join','leave'].includes(r.getMyMembership())&&this.info.has(r.roomId))));const activity=new Map(rooms.map(r=>[r.roomId,this.roomActivity(r)]));this.rooms=rooms.sort((a,b)=>Number(!!this.preferences.get(b.roomId)?.pinned)-Number(!!this.preferences.get(a.roomId)?.pinned)||activity.get(b.roomId)!-activity.get(a.roomId)!);this.changed()}
   scheduleRefresh(){if(this.notificationMode||this.offline||this.closed)return;clearTimeout(this.refreshTimer);this.refreshTimer=setTimeout(()=>void this.refresh().catch(e=>this.fail(e)),800)}
   async refresh(){const revision=this.preferenceRevision;const [rows,prefs]:[RoomInfo[],any[]]=await Promise.all([requests.single('rooms',()=>requests.api('/api/rooms')),requests.single('preferences',()=>requests.api('/api/conversations/preferences'))]);if(this.closed)return;for(const r of rows){const old=this.info.get(r.room);if(old?.dissolved_at)r.dissolved_at=old.dissolved_at;if(old?.peer_deleted)r.peer_deleted=true;if((old?.revision||0)>(r.revision||0)){r.owner=old!.owner;r.revision=old!.revision}}this.info=new Map(rows.map(r=>[r.room,r]));const fresh=new Map(prefs.map(r=>[r.room,r]));for(const [id,version] of this.preferenceVersions)if(version>revision||this.preferencePending.has(id)){if(this.preferences.has(id))fresh.set(id,this.preferences.get(id));else fresh.delete(id)};this.preferences=fresh;this.updateRooms();await this.loadProfiles([this.session.mxid,...rows.flatMap(r=>[r.owner,...(r.peer?[r.peer]:[])]),...this.rooms.slice(0,60).flatMap(r=>r.getMembers().map(m=>m.userId))]);if(isApp){await this.saveNativeUi()}else await this.businessVault.saveState('profiles',[...this.profiles]).catch(()=>{});if(isApp&&!this.notificationMode)void appCall('notificationNames',{rooms:this.rooms.filter(r=>r.getMyMembership()==='join').map(r=>({room:r.roomId,label:this.roomName(r)}))}).catch(()=>{})}
   private async saveNativeUi(){if(this.closed)return;const ui={info:[...this.info],profiles:[...this.profiles],preferences:[...this.preferences],room_names:this.client.getRooms().map(room=>[room.roomId,room.name])};await this.businessVault.saveState('app-ui',ui);if(!this.closed)await appCall('protocolUiSave',ui).catch(()=>{})}
@@ -120,7 +121,9 @@ export class Chat {
   }
   name(mxid?:string){return mxid?(this.profiles.get(mxid)?.nickname||this.client?.getUser(mxid)?.displayName||mxid):'未知用户'}
   roomName(room:sdk.Room){const info=this.info.get(room.roomId);if(info?.kind==='direct')return this.name(info.owner===this.session.mxid?info.peer!:info.owner);return room.name||'会话'}
-  timeline(room:sdk.Room){const events=this.history.timeline(room);return this.session?.material_protocol===2?events.filter(e=>!legacySpecial(e.getContent())&&(e.getType()!=='m.room.message'||Object.keys(e.getContent()).length>0)):events}
+  previewEvent(room:sdk.Room){return latestRoomMessage(room.roomId,room.getLiveTimeline().getEvents(),this.history.receipts)}
+  private roomActivity(room:sdk.Room){const event=this.previewEvent(room);return event?receivedAt(event,this.history.receipts):room.getLastActiveTimestamp()}
+  timeline(room:sdk.Room){const events=this.history.timeline(room).filter(e=>e.getRoomId()===room.roomId);return this.session?.material_protocol===2?events.filter(e=>!legacySpecial(e.getContent())&&(e.getType()!=='m.room.message'||Object.keys(e.getContent()).length>0)):events}
   findEvent(room:sdk.Room,id:string){return room.findEventById(id)}
   // App only: page older messages from the native automatic packet backup
   // (not the WebView sync cache) when offline or past the server's retention.
@@ -135,7 +138,7 @@ export class Chat {
       try{result=await appCall('localOlder',{room:room.roomId,cursor:next,before_ts:first?first.getTs():Number.MAX_SAFE_INTEGER,limit:40})}catch(e:any){if(/不支持此 App 操作/.test(e.message)){this.localCursors.set(room.roomId,null);return added}throw e}
       if(this.closed)return 0;
       const events:sdk.MatrixEvent[]=[];
-      for(const row of result.rows){if(room.findEventById(row.event_id))continue;try{const raw=await verifyPacket(row.raw,{sha256:row.sha256,event_id:row.event_id,room:room.roomId});raw.unsigned={...raw.unsigned,'org.yitiao.received_ms':(row as any).received_ms};events.push(new sdk.MatrixEvent(raw))}catch{/* Skip packets that fail verification. */}}
+      for(const row of result.rows){if(room.findEventById(row.event_id))continue;try{const raw=await verifyPacket(row.raw,{sha256:row.sha256,event_id:row.event_id,room:room.roomId});raw.unsigned={...raw.unsigned,'org.yitiao.received_ms':(row as any).received_ms,'org.yitiao.sequence':(row as any).sequence};events.push(new sdk.MatrixEvent(raw))}catch{/* Skip packets that fail verification. */}}
       if(events.length){room.addEventsToTimeline(events,true,false,room.getLiveTimeline(),room.getLiveTimeline().getPaginationToken(sdk.EventTimeline.BACKWARDS)??undefined);added+=events.length}
       next=result.more&&result.cursor?result.cursor:null;
     }

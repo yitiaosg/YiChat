@@ -20,3 +20,5 @@ test('cards and media omit the outer bubble; plain text and disabled previews re
  assert.equal(standaloneContent({msgtype:'m.text'},[card]),true);assert.equal(standaloneContent({msgtype:'m.text'},[],true),true);
  assert.equal(standaloneContent({msgtype:'m.text',body:card,'org.yitiao.no_preview':true}),false);assert.equal(standaloneContent({msgtype:'m.text',body:'hello'}),false);
 });
+
+test('transfer and red-packet previews are distinct, including old App envelopes',async()=>{const {messageCaption}=await import('../src/message-display');const old={msgtype:'m.text',body:'转账 / 红包','org.yitiao.material_type':'order','org.yitiao.business':{kind:'order',id:'a'.repeat(32)}};assert.equal(messageCaption(old,'direct'),'转账');assert.equal(messageCaption(old,'group'),'红包');assert.equal(messageCaption({...old,'org.yitiao.order_kind':'direct'},'group'),'转账');assert.equal(messageCaption({...old,'org.yitiao.order_kind':'group'},'direct'),'红包');assert.equal(messageCaption({...old,'org.yitiao.material_type':'receipt'},'group'),'[已收款]');assert.equal(messageCaption({msgtype:'m.text',body:'普通新消息'},'direct'),'普通新消息')});

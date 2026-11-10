@@ -102,11 +102,14 @@ async def prepare(app,s,who,room,content):
  except BaseException:target.unlink(missing_ok=True);raise
  grant_files(s,who,room,[content])
  summary='聊天记录' if value['kind']=='record' else content.get('body','附件') if value['kind']=='media' else {'gift':'赠送闪卡','card':'分享闪卡','order':'收款回执' if content.get('org.yitiao.share',{}).get('type')=='receipt' else '转账 / 红包','doudizhu_record':'斗地主战绩'}.get(value['previews'][0]['type'],value['previews'][0].get('title','分享消息'))
+ if value['kind']=='share' and value['previews'][0]['type']=='order':
+  first=value['previews'][0];summary='收款回执' if first.get('receipt') or content.get('org.yitiao.share',{}).get('type')=='receipt' else '红包' if first['data'].get('kind')=='group' else '转账'
  result={'msgtype':content.get('msgtype','m.text') if value['kind']=='media' else 'm.text','body':str(summary)[:2000],KEY:{'version':2,'id':mid,'sha256':body_hash(raw),'kind':value['kind']},'org.yitiao.attachments':sorted(file_ids(content))}
  if value['kind']=='record':result['org.yitiao.record_access']=value['record']['hash']
  if value['kind']=='media':result.update({k:v for k,v in content.items() if k in ('url','info')})
  if value['kind']=='share':
   first=value['previews'][0];typ=first['type'];result['org.yitiao.material_type']='receipt' if first.get('receipt') else typ
+  if typ=='order':result['org.yitiao.order_kind']=first['data'].get('kind')
   if typ in ('gift','order'):
    bid=first['data'].get('id') if typ=='order' else first.get('url','').rsplit('/',1)[-1]
    result['org.yitiao.business']={'kind':typ,'id':bid}

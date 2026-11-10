@@ -45,7 +45,7 @@ class LocalTimeline(private val store: PacketStore, private val vault: SecureSto
                         HistoryRepository.verifyPacket(raw, receipt.hash, room, receipt.event)
                         val event = json.parseToJsonElement(raw.decodeToString()).jsonObject
                         if (event["state_key"] != null || event.s("type") == "m.room.redaction" || event.s("type") != metadata.s("type")) null
-                        else buildJsonObject { put("event_id", receipt.event); put("sha256", receipt.hash); put("raw", Base64.encodeToString(raw, Base64.NO_WRAP));put("received_ms",metadata["received_ms"]?:JsonNull) }
+                        else buildJsonObject { put("event_id", receipt.event);put("sequence",receipt.sequence); put("sha256", receipt.hash); put("raw", Base64.encodeToString(raw, Base64.NO_WRAP));put("received_ms",metadata["received_ms"]?:JsonNull) }
                     } catch (_: Exception) { null } finally { raw?.fill(0) }
                     if (row != null) {
                         val bytes = row.toString().length

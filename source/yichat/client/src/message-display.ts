@@ -13,15 +13,19 @@ export function messageBody(content:Record<string,any>,previews:string[]=[]):str
   return displayed.has(url)?token.slice(url.length):token;
  }).trim();
 }
-export function messageCaption(content:Record<string,any>):string {
+export function messageCaption(content:Record<string,any>,roomKind?:'direct'|'group'):string {
  const urls=content['org.yitiao.no_preview']?[]:shareUrls(content.body||'');
  if(isRecord(content))return '[聊天记录]';
- const body=messageBody(content,urls);if(body&&!body.startsWith('https://'))return body;
  const share=content['org.yitiao.share'];
+ const materialType=content['org.yitiao.material_type'];
+ if(materialType==='receipt'||share?.type==='receipt')return '[已收款]';
+ if(materialType==='order'||share?.type==='order'||content['org.yitiao.business']?.kind==='order'||urls.some(u=>u.includes('/orders/'))){
+  const kind=content['org.yitiao.order_kind']||roomKind;return kind==='group'?'红包':'转账';
+ }
+ const body=messageBody(content,urls);if(body&&!body.startsWith('https://'))return body;
  const media:Record<string,string>={'m.image':'[图片]','m.audio':'[语音]','m.video':'[视频]','m.file':'[文件]'};
  if(media[content.msgtype])return media[content.msgtype]+(content.body?' '+content.body:'');
  if(share?.type==='receipt')return '[已收款]';
- if(content['org.yitiao.business']?.kind==='order'||urls.some(u=>u.includes('/orders/')))return '[转账 / 红包]';
  if(share?.type==='gift'||urls.some(u=>u.includes('/gifts/')))return '[赠卡]';
  if(urls.some(u=>u.includes('/records/')))return '[游戏记录]';
  if(urls.some(u=>u.includes('/ycards/card/')))return '[卡片]';

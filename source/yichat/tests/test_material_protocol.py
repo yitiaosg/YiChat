@@ -282,3 +282,13 @@ def test_empty_dates_older_than_seven_days_are_still_sealed_since_room_creation(
  protocol_retention.initialize(s);c.portal.call(day_packets.tick,app)
  saved=day_packets.trusted(s,who(s),'!direct',day);assert saved['count']==0
  assert saved['sha256']==day_packets.packet_hash(day_packets.header('!direct',day)|{'entries':[],'complete':True})
+
+def test_order_original_envelopes_distinguish_transfer_packet_and_receipt(gateway,monkeypatch):
+ c,app,s=gateway;s.material_protocol=True
+ from backend import materials
+ for kind,label,receipt in [('direct','转账',False),('group','红包',False),('direct','收款回执',True)]:
+  def freeze(*_):return {'version':2,'kind':'share','content':{'msgtype':'m.text','body':'old URL'},'previews':[{'type':'order','receipt':receipt,'data':{'id':'a'*32,'kind':kind},'title':'old title'}]}
+  monkeypatch.setattr(materials,'freeze',freeze)
+  content=c.portal.call(materials.prepare,app,s,who(s),'!direct',{'msgtype':'m.text','body':'old URL'})
+  assert content['body']==label and content['org.yitiao.order_kind']==kind
+  assert content['org.yitiao.material_type']==('receipt' if receipt else 'order')

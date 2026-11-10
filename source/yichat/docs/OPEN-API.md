@@ -844,3 +844,5 @@ websocat -H "Authorization: Bearer $YICHAT_KEY" \
 整日 GMT 摘要、离线导出/导入、网页数据包合并与连续最多7日实际内容核验规范见 [MATERIAL-PROTOCOL-V2.md](MATERIAL-PROTOCOL-V2.md)。网页独立工具地址为 `https://chat.yitiao.org/data-packages`。
 
 0.4.1 中，整日校验的文件 `data` 可省略，表示实体尚未下载；必须保留原 `id/bytes/sha256`。若提供 `data`，服务器必定重新计算字节数和摘要。照片自动缓存，普通文件点击后下载。完整行为与原生互助端点见 [原始消息协议](MATERIAL-PROTOCOL-V2.md)。
+
+0.4.2 中，新资金材料信封的 `body` 分别为“转账”“红包”，`org.yitiao.order_kind` 为 `direct` 或 `group`；收款回执保持独立类型。原件、单条与整日摘要协议不变，旧消息摘要不重新生成。
