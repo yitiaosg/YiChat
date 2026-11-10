@@ -9,6 +9,7 @@ import {notificationText} from './notification-summary';
 // Only a verified MatrixEvent's clear content reaches the native notification.
 // The push is an untrusted hint; membership, preferences and messages are fetched
 // from the authenticated gateway. No crypto primitives or exported session keys.
+export class StaleNotification extends Error{constructor(){super('Already read')}}
 export async function notificationContent(chat:Chat,request:NotificationRequest){
  if(!request.room.startsWith('!')||request.room.length>255||!request.event.startsWith('$')||request.event.length>255)throw Error('Invalid hint');
  const deadline=Date.now()+30_000;
@@ -19,7 +20,10 @@ export async function notificationContent(chat:Chat,request:NotificationRequest)
  if(!info||chat.readOnly(request.room)||preference?.muted||preference?.archived||preference?.deleted||(info.kind==='direct'?'private':'group')!==request.kind)throw Error('Conversation unavailable');
  const room=chat.client.getRoom(request.room)!;
  const unread=await requests.api<{events:string[]}>('/api/notifications/'+path(request.room)+'/events?through='+path(request.event));
- if(!unread.events.length||unread.events.length>20||!unread.events.includes(request.event))throw Error('No unread notification');
+ // Nothing unread through this message and no unread count at all: the notice is stale.
+ if(!unread.events.length&&preference?.unread_count===0)throw new StaleNotification();
+ if(!unread.events.length)throw Error('No unread notification');
+ if(unread.events.length>20||!unread.events.includes(request.event))throw Error('No unread notification');
  const messages=[];
  for(const id of unread.events){
  const raw=await chat.client.fetchRoomEvent(request.room,id);
@@ -40,6 +44,6 @@ export function installNotificationContent(chat:Chat){
   const request=event.detail;
   void notificationContent(chat,request)
    .then(messages=>appCall('notificationResult',{id:request.id,ok:true,messages}))
-   .catch(()=>appCall('notificationResult',{id:request.id,ok:false}).catch(()=>{}));
+   .catch(e=>appCall('notificationResult',{id:request.id,ok:false,...(e instanceof StaleNotification?{stale:true}:{})}).catch(()=>{}));
  }) as EventListener);
 }

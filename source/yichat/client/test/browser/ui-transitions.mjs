@@ -1,0 +1,77 @@
+// Real App entry with an isolated native bridge: full-screen settings pages, pane
+// transitions, conversation swipes, the colour editor and replayed-message notifications.
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
+import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {mkdir} from 'node:fs/promises';
+const base=process.env.YICHAT_BROWSER_BASE||'http://127.0.0.1:5193',out=process.env.YICHAT_BROWSER_OUT||'/tmp/yichat-045-ui-browser';await mkdir(out,{recursive:true});
+const self='@alice:chat.yitiao.org',bob='@bob:chat.yitiao.org',carol='@carol:chat.yitiao.org',a='!first:chat.yitiao.org',b='!second:chat.yitiao.org',at=Date.now()-600000;
+function row(room,id,body,offset,sender=self){const raw=JSON.stringify({event_id:id,room_id:room,sender,type:'m.room.message',origin_server_ts:at+offset,content:{msgtype:'m.text',body}})+'\n';return {sequence:offset,event_id:id,raw:Buffer.from(raw).toString('base64'),sha256:createHash('sha256').update(raw).digest('hex'),received_ms:at+offset}}
+const initial={ui:{info:[[a,{room:a,kind:'direct',owner:self,peer:bob,encryption:'plain'}],[b,{room:b,kind:'direct',owner:self,peer:carol,encryption:'plain'}]],room_names:[],profiles:[[self,{mxid:self,nickname:'Alice'}],[bob,{mxid:bob,nickname:'第一位联系人'}],[carol,{mxid:carol,nickname:'固定联系人'}]],preferences:[]},rooms:[{room:a,rows:[row(a,'$a1','你好',10,bob)]},{room:b,rows:[row(b,'$p2','第二条旧消息',30,carol),row(b,'$p1','第一条旧消息',20,carol)]}],states:[]};
+const extra=row(b,'$p3','后台已保存的旧消息',40,carol);
+const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,args:['--no-sandbox']});
+const context=await browser.newContext({viewport:{width:412,height:900},isMobile:true,hasTouch:true}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+await context.addInitScript(({initial,self})=>{Object.defineProperty(navigator,'onLine',{get:()=>false});window.__calls=[];window.__nativeData=structuredClone(initial);window.YiChatApp={postMessage(text){const r=JSON.parse(text);window.__calls.push(r);let value={};if(r.method==='session')value={session:{uid:'alice',user:'alice',mxid:self,device_id:'ui-device',device:'ui-device',token:'isolated',material_protocol:2},online:false,capabilities:{notifications:true,immediateMessages:true}};if(r.method==='protocolBootstrap')value=structuredClone(window.__nativeData);if(r.method==='systemThemeColor')value={color:'#1479b8'};if(r.method==='pendingNotification')value={room:''};if(r.method==='messagePersist')value={state:'verified'};if(r.method==='notificationStatus')value={enabled:true,permitted:true,background_supported:true};queueMicrotask(()=>window.YiChatApp.onmessage?.({data:JSON.stringify({id:r.id,ok:true,value})}))}};sessionStorage.setItem('yc:backup-hint-seen','1')},{initial,self});
+const saved=[];await context.route('**/api/**',r=>{const url=r.request().url();if(/\/api\/conversations\/[^/]+\/preferences$/.test(url)&&r.request().method()!=='GET'){const body=r.request().postDataJSON();saved.push(body);return r.fulfill({json:{room:decodeURIComponent(url.split('/').at(-2)),pinned:!!body.pinned,archived:!!body.archived,muted:false}})}return r.abort()});await context.route('**/_matrix/**',r=>r.abort());
+const cdp=await context.newCDPSession(page);
+async function touch(type,x,y){await cdp.send('Input.dispatchTouchEvent',{type,touchPoints:type==='touchEnd'?[]:[{x,y,id:1}]})}
+async function drag(from,to,y,hold){await touch('touchStart',from,y);const steps=12;for(let i=1;i<=steps;i++){await touch('touchMove',from+(to-from)*i/steps,y);await page.waitForTimeout(12)}if(hold)await hold();await touch('touchEnd',to,y)}
+const until=async test=>{for(let i=0;i<100&&!test();i++)await page.waitForTimeout(30);assert.ok(test(),'timed out')};
+const calls=method=>page.evaluate(m=>window.__calls.filter(r=>r.method===m),method);
+try{
+ await page.goto(base+'/');await page.locator('.app-offline').waitFor();await page.locator('.room-row').nth(1).waitFor();
+ // 1. The header keeps only the new-conversation action.
+ assert.equal(await page.locator('.sidebar-header').getByRole('button',{name:'钱包'}).count(),0);assert.equal(await page.locator('.sidebar-header button').count(),1);
+
+ // 3. Rebuilding a room from the device store must not announce its old messages.
+ assert.equal((await calls('notifyRoom')).length,0);
+ await page.evaluate(extra=>{window.__nativeData.rooms[1].rows.unshift(extra);window.dispatchEvent(new Event('yc:packet-updated'))},extra);
+ await page.locator('.room-row').filter({hasText:'后台已保存的旧消息'}).waitFor();await page.waitForTimeout(300);
+ await page.evaluate(()=>window.dispatchEvent(new Event('yc:packet-updated')));await page.waitForTimeout(300);
+ assert.deepEqual(await calls('notifyRoom'),[],'replayed local messages raised a notification');
+ console.log('PASS rebuilt local timeline (the app-resume path) raises no notification for stored messages');
+
+ // Preferences are saved through the (stubbed) gateway; the rest stays on the device store.
+ await page.evaluate(async()=>{const {chat}=await import('/src/chat.ts');chat.offline=false;chat.changed()});await page.locator('.app-offline').waitFor({state:'detached'});
+ // 2. Swipes follow the finger past the old 72px stop and show the action in the freed space.
+ const first=page.locator('.conversation-entry').filter({hasText:'固定联系人'}),box=await first.boundingBox(),y=box.y+box.height/2;
+ await drag(box.x+40,box.x+250,y,async()=>{const state=await first.evaluate(n=>({dx:new DOMMatrix(getComputedStyle(n.querySelector('.room-row')).transform).m41,hint:n.querySelector('.swipe-pin').getBoundingClientRect().width,armed:n.querySelector('.swipe-pin').classList.contains('armed'),visible:getComputedStyle(n.querySelector('.swipe-pin')).visibility,text:n.querySelector('.swipe-pin').textContent}));assert.ok(state.dx>180,'row stopped at '+state.dx);assert.ok(Math.abs(state.hint-state.dx)<2);assert.equal(state.armed,true);assert.equal(state.visible,'visible');assert.equal(state.text,'置顶');await page.screenshot({path:out+'/swipe-pin.png'})});
+ await page.waitForFunction(()=>document.querySelector('.conversation-entry.pinned'));await until(()=>saved.length===1);assert.deepEqual(saved.at(-1),{pinned:true,archived:false});assert.equal(await page.locator('.app-shell.has-active').count(),0,'a swipe must not open the conversation');
+ await page.waitForTimeout(320);const second=page.locator('.conversation-entry').filter({hasText:'第一位联系人'}),box2=await second.boundingBox(),y2=box2.y+box2.height/2;
+ await drag(box2.x+300,box2.x+262,y2);await page.waitForTimeout(320);assert.equal(saved.length,1,'a short swipe must spring back without acting');assert.equal(await second.evaluate(n=>getComputedStyle(n.querySelector('.room-row')).transform),'none');
+ await drag(box2.x+320,box2.x+150,y2,async()=>{const state=await second.evaluate(n=>({hint:n.querySelector('.swipe-archive').getBoundingClientRect().width,text:n.querySelector('.swipe-archive').textContent,armed:n.querySelector('.swipe-archive').classList.contains('armed')}));assert.ok(state.hint>150);assert.equal(state.text,'归档');assert.equal(state.armed,true);await page.screenshot({path:out+'/swipe-archive.png'})});
+ await page.waitForFunction(()=>document.querySelectorAll('.room-list .conversation-entry').length===1);await until(()=>saved.length===2);assert.deepEqual(saved.at(-1),{archived:true});
+ // Vertical movement stays a list scroll.
+ const box3=await first.boundingBox();await touch('touchStart',box3.x+100,box3.y+20);for(let i=1;i<=6;i++)await touch('touchMove',box3.x+100+i*3,box3.y+20+i*12);await touch('touchEnd',0,0);assert.equal(saved.length,2);
+ console.log('PASS conversation swipes track the finger, show pin/archive in the freed space, act past the threshold and spring back otherwise');
+
+ await page.evaluate(async()=>{const {chat}=await import('/src/chat.ts');chat.offline=true;chat.error='';chat.changed()});await page.locator('.app-offline').waitFor();
+ // 1. Conversation and details transitions.
+ await first.locator('.room-row').click();assert.equal(await page.locator('.app-shell.is-opening').count(),1);assert.equal(await page.locator('.app-shell.is-opening>.conversation').evaluate(n=>getComputedStyle(n).animationName),'pane-in');await page.locator('.app-shell.has-active:not(.is-opening)').waitFor();
+ await page.getByRole('button',{name:'会话详情',exact:true}).click();assert.equal(await page.locator('.details-panel').evaluate(n=>getComputedStyle(n).animationName),'details-in');await page.waitForTimeout(300);await page.screenshot({path:out+'/details.png'});
+ assert.equal(await page.evaluate(()=>window.YiChatBack()),true);assert.equal(await page.locator('.details-panel.closing').evaluate(n=>getComputedStyle(n).animationName),'details-out');await page.locator('.details-panel').waitFor({state:'detached'});
+ assert.equal(await page.evaluate(()=>window.YiChatBack()),true);assert.equal(await page.locator('.app-shell.is-closing>.conversation').evaluate(n=>getComputedStyle(n).animationName),'pane-out');assert.equal(await page.locator('.app-shell.is-closing>.sidebar').evaluate(n=>getComputedStyle(n).display),'flex');await page.locator('.app-shell:not(.has-active)').waitFor();assert.equal(await page.evaluate(()=>window.YiChatBack()),false);
+ console.log('PASS list → conversation → details transitions run both ways and answer the system back action');
+
+ // Requests are blocked in this fixture; dismiss its notice like a user would.
+ for(const close of await page.getByRole('button',{name:'关闭错误',exact:true}).all())await close.click();
+ // 1. Settings are full-screen pages; a child slides over its parent.
+ const view=page.viewportSize();await page.getByRole('button',{name:'账户与设置',exact:true}).click();await page.getByRole('button',{name:'Yichat设置',exact:true}).click();
+ const root=page.getByRole('dialog',{name:'Yichat设置'});await root.waitFor();assert.equal(await page.locator('.modal-shade').count(),0);assert.equal(await root.evaluate(n=>getComputedStyle(n).animationName),'page-in');await page.waitForTimeout(320);assert.deepEqual(await root.boundingBox(),{x:0,y:0,width:view.width,height:view.height});await page.screenshot({path:out+'/settings-page.png'});
+ await page.getByRole('button',{name:'消息通知',exact:true}).click();const child=page.getByRole('dialog',{name:'消息通知'});await child.waitFor();assert.equal(await page.locator('.page-sheet').count(),2);assert.equal(await page.locator('.page-sheet.page-covered[inert]').getAttribute('aria-label'),'Yichat设置');await page.waitForTimeout(320);assert.deepEqual(await child.boundingBox(),{x:0,y:0,width:view.width,height:view.height});await page.screenshot({path:out+'/settings-child.png'});
+ assert.equal(await page.evaluate(()=>window.YiChatBack()),true);assert.equal(await page.locator('.page-sheet.page-leaving').getAttribute('aria-label'),'消息通知');assert.equal(await page.locator('.page-sheet.page-leaving').evaluate(n=>getComputedStyle(n).animationName),'page-out');await page.locator('.page-sheet.page-leaving').waitFor({state:'detached'});assert.equal(await page.locator('.page-sheet').count(),1);assert.equal(await page.locator('.page-sheet[inert]').count(),0);
+ await page.keyboard.press('Escape');await page.locator('.page-sheet').waitFor({state:'detached'});
+ console.log('PASS settings open full screen, push and pop child pages with enter/exit motion, and close by back or Escape');
+
+ // 5. Theme colour editor replaces the native picker.
+ await page.getByRole('button',{name:'账户与设置',exact:true}).click();await page.getByRole('button',{name:'主题',exact:true}).click();await page.getByRole('button',{name:'主题色设置'}).click();const editor=page.getByRole('dialog',{name:'应用主题色'});await editor.waitFor();await page.waitForTimeout(320);assert.equal(await page.locator('input[type=color]').count(),0);
+ const seed=()=>page.evaluate(()=>document.documentElement.style.getPropertyValue('--theme-seed'));
+ const area=await editor.locator('.color-area').boundingBox();await touch('touchStart',area.x+20,area.y+20);await touch('touchMove',area.x+area.width*.5,area.y+area.height*.5);await touch('touchMove',area.x+area.width-1,area.y+1);await touch('touchEnd',0,0);await page.waitForFunction(()=>/^#0[0-3][0-9a-f]{2}f[c-f]$/.test(document.documentElement.style.getPropertyValue('--theme-seed')));
+ const hue=await editor.locator('.color-hue').boundingBox();await touch('touchStart',hue.x+hue.width/3,hue.y+hue.height/2);await touch('touchEnd',0,0);await page.waitForFunction(()=>/^#0[0-3]f[c-f]0[0-3]$/.test(document.documentElement.style.getPropertyValue('--theme-seed')));
+ await editor.getByRole('button',{name:'预设颜色 #6c5ce7',exact:true}).click();await page.waitForFunction(()=>document.documentElement.style.getPropertyValue('--theme-seed')==='#6c5ce7');assert.equal(await editor.getByLabel('十六进制色值').inputValue(),'#6C5CE7');assert.equal(await editor.getByRole('button',{name:'预设颜色 #6c5ce7',exact:true}).getAttribute('aria-pressed'),'true');
+ await editor.getByLabel('十六进制色值').fill('d9483b');await page.waitForFunction(()=>document.documentElement.style.getPropertyValue('--theme-seed')==='#d9483b');await editor.getByLabel('十六进制色值').fill('zz');assert.equal(await editor.getByLabel('十六进制色值').getAttribute('aria-invalid'),'true');assert.equal(await seed(),'#d9483b');await editor.getByLabel('十六进制色值').blur();assert.equal(await editor.getByLabel('十六进制色值').inputValue(),'#D9483B');
+ assert.deepEqual(JSON.parse(await page.evaluate(()=>localStorage.getItem('yc:appearance:alice:'))),{color:'#d9483b'});await page.screenshot({path:out+'/color-editor.png'});
+ await editor.getByRole('button',{name:'恢复默认主题色',exact:true}).click();await page.waitForFunction(()=>document.documentElement.style.getPropertyValue('--theme-seed')==='#1479b8');
+ await page.evaluate(()=>window.YiChatBack());await page.getByRole('dialog',{name:'主题'}).waitFor();await page.evaluate(()=>window.YiChatBack());await page.waitForFunction(()=>!document.querySelector('.page-sheet'));
+ // 4. No control keeps a tap rectangle.
+ assert.deepEqual(await page.evaluate(()=>[...document.querySelectorAll('button,a,label,input,.room-row,.setting-switch,div,span')].map(n=>getComputedStyle(n).webkitTapHighlightColor).filter(c=>c!=='rgba(0, 0, 0, 0)')),[]);
+ assert.deepEqual(errors,[]);console.log('PASS in-page colour editor (area, hue, presets, hex field, reset) applies live and stores the choice; tap highlight is transparent everywhere');
+}catch(e){console.log('global error:',await page.locator('.global-error').allTextContents());await page.screenshot({path:out+'/failure.png'}).catch(()=>{});throw e}finally{await browser.close()}

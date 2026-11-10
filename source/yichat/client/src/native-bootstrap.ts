@@ -25,6 +25,8 @@ export async function nativeBootstrap(chat:Chat){
   const ordered=orderedRoomEvents(saved.room,[...merged.values()],chat.history.receipts);
   if(ordered.length!==existing.length||ordered.some((e,i)=>e!==existing[i])){
    if(existing.length)room.resetLiveTimeline(live.getPaginationToken(sdk.EventTimeline.BACKWARDS),null);
+   // Rebuilding re-emits every stored event as live; none of them is a new arrival.
+   chat.replayed.mark(ordered);
    if(ordered.length)await room.addLiveEvents(ordered,{addToState:false});
   }
  }
@@ -35,5 +37,5 @@ export async function replaceNativeDay(chat:Chat,roomId:string,day:string){
  for(const [id,e] of chat.untrustedEntries)if(e.room_id===roomId&&gmtDay(Number(e.received_ms))===day)chat.untrustedEntries.delete(id);if((packet as any).manual){const display=await appCall('protocolBootstrap');for(const e of display.untrusted||[])chat.untrustedEntries.set(e.event_id,e)}
  const prior=room.getLiveTimeline().getEvents().filter(e=>gmtDay(Number(e.getUnsigned()['org.yitiao.received_ms']||e.getTs()))!==day);
  const corrected=packet.entries.map(e=>{const raw=JSON.parse(e.raw);raw.unsigned={...raw.unsigned,'org.yitiao.received_ms':e.received_ms,'org.yitiao.sequence':e.sequence};if(e.redacted)raw.unsigned.redacted_because={type:'m.room.redaction',content:{redacts:e.event_id}};return new sdk.MatrixEvent(raw)});
- room.resetLiveTimeline(null,null);await room.addLiveEvents([...prior,...corrected].sort((a,b)=>Number(a.getUnsigned()['org.yitiao.received_ms']||a.getTs())-Number(b.getUnsigned()['org.yitiao.received_ms']||b.getTs())),{addToState:false});chat.packetStates.set(roomId+'|'+day,packet.state||'ok');chat.changed();window.dispatchEvent(new Event('yc:material-reset'));
+ chat.replayed.mark([...prior,...corrected]);room.resetLiveTimeline(null,null);await room.addLiveEvents([...prior,...corrected].sort((a,b)=>Number(a.getUnsigned()['org.yitiao.received_ms']||a.getTs())-Number(b.getUnsigned()['org.yitiao.received_ms']||b.getTs())),{addToState:false});chat.packetStates.set(roomId+'|'+day,packet.state||'ok');chat.changed();window.dispatchEvent(new Event('yc:material-reset'));
 }

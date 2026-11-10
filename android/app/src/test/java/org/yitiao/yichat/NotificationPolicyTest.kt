@@ -60,4 +60,15 @@ class NotificationPolicyTest {
         assertFalse(NotificationPolicy.suppress(true,"!another",hint.room))
         assertFalse(NotificationPolicy.suppress(false,hint.room,hint.room))
     }
+    @Test fun repeatedMessagesOfOneConversationNotifyOnce() {
+        var stored:String?=null
+        for(id in listOf("\$a","\$b"))stored=NotificationPolicy.seen(stored,id)
+        assertEquals("\$a\n\$b",stored)
+        // A rebuilt timeline presents both again, in order: neither may alert.
+        assertNull(NotificationPolicy.seen(stored,"\$a"));assertNull(NotificationPolicy.seen(stored,"\$b"))
+        assertEquals("\$a\n\$b\n\$c",NotificationPolicy.seen(stored,"\$c"))
+        // Values written by earlier versions hold a single ID.
+        assertNull(NotificationPolicy.seen("\$old","\$old"))
+        assertEquals("\$2\n\$3",NotificationPolicy.seen("\$1\n\$2","\$3",limit=2))
+    }
 }

@@ -1,3 +1,4 @@
+import {ReplayedEvents,shouldNotify} from './notification-gate';
 import {NativeLiveMessages} from './native-live';
 import {latestRoomMessage,receivedAt} from './room-timeline';
 import {legacySpecial} from './message-display';
@@ -95,7 +96,7 @@ export class Chat {
       this.client.on(sdk.RoomStateEvent.Events,(event)=>{if(event.getType()==='m.room.avatar')update();if(event.getType()==='m.room.member'){if(event.getContent().reason==='账户已注销')this.profileTimes.delete(event.getStateKey()!);this.scheduleRefresh()}});this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{update();if(this.nativeImmediate&&room&&event.getId()?.startsWith('$'))void this.liveMessages.remember(room.roomId,event).catch(e=>this.fail(e));if(event.getContent()['org.yitiao.material'])void ensureMaterial(event.getId()!).catch(()=>{});if(room&&!toStart&&data.liveEvent&&this.preferences.get(room.roomId)?.deleted&&['m.room.message','m.room.encrypted'].includes(event.getWireType()))this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Name,()=>{update();if(isApp&&this.phase==='ready'&&this.info.size){clearTimeout(this.uiSaveTimer);this.uiSaveTimer=setTimeout(()=>void this.saveNativeUi().catch(()=>{}),500)}});this.client.on(sdk.RoomEvent.Receipt,()=>{update();this.scheduleRefresh()});this.client.on(sdk.RoomEvent.Redaction,update);
       this.client.on(sdk.MatrixEventEvent.Decrypted,update);this.client.on(sdk.RoomEvent.MyMembership,()=>{this.scheduleRefresh();update()});this.client.on(sdk.ClientEvent.Room,()=>{this.scheduleRefresh();update()});
 
-      this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{if(this.notificationMode||!isApp||!this.appNotifications||this.phase!=='ready'||toStart||!data.liveEvent||!room||event.getSender()===this.session?.mxid||!['m.room.message','m.room.encrypted'].includes(event.getWireType()))return;const p=this.preferences.get(room.roomId);if(!p?.archived&&!p?.muted&&!this.readOnly(room.roomId)&&(document.hidden||this.activeRoom!==room.roomId))void appCall('notifyRoom',{room:room.roomId,event:event.getId(),label:this.roomName(room),kind:this.info.get(room.roomId)?.kind==='group'?'group':'private'}).catch(()=>{})});
+      this.client.on(sdk.RoomEvent.Timeline,(event,room,toStart,_removed,data)=>{if(this.notificationMode||!isApp||!this.appNotifications||this.phase!=='ready'||toStart||!data.liveEvent||!room||!shouldNotify(event,room,this.session?.mxid,this.replayed))return;const p=this.preferences.get(room.roomId);if(!p?.archived&&!p?.muted&&!this.readOnly(room.roomId)&&(document.hidden||this.activeRoom!==room.roomId))void appCall('notifyRoom',{room:room.roomId,event:event.getId(),label:this.roomName(room),kind:this.info.get(room.roomId)?.kind==='group'?'group':'private'}).catch(()=>{})});
       const filter=new sdk.Filter(this.session.mxid);filter.setIncludeLeaveRooms(true);
       const starting=this.client.startClient({filter,initialSyncLimit:40,lazyLoadMembers:true,pendingEventOrdering:sdk.PendingEventOrdering.Detached});
       if(isApp&&this.offline){this.phase='ready';this.sync='离线 · 本机原始数据';this.updateRooms();void starting.catch(()=>{})}else await starting;
@@ -104,6 +105,7 @@ export class Chat {
       window.addEventListener('pagehide',()=>this.lock('loading'),{once:true});
     }catch(e:any){if(!this.closed){this.phase='error';this.error=e.message;this.changed()}}
   }
+  replayed=new ReplayedEvents();
   untrustedEntries=new Map<string,any>();packetStates=new Map<string,string>();private checkingDays=new Set<string>();
   packetDay(event:sdk.MatrixEvent){return gmtDay(Number(this.history.receipts.get(event.getId()!)?.received_ms||event.getUnsigned()['org.yitiao.received_ms']||event.getTs()))}
   async checkPacketDay(room:string,day:string){const key=room+'|'+day;if(!isApp||!this.nativeProtocol||this.offline||!navigator.onLine||Date.now()<immutableAt(day)||this.checkingDays.has(key))return;this.checkingDays.add(key);try{const result=await appCall('protocolCheckDay',{room,day});if(['repaired','ok'].includes(result.state)){this.packetStates.set(key,'ok');if(result.state==='repaired')await replaceNativeDay(this,room,day)}else if(result.state==='peer_required')this.packetStates.set(key,'mismatch');this.changed()}catch(e:any){if(!this.offline)this.fail(e)}finally{this.checkingDays.delete(key)}}

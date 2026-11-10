@@ -54,8 +54,10 @@ class Notifications(private val context:Context,private val graph:Graph) {
         val hint=PushHint.parse(mapOf("conversation_id" to room,"conversation_type" to kind,"message_id" to event))?:return
         val a=graph.auth.account?:return
         val key="${a.storage}.notified.${SecureStore.hash(room)}"
-        if(graph.vault.get(key)?.decodeToString()==event)return
-        push.receive(hint);graph.vault.put(key,event.toByteArray())
+        // Remember several recent messages per conversation: a rebuilt timeline may
+        // present older ones again in any order.
+        val seen=NotificationPolicy.seen(graph.vault.get(key)?.decodeToString(),event)?:return
+        push.receive(hint);graph.vault.put(key,seen.toByteArray())
     }
     suspend fun poll() = polling.withLock {
         if(!enabled() || !permitted())return@withLock

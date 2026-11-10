@@ -1,10 +1,20 @@
 # YiChat
 
-当前版本 **Android 0.4.4 / versionCode 27**，包名 `org.yitiao.yichat.mobile`。
+当前版本 **Android 0.4.5 / versionCode 28**，包名 `org.yitiao.yichat.mobile`。
 
-[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.4.4 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261110-v0.4.4/YiChat-0.4.4-27.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
+[最新发布](https://github.com/yitiaosg/YiChat/releases/latest) · [下载 0.4.5 APK](https://github.com/yitiaosg/YiChat/releases/download/android-20261110-v0.4.5/YiChat-0.4.5-28.apk) · [更新日志](CHANGELOG.md) · [网页版](https://chat.yitiao.org)
 
 Android App 与网页版共用 Preact / TypeScript 界面和 Matrix JS SDK。**私聊和群聊均停用端到端加密**，通过 HTTPS 传输，服务器可以读取消息；不再需要会话密钥、密钥导入或 Rust 加密初始化。Kotlin 容器提供系统浏览器授权、通知、离线缓存、原消息包备份和文件操作。
+
+## 0.4.5 更新（网页版与 Android App）
+
+- **全屏设置页**：“Yichat设置”“主题”及其下级页面不再使用弹窗，改为全屏页面；下级页面从右侧滑入，返回时滑出，上级页面保持原位置。系统返回键、页面左上角返回和 Esc 逐级返回。
+- **界面衔接**：手机上从会话列表进入会话、返回列表，以及打开/关闭会话详情都有滑动过渡；宽屏使用淡入。首页顶部移除钱包入口，钱包仍在左下角账户菜单中。
+- **会话滑动**：会话行跟随手指移动，不再在 72px 处卡住；右滑露出的区域显示“置顶/取消置顶”，左滑显示“归档/取消归档”（空会话为“删除”），越过 64px 后图标放大并在松手时执行，未越过则回弹。纵向滑动仍为列表滚动。
+- **修复 App 误报通知**：App 回到前台时会用本机保存的原消息重建会话时间线，重建出的旧消息曾被当作新到消息再次通知，且因为这些消息早已读过而停留在“你有新的消息”占位。现在重建的消息不再触发通知；已读消息的占位通知在核实后自动撤销；原生端按会话记住最近 64 条已通知消息。
+- **点击高亮**：所有控件取消 WebView 默认的淡蓝色点击矩形，并关闭 WebView 的系统焦点高亮。
+- **主题色编辑器**：应用主题色和单会话主题色使用页面内的颜色编辑器（饱和度/亮度面板、色相条、12 个预设色、十六进制输入），不再调用系统原生取色器；会话背景选择与取色界面同步整理。
+- Windows 与 Linux 桌面版本次不更新。见 [部署与验证](PRODUCTION-0.4.5.md)。
 
 ## 0.4.4 更新
 
@@ -110,4 +120,4 @@ export YICHAT_FIREBASE_CONFIG=/private/path/google-services.json
 
 0.3.10 / code 18 修正主题色Logo图形，见 [0.3.10记录](PRODUCTION-0.3.10.md)。
 
-历史 0.3.14 的自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。当前 0.4.4 的部署和测试记录见 [0.4.4记录](PRODUCTION-0.4.4.md)。
+历史 0.3.14 的自动已读、离线特殊消息备份、分享预览修复和新增 API 见 [0.3.14记录](PRODUCTION-0.3.14.md)。0.4.4 的部署和测试记录见 [0.4.4记录](PRODUCTION-0.4.4.md)。当前 0.4.5 见 [0.4.5记录](PRODUCTION-0.4.5.md)。

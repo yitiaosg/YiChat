@@ -1,0 +1,3 @@
+PASS categorized App settings, automatic snapshots only, no independent verification UI, shared switches, conversation preview selection, offline export/import and real CDP menu pinch blocked
+PASS full standalone web tool, incremental multiple file selection/removal, preserved files on decode error, local encrypted merged download and preview without API requests, mobile/desktop layout
+PASS platform-specific download captions and URLs use the browser User-Agent recommendation, including fallback

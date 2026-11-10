@@ -118,6 +118,13 @@ class PushNotifications(private val context:Context) {
         manager.notify(hint.tag,hint.notificationId,builder(hint).setExtras(old.extras).setStyle(style)
             .setContentText(if(hint.kind=="group")"${last.sender}: ${last.body}" else last.body).setOnlyAlertOnce(true).build())
     }
+    /** Removes a placeholder whose message was read or withdrawn before any content was shown. */
+    @Synchronized fun dismissStale(hint:PushHint,generation:String) {
+        val old=current(hint)?.notification?:return
+        if(old.extras.getString("yc.generation")!=generation)return
+        if(old.extras.getString(Notification.EXTRA_TEMPLATE)=="android.app.Notification\$MessagingStyle")return
+        manager.cancel(hint.tag,hint.notificationId);synchronized(history){history.remove(hint.room)}
+    }
     // Memory only. OS NotificationManager owns displayed content; nothing goes into DP storage.
     companion object { private val history=mutableMapOf<String,NoticeState>() }
 }
@@ -192,7 +199,8 @@ class NotificationContentWorker(context:Context,params:WorkerParameters):Corouti
             val messages=withTimeout(45_000){graph.notificationContent.fetch(hint)}
             if(graph.auth.account?.token==a.token)push.replace(hint,inputData.getString("generation").orEmpty(),account,messages)
             Result.success()
-        }catch(e:TimeoutCancellationException){Log.w("YiChatPush","Content timeout; placeholder retained");Result.success()}
+        }catch(e:StaleNotification){push.dismissStale(hint,inputData.getString("generation").orEmpty());Result.success()}
+        catch(e:TimeoutCancellationException){Log.w("YiChatPush","Content timeout; placeholder retained");Result.success()}
         catch(e:CancellationException){throw e}
         catch(_:Exception){Log.w("YiChatPush","Content unavailable; placeholder retained");Result.success()}
     }

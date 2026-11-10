@@ -104,6 +104,8 @@ class MainActivity : ComponentActivity() {
         }
         cache=WebShellCache(this,::online)
         web=WebView(this)
+        // No system focus rectangle around the page; controls style their own focus.
+        web.defaultFocusHighlightEnabled=false
         web.settings.apply {
             javaScriptEnabled=true;domStorageEnabled=true;databaseEnabled=true
             allowFileAccess=false;allowContentAccess=true; // Required for user-selected SAF upload URIs. Top-level content/file navigation stays blocked.
@@ -162,7 +164,7 @@ class MainActivity : ComponentActivity() {
         setSafeContent(web)
         onBackPressedDispatcher.addCallback(this,object:OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                web.evaluateJavascript("(()=>{const close=document.querySelector('.modal header button[aria-label=关闭]');if(close){close.click();return true}const back=document.querySelector('.conversation .mobile-back');if(back){back.click();return true}return false})()") { handled -> if(handled!="true") finish() }
+                web.evaluateJavascript("(()=>{if(typeof window.YiChatBack==='function')return !!window.YiChatBack();const close=document.querySelector('.modal header button[aria-label=关闭]');if(close){close.click();return true}const back=document.querySelector('.conversation .mobile-back');if(back){back.click();return true}return false})()") { handled -> if(handled!="true") finish() }
             }
         })
         (application as YiChatApplication).push.refreshVisible={web.post {

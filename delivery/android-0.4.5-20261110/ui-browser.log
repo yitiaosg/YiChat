@@ -1,0 +1,5 @@
+PASS rebuilt local timeline (the app-resume path) raises no notification for stored messages
+PASS conversation swipes track the finger, show pin/archive in the freed space, act past the threshold and spring back otherwise
+PASS list → conversation → details transitions run both ways and answer the system back action
+PASS settings open full screen, push and pop child pages with enter/exit motion, and close by back or Escape
+PASS in-page colour editor (area, hue, presets, hex field, reset) applies live and stores the choice; tap highlight is transparent everywhere

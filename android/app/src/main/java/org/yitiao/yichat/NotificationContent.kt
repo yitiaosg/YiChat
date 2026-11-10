@@ -12,6 +12,8 @@ import java.util.UUID
 /** Shares the UI's existing JS SDK. A headless WebView uses the identical origin,
  * IndexedDB and yc:active-client Web Lock when no UI exists.
  * Never creates a native Matrix device or a second native /sync consumer. */
+/** The server confirmed that nothing in the conversation is unread any more. */
+class StaleNotification:Exception("Already read")
 class NotificationContent(private val context:Context,private val graph:Graph) {
     private val serial=Mutex()
     private val pending=mutableMapOf<String,CompletableDeferred<List<NoticeMessage>>>()
@@ -21,7 +23,7 @@ class NotificationContent(private val context:Context,private val graph:Graph) {
     fun detach(){host=null}
     fun complete(id:String,data:JsonObject) {
         val result=pending[id]?:return
-        if(!data.b("ok")){result.completeExceptionally(IllegalStateException("Notification unavailable"));return}
+        if(!data.b("ok")){result.completeExceptionally(if(data["stale"]?.jsonPrimitive?.booleanOrNull==true)StaleNotification() else IllegalStateException("Notification unavailable"));return}
         val messages=data.a("messages").takeLast(20).map{it.jsonObject}.map {
             require(it.s("id").startsWith("$")&&it.s("id").length<=255)
             NoticeMessage(it.s("id"),it.s("sender").take(80),it.s("body").take(2000),it["time"]?.jsonPrimitive?.longOrNull?:0)

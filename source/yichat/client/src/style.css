@@ -112,3 +112,74 @@ html[data-app="android"] .message .message-body:not(.message-copy-text){user-sel
 @media(max-width:600px){.packet-tools-page{padding:20px 14px}.packet-page-intro h1{font-size:24px}.packet-section{padding:20px 16px;border-radius:13px}.packet-section .form-grid{gap:10px}.package-file-drop{padding:24px 12px}.packet-section .actions button{flex:1;font-size:12px}.packet-native .packet-tabs button{font-size:11px}.packet-export-rooms .room-row{padding:13px 10px}.packet-export-rooms .room-summary time{font-size:9px}}
 
 .packet-feedback{position:sticky;top:12px;z-index:4}.packet-feedback:empty{display:none}.packet-feedback .notice,.packet-feedback .error{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:13px;box-shadow:0 3px 15px #0001}.packet-native .packet-feedback{top:0}
+
+/* 0.4.5 — no WebView tap rectangle on any control. */
+*{-webkit-tap-highlight-color:transparent}
+html[data-app="android"] :focus:not(:focus-visible){outline:none}
+
+/* Full-screen settings pages. A child slides over its parent and back out again. */
+@keyframes page-in{from{transform:translateX(var(--page-shift,100%));opacity:var(--page-fade,1)}}
+@keyframes page-out{to{transform:translateX(var(--page-shift,100%));opacity:var(--page-fade,1)}}
+.modal.page-sheet{position:fixed;inset:0;width:auto;max-width:none;max-height:none;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;outline:0;animation:page-in .26s cubic-bezier(.2,.8,.2,1);transition:transform .26s cubic-bezier(.2,.8,.2,1)}
+.page-sheet.page-covered{transform:translateX(-22%);pointer-events:none}
+.page-sheet.page-leaving{animation:page-out .25s cubic-bezier(.4,0,.7,.2) forwards;pointer-events:none}
+.modal.page-sheet>header{flex-shrink:0;justify-content:flex-start;gap:6px;margin:0;height:60px;padding:0 10px;background:var(--panel);border-bottom:1px solid var(--border)}
+.modal.page-sheet>header h2{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modal.page-sheet>header .icon{margin:0;width:40px;height:40px;color:var(--text);flex-shrink:0}
+.page-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:10px max(20px,calc(50% - 330px)) calc(40px + env(safe-area-inset-bottom))}
+.page-body .settings-entry{padding:15px 14px}
+@media(min-width:701px){.modal.page-sheet{--page-shift:40px;--page-fade:0}.page-sheet.page-covered{transform:none}.modal.page-sheet>header{padding:0 max(14px,calc(50% - 340px))}}
+@media(prefers-reduced-motion:reduce){.page-sheet.page-leaving{display:none}}
+
+/* Opening a conversation, returning to the list and the details panel. */
+@keyframes pane-fade{from{opacity:0;transform:translateY(6px)}}
+@keyframes pane-in{from{transform:translateX(100%)}}
+@keyframes pane-out{to{transform:translateX(100%)}}
+@keyframes list-back{from{transform:translateX(-16%);opacity:.55}}
+@keyframes details-in{from{transform:translateX(var(--details-shift,100%));opacity:var(--details-fade,1)}}
+@keyframes details-out{to{transform:translateX(var(--details-shift,100%));opacity:var(--details-fade,1)}}
+.app-shell>.conversation{animation:pane-fade .2s ease-out}
+.details-panel{animation:details-in .25s cubic-bezier(.2,.8,.2,1)}
+.details-panel.closing{animation:details-out .21s cubic-bezier(.4,0,.7,.2) forwards;pointer-events:none}
+@media(min-width:1101px){.details-panel{--details-shift:28px;--details-fade:0}}
+@media(max-width:700px){
+ .app-shell>.conversation{animation:none}
+ .app-shell.is-opening>.sidebar,.app-shell.is-closing>.sidebar{display:flex}
+ .app-shell.is-opening>.conversation,.app-shell.is-closing>.conversation{display:flex;position:fixed;inset:0;z-index:5;box-shadow:-10px 0 36px #0002}
+ .app-shell.is-offline.is-opening>.conversation,.app-shell.is-offline.is-closing>.conversation{top:30px}
+ .app-shell.is-opening>.conversation{animation:pane-in .26s cubic-bezier(.2,.8,.2,1)}
+ .app-shell.is-closing>.conversation{animation:pane-out .23s cubic-bezier(.4,0,.7,.2) forwards;pointer-events:none}
+ .app-shell.is-closing>.sidebar{animation:list-back .23s ease-out}
+}
+
+/* Conversation swipes: the row tracks the finger and the freed space names the action. */
+.conversation-entry .room-row{position:relative;z-index:1;transition:transform .24s cubic-bezier(.2,.8,.2,1)}
+.conversation-entry.dragging .room-row{transition:none}
+.swipe-hint{position:absolute;top:0;bottom:3px;width:0;display:flex;align-items:center;overflow:hidden;border-radius:10px;pointer-events:none;visibility:hidden;color:var(--panel);font-size:11px;font-weight:600;transition:width .24s cubic-bezier(.2,.8,.2,1),filter .15s}
+.swipe-hint>span{display:flex;flex-direction:column;align-items:center;gap:5px;width:72px;flex-shrink:0;white-space:nowrap;opacity:.8;transition:transform .16s,opacity .16s}
+.swipe-pin{left:0;justify-content:flex-start;background:var(--accent)}
+.swipe-archive{right:0;justify-content:flex-end;background:#c9822b;color:#fff}
+.swipe-archive.swipe-delete{background:var(--danger);color:var(--panel)}
+.swipe-hint:not(.armed){filter:saturate(.55)}
+.swipe-hint.armed>span{transform:scale(1.14);opacity:1}
+.conversation-entry.swiping .swipe-hint{visibility:visible}
+.conversation-entry.dragging .swipe-hint{transition:filter .15s}
+.conversation-entry.swiping .conversation-row-actions{opacity:0}
+
+/* Theme colour editor. */
+.color-editor{display:grid;gap:18px;margin:6px 0 12px}
+.color-area{position:relative;height:190px;border-radius:14px;border:1px solid var(--border);touch-action:none;cursor:crosshair}
+.color-hue{position:relative;height:22px;margin:0 12px;border-radius:11px;touch-action:none;cursor:pointer;background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.color-area:focus-visible,.color-hue:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.color-thumb{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px #0005,0 2px 7px #0006;pointer-events:none}
+.color-hue .color-thumb{top:50%}
+.color-presets{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:4px 0}
+.color-swatch{width:100%;max-width:46px;aspect-ratio:1;justify-self:center;padding:0;border-radius:50%;border:3px solid var(--panel);box-shadow:0 0 0 1px var(--border);color:#fff}
+.color-swatch.selected{box-shadow:0 0 0 2px var(--accent)}
+.color-value{display:flex;align-items:flex-end;gap:12px}
+.color-chip{width:42px;height:42px;border-radius:12px;border:1px solid var(--border);flex-shrink:0}
+.color-value label{flex:1;margin:0}
+.color-value input{margin:7px 0 0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;letter-spacing:1.5px;text-transform:uppercase}
+.color-value input[aria-invalid=true]{border-color:var(--danger)}
+.file-button{margin:0;padding:9px 13px;background:var(--panel);color:var(--text);font-size:14px;font-weight:550;cursor:pointer}
+.background-picker{display:block;width:100%;height:auto;margin:8px 0;border-radius:12px;border:1px solid var(--border);cursor:crosshair}

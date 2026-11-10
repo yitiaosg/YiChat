@@ -27,6 +27,11 @@ object NotificationPolicy {
     fun accepts(hint:PushHint,account:String)=hint.recipientTag==null||hint.recipientTag==account
     fun initialText(hint:PushHint,unlocked:Boolean)=
         if(unlocked)hint.preview?.takeIf{it.isNotBlank()}?:PLACEHOLDER else PLACEHOLDER
+    /** Updated per-conversation record of notified message IDs, or null when [event] was already notified. */
+    fun seen(stored:String?,event:String,limit:Int=64):String? {
+        val known=stored.orEmpty().split('\n').filter{it.isNotBlank()}
+        return if(event in known)null else (known+event).takeLast(limit).joinToString("\n")
+    }
     fun suppress(foreground:Boolean,activeRoom:String,room:String)=foreground&&activeRoom==room
     fun title(cached:String?)=cached?.take(80)?.takeIf{it.isNotBlank()}?:TITLE
     fun replace(state:NoticeState,generation:String,messages:List<NoticeMessage>?):NoticeState {
